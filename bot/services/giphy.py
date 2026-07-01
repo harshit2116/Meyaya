@@ -10,6 +10,9 @@ import aiohttp
 from redis.asyncio import Redis
 
 
+FALLBACK_GIF_URL = "https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif"
+
+
 @dataclass(frozen=True, slots=True)
 class GifResult:
     """A resolved GIF URL."""
@@ -30,18 +33,40 @@ class GiphyService:
         """Return a cached or freshly fetched GIF result for a query."""
 
         if not self.api_key:
-            return GifResult(url=None)
+            return GifResult(url=FALLBACK_GIF_URL)
 
-        cache_key = f"giphy:{sha256(query.encode('utf-8')).hexdigest()}"
-        cached_url = await self.cache.get(cache_key)
-        if cached_url:
-            return GifResult(url=cached_url)
+        normalized_query = query.strip().lower() or "reaction"
+        cache_key = f"giphy:{sha256(normalized_query.encode('utf-8')).hexdigest()}"
+
+        try:
+            cached_url = await self.cache.get(cache_key)
+            if cached_url:
+                return GifResult(url=cached_url)
+        except Exception:
+            cached_url = None
+
+        search_result = await self._search_gifs(normalized_query)
+        if search_result.url is None:
+            search_result = await self._random_gif(normalized_query)
+
+        url = search_result.url or FALLBACK_GIF_URL
+        try:
+            await self.cache.set(cache_key, url, ex=60 * 60)
+        except Exception:
+            pass
+        return GifResult(url=url)
+
+    async def _search_gifs(self, query: str) -> GifResult:
+        """Search Giphy for a query and return a deterministic GIF if one exists."""
 
         endpoint = "https://api.giphy.com/v1/gifs/search"
         params = {"api_key": self.api_key, "q": query, "limit": 25, "rating": self.rating}
-        async with self.http_session.get(endpoint, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
-            response.raise_for_status()
-            payload = await response.json()
+        try:
+            async with self.http_session.get(endpoint, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                response.raise_for_status()
+                payload = await response.json()
+        except Exception:
+            return GifResult(url=None)
 
         data = payload.get("data", [])
         if not data:
@@ -49,7 +74,39 @@ class GiphyService:
 
         rng = Random(query)
         chosen = rng.choice(data)
-        url = chosen.get("images", {}).get("original", {}).get("url")
-        if url:
-            await self.cache.set(cache_key, url, ex=60 * 60)
-        return GifResult(url=url)
+        return GifResult(url=self._extract_url(chosen))
+
+    async def _random_gif(self, query: str) -> GifResult:
+        """Ask Giphy for a random GIF as a fallback when search returns nothing."""
+
+        endpoint = "https://api.giphy.com/v1/gifs/random"
+        params = {"api_key": self.api_key, "tag": query, "rating": self.rating}
+        try:
+            async with self.http_session.get(endpoint, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                response.raise_for_status()
+                payload = await response.json()
+        except Exception:
+            return GifResult(url=None)
+
+        return GifResult(url=self._extract_url(payload.get("data", {})))
+
+    def _extract_url(self, payload: dict[str, object]) -> str | None:
+        """Extract a usable GIF URL from a Giphy response payload."""
+
+        images = payload.get("images")
+        if isinstance(images, dict):
+            original = images.get("original")
+            if isinstance(original, dict):
+                url = original.get("url")
+                if isinstance(url, str) and url:
+                    return url
+
+        url = payload.get("image_original_url")
+        if isinstance(url, str) and url:
+            return url
+
+        fallback_url = payload.get("url")
+        if isinstance(fallback_url, str) and fallback_url:
+            return fallback_url
+
+        return None

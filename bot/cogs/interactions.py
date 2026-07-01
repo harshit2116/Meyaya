@@ -151,6 +151,11 @@ class InteractionsCog(commands.Cog):
                 lines.append(f"`uwu {command.name} ...`")
             lines.append("`uwu gif <query>`")
             lines.append("`uwu help`")
+            lines.append("`uwu dailyiq [member]`")
+            lines.append("`uwu dailydumbest`")
+            lines.append("`uwu dailysmartest`")
+            lines.append("`uwu dailyclown`")
+            lines.append("`uwu profile [member]`")
             lines.append("")
             lines.append("**Slash commands**")
             for command in INTERACTION_DEFINITIONS:
