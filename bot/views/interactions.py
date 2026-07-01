@@ -35,7 +35,14 @@ class InteractionResponseView(discord.ui.View):
             self.add_item(button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Always allow the button press so the command stays playful."""
+        """Allow button presses, except restrict Kiss Back to the mentioned user."""
+
+        if self.definition.name == "kiss" and interaction.user.id != self.target_id:
+            await interaction.response.send_message(
+                f"Only <@{self.target_id}> can use this button.",
+                ephemeral=True,
+            )
+            return False
 
         return True
 
@@ -47,6 +54,26 @@ class InteractionResponseView(discord.ui.View):
             result = await service.perform(interaction.user.id, self.actor_id, self.definition)
         target_member = interaction.guild.get_member(self.actor_id) if interaction.guild else None
         target_avatar = str(target_member.display_avatar.url) if target_member else str(interaction.user.display_avatar.url)
+        embed = build_interaction_embed(
+            title=result.title,
+            description=result.message.format(
+                actor=interaction.user.mention,
+                target=target_member.mention if target_member else f"<@{self.actor_id}>",
+            ),
+            color=self.definition.color,
+            actor_avatar=str(interaction.user.display_avatar.url),
+            target_avatar=target_avatar,
+            gif_url=result.gif_url,
+            count_label=f"{self.definition.name.title()}s between {interaction.user.display_name} & {target_member.display_name if target_member else self.actor_id}",
+            count=result.count,
+        )
+
+        if self.definition.name == "kiss":
+            await interaction.response.send_message(embed=embed)
+            if interaction.message is not None:
+                await interaction.message.edit(view=None)
+            return
+
         await interaction.response.edit_message(
             embed=build_interaction_embed(
                 title=result.title,
