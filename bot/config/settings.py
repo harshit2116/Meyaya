@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +21,15 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     command_prefix: str = Field(default="", alias="COMMAND_PREFIX")
     guild_id: int | None = Field(default=None, alias="GUILD_ID")
+
+    @field_validator("guild_id", mode="before")
+    @classmethod
+    def parse_blank_guild_id(cls, value: object) -> int | None:
+        """Treat an empty GUILD_ID as unset."""
+
+        if value in {None, ""}:
+            return None
+        return int(value)
 
 
 @lru_cache(maxsize=1)

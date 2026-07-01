@@ -44,3 +44,9 @@ class ProfileCog(commands.Cog):
             )
             embed.set_thumbnail(url=str(target.display_avatar.url))
             await interaction.response.send_message(embed=embed)
+
+
+async def setup(bot: commands.Bot) -> None:
+    """Install the profile command cog."""
+
+    await bot.add_cog(ProfileCog(bot))
