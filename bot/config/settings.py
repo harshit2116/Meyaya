@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     discord_token: str = Field(alias="DISCORD_TOKEN")
     database_url: str = Field(alias="DATABASE_URL")
     redis_url: str = Field(alias="REDIS_URL")
+    giphy_api_key: str = Field(default="", alias="GIPHY_API_KEY")
+    giphy_rating: str = Field(default="g", alias="GIPHY_RATING")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     command_prefix: str = Field(default="", alias="COMMAND_PREFIX")
     guild_id: int | None = Field(default=None, alias="GUILD_ID")

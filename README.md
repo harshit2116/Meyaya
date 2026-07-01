@@ -18,6 +18,13 @@ This project intentionally stays centered on:
 3. Copy `.env.example` to `.env` and fill in the values.
 4. Run the bot with `python -m bot.main`.
 
+Required environment values:
+
+- DISCORD_TOKEN
+- DATABASE_URL
+- REDIS_URL
+- GIPHY_API_KEY for GIF-backed interaction responses
+
 ## Project Layout
 
 The source package lives in `bot/` and is organized around commands, services, repositories, and models.

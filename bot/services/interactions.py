@@ -7,6 +7,7 @@ from random import choice
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.services.giphy import GiphyService
 from bot.repositories.relationships import RelationshipRepository
 from bot.repositories.users import UserRepository
 
@@ -20,6 +21,7 @@ class InteractionDefinition:
     color: int
     responses: tuple[str, ...]
     gif_urls: tuple[str, ...]
+    gif_query: str | None = None
     button_label: str | None = None
     back_command: str | None = None
 
@@ -37,10 +39,11 @@ class InteractionResult:
 class InteractionService:
     """Business logic for relationship-based interaction commands."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, giphy: GiphyService | None = None) -> None:
         self.session = session
         self.relationships = RelationshipRepository(session)
         self.users = UserRepository(session)
+        self.giphy = giphy
 
     async def perform(
         self,
@@ -74,9 +77,14 @@ class InteractionService:
             setattr(target_stats, target_received_field, getattr(target_stats, target_received_field) + 1)
         count = await self.relationships.increment(actor_id, target_id, definition.name)
         await self.session.commit()
+        gif_url = choice(definition.gif_urls) if definition.gif_urls else None
+        if gif_url is None and self.giphy and definition.gif_query:
+            gif_result = await self.giphy.random_gif(definition.gif_query)
+            gif_url = gif_result.url
+
         return InteractionResult(
             message=message,
-            gif_url=choice(definition.gif_urls) if definition.gif_urls else None,
+            gif_url=gif_url,
             count=count,
             title=f"{definition.emoji} {definition.name.title()} complete",
         )

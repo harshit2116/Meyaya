@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+import aiohttp
 import discord
 from discord.ext import commands
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from redis.asyncio import Redis
 
 from bot.config.settings import Settings, get_settings
+from bot.cache.redis import build_redis_client
 from bot.database.session import build_async_engine, build_session_factory
 from bot.logging.setup import configure_logging
 
@@ -23,6 +26,8 @@ class MeyayaBot(commands.Bot):
         self.settings = settings
         self.engine = build_async_engine(settings.database_url)
         self.session_factory: async_sessionmaker[AsyncSession] = build_session_factory(self.engine)
+        self.redis: Redis | None = None
+        self.http_session: aiohttp.ClientSession | None = None
 
     @asynccontextmanager
     async def db_session(self) -> AsyncSession:
@@ -34,6 +39,8 @@ class MeyayaBot(commands.Bot):
     async def setup_hook(self) -> None:
         """Load cogs and synchronize application commands."""
 
+        self.redis = build_redis_client(self.settings.redis_url)
+        self.http_session = aiohttp.ClientSession()
         await self.load_extension("bot.cogs.interactions")
         await self.load_extension("bot.cogs.daily")
         await self.load_extension("bot.cogs.profile")
@@ -42,6 +49,16 @@ class MeyayaBot(commands.Bot):
             await self.tree.sync(guild=guild)
         else:
             await self.tree.sync()
+
+    async def close(self) -> None:
+        """Close external resources before shutting down the bot."""
+
+        if self.http_session is not None and not self.http_session.closed:
+            await self.http_session.close()
+        if self.redis is not None:
+            await self.redis.aclose()
+        await self.engine.dispose()
+        await super().close()
 
     async def on_ready(self) -> None:
         """Log the connected bot account."""

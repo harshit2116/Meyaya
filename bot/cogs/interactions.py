@@ -10,6 +10,7 @@ from discord.ext import commands
 
 from bot.data.interactions import INTERACTION_DEFINITIONS
 from bot.app import MeyayaBot
+from bot.services.giphy import GiphyService
 from bot.services.interactions import InteractionDefinition, InteractionService
 from bot.utils.embeds import build_interaction_embed
 from bot.views.interactions import InteractionResponseView
@@ -48,7 +49,8 @@ class InteractionsCog(commands.Cog):
 
             bot = cast(MeyayaBot, interaction.client)
             async with bot.db_session() as session:
-                service = InteractionService(session)
+                giphy = GiphyService(bot.settings.giphy_api_key, bot.settings.giphy_rating, bot.http_session, bot.redis) if bot.http_session and bot.redis else None
+                service = InteractionService(session, giphy)
                 result = await service.perform(interaction.user.id, chosen_target.id, definition)
                 await interaction.response.send_message(
                     embed=build_interaction_embed(
