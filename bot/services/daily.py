@@ -32,7 +32,6 @@ class DailyService:
         """Return a stable daily IQ score for a guild member."""
 
         await self.users.ensure_user(user_id)
-        await self.daily.get_or_create(guild_id, day)
         rng = Random(f"{guild_id}:{user_id}:{day.isoformat()}")
         score = rng.randint(1, 200)
         await self.session.commit()
@@ -42,6 +41,13 @@ class DailyService:
         """Return a stable daily winner from the provided candidate IDs."""
 
         record = await self.daily.get_or_create(guild_id, day)
+        existing = {
+            "dumbest": record.dumbest_member_id,
+            "smartest": record.smartest_member_id,
+            "clown": record.clown_member_id,
+        }[kind]
+        if existing is not None:
+            return existing
         seed = f"{guild_id}:{day.isoformat()}:{kind}"
         rng = Random(seed)
         winner = rng.choice(candidates)

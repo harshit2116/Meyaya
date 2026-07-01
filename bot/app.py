@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import discord
 from discord.ext import commands
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.config.settings import Settings, get_settings
+from bot.database.session import build_async_engine, build_session_factory
 from bot.logging.setup import configure_logging
 
 
@@ -17,6 +21,15 @@ class MeyayaBot(commands.Bot):
         intents.members = True
         super().__init__(command_prefix=settings.command_prefix or "/", intents=intents)
         self.settings = settings
+        self.engine = build_async_engine(settings.database_url)
+        self.session_factory: async_sessionmaker[AsyncSession] = build_session_factory(self.engine)
+
+    @asynccontextmanager
+    async def db_session(self) -> AsyncSession:
+        """Provide a managed async database session to commands and services."""
+
+        async with self.session_factory() as session:
+            yield session
 
     async def setup_hook(self) -> None:
         """Load cogs and synchronize application commands."""

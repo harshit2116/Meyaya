@@ -59,6 +59,19 @@ class InteractionService:
             message = choice(definition.responses)
         await self.users.ensure_user(actor_id)
         await self.users.ensure_user(target_id)
+        actor_stats = await self.users.get_or_create_statistics(actor_id)
+        target_stats = await self.users.get_or_create_statistics(target_id)
+        actor_stats.total_given += 1
+        actor_stats.total_interactions += 1
+        target_stats.total_received += 1
+        target_stats.total_interactions += 1
+        counter_name = f"{definition.name}s"
+        actor_given_field = f"{counter_name}_given"
+        target_received_field = f"{counter_name}_received"
+        if hasattr(actor_stats, actor_given_field):
+            setattr(actor_stats, actor_given_field, getattr(actor_stats, actor_given_field) + 1)
+        if hasattr(target_stats, target_received_field):
+            setattr(target_stats, target_received_field, getattr(target_stats, target_received_field) + 1)
         count = await self.relationships.increment(actor_id, target_id, definition.name)
         await self.session.commit()
         return InteractionResult(
