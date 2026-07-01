@@ -70,3 +70,38 @@ def build_profile_embed(target: discord.Member, summary: ProfileSummaryLike) -> 
         icon_url=str(target.display_avatar.url),
     )
     return embed
+
+
+def build_ship_embed(
+    user_a: "discord.Member | discord.User",
+    user_b: "discord.Member | discord.User",
+    percentage: int,
+    label: str,
+    gif_url: str,
+    attachment_filename: str,
+) -> "discord.Embed":
+    """Builds the big embed for /ship. Expects the composite side-by-side
+    avatar image to already be attached to the message as `attachment_filename`.
+    """
+    filled = "❤️" * (percentage // 10)
+    empty = "🤍" * (10 - percentage // 10)
+    bar = filled + empty
+
+    if percentage >= 70:
+        color = 0xFF4D6D
+    elif percentage >= 40:
+        color = 0xFF8FA3
+    else:
+        color = 0x6C757D
+
+    embed = discord.Embed(
+        title="💘 Ship Result",
+        description=(
+            f"**{user_a.display_name}** × **{user_b.display_name}**\n\n"
+            f"{bar}\n"
+            f"**{percentage}%** — {label}"
+        ),
+        color=color,
+    )
+    embed.set_image(url=f"attachment://{attachment_filename}")
+    return embed

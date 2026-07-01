@@ -51,6 +51,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.interactions")
         await self.load_extension("bot.cogs.daily")
         await self.load_extension("bot.cogs.profile")
+        await self.load_extension("bot.cogs.ship")
         if self.settings.guild_id:
             guild = discord.Object(id=self.settings.guild_id)
             await self.tree.sync(guild=guild)
