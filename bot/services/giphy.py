@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
-from random import Random
+from random import SystemRandom
 
 import aiohttp
 from redis.asyncio import Redis
@@ -21,7 +20,7 @@ class GifResult:
 
 
 class GiphyService:
-    """Resolve GIFs from Giphy and cache selections in Redis."""
+    """Resolve GIFs from Giphy and return a fresh random result each time."""
 
     def __init__(self, api_key: str, rating: str, http_session: aiohttp.ClientSession, cache: Redis) -> None:
         self.api_key = api_key
@@ -30,37 +29,28 @@ class GiphyService:
         self.cache = cache
 
     async def random_gif(self, query: str) -> GifResult:
-        """Return a cached or freshly fetched GIF result for a query."""
+        """Return a random GIF result for a query.
+
+        The service intentionally avoids caching the selected URL so each command
+        invocation can show a different GIF.
+        """
 
         if not self.api_key:
             return GifResult(url=FALLBACK_GIF_URL)
 
         normalized_query = query.strip().lower() or "reaction"
-        cache_key = f"giphy:{sha256(normalized_query.encode('utf-8')).hexdigest()}"
-
-        try:
-            cached_url = await self.cache.get(cache_key)
-            if cached_url:
-                return GifResult(url=cached_url)
-        except Exception:
-            cached_url = None
 
         search_result = await self._search_gifs(normalized_query)
         if search_result.url is None:
             search_result = await self._random_gif(normalized_query)
 
-        url = search_result.url or FALLBACK_GIF_URL
-        try:
-            await self.cache.set(cache_key, url, ex=60 * 60)
-        except Exception:
-            pass
-        return GifResult(url=url)
+        return GifResult(url=search_result.url or FALLBACK_GIF_URL)
 
     async def _search_gifs(self, query: str) -> GifResult:
-        """Search Giphy for a query and return a deterministic GIF if one exists."""
+        """Search Giphy for a query and return a random GIF from the result set."""
 
         endpoint = "https://api.giphy.com/v1/gifs/search"
-        params = {"api_key": self.api_key, "q": query, "limit": 25, "rating": self.rating}
+        params = {"api_key": self.api_key, "q": query, "limit": 50, "rating": self.rating}
         try:
             async with self.http_session.get(endpoint, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
                 response.raise_for_status()
@@ -72,7 +62,7 @@ class GiphyService:
         if not data:
             return GifResult(url=None)
 
-        rng = Random(query)
+        rng = SystemRandom()
         chosen = rng.choice(data)
         return GifResult(url=self._extract_url(chosen))
 
