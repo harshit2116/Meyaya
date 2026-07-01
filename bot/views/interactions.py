@@ -35,9 +35,9 @@ class InteractionResponseView(discord.ui.View):
             self.add_item(button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        """Allow button presses, except restrict Kiss Back to the mentioned user."""
+        """Restrict back buttons to the originally targeted member."""
 
-        if self.definition.name == "kiss" and interaction.user.id != self.target_id:
+        if interaction.user.id != self.target_id:
             await interaction.response.send_message(
                 f"Only <@{self.target_id}> can use this button.",
                 ephemeral=True,
@@ -68,25 +68,6 @@ class InteractionResponseView(discord.ui.View):
             count=result.count,
         )
 
-        if self.definition.name == "kiss":
-            await interaction.response.send_message(embed=embed)
-            if interaction.message is not None:
-                await interaction.message.edit(view=None)
-            return
-
-        await interaction.response.edit_message(
-            embed=build_interaction_embed(
-                title=result.title,
-                description=result.message.format(
-                    actor=interaction.user.mention,
-                    target=target_member.mention if target_member else f"<@{self.actor_id}>",
-                ),
-                color=self.definition.color,
-                actor_avatar=str(interaction.user.display_avatar.url),
-                target_avatar=target_avatar,
-                gif_url=result.gif_url,
-                count_label=f"{self.definition.name.title()}s between {interaction.user.display_name} & {target_member.display_name if target_member else self.actor_id}",
-                count=result.count,
-            ),
-            view=self,
-        )
+        await interaction.response.send_message(embed=embed)
+        if interaction.message is not None:
+            await interaction.message.edit(view=None)

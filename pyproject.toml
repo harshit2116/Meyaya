@@ -30,8 +30,8 @@ dev = [
     "ruff>=0.6",
 ]
 
-[tool.setuptools]
-packages = ["bot"]
+[tool.setuptools.packages.find]
+include = ["bot*"]
 
 [tool.ruff]
 line-length = 100

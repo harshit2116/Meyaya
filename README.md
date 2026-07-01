@@ -29,4 +29,16 @@ Required environment values:
 
 ## Project Layout
 
-The source package lives in `bot/` and is organized around commands, services, repositories, and models.
+The source package lives in `bot/` and keeps runtime responsibilities separated:
+
+- `bot/main.py` starts the application.
+- `bot/app.py` builds the Discord bot and owns process lifecycle resources.
+- `bot/cogs/` contains Discord slash and text command adapters.
+- `bot/services/` contains business logic that can be tested without Discord objects.
+- `bot/repositories/` contains database access.
+- `bot/models/` contains SQLAlchemy table definitions.
+- `bot/utils/` contains reusable Discord presentation helpers.
+- `bot/views/` contains reusable Discord UI views.
+- `bot/data/` contains command definitions and other static runtime data.
+- `alembic/` contains database migrations.
+- `tests/` contains automated tests.

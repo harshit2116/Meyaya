@@ -4,8 +4,10 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 .venv/
+.venv-win/
 .env
 .DS_Store
 dist/
 build/
 *.egg-info/
+full_read_me.md

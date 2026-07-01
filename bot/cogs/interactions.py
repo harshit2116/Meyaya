@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from bot.data.interactions import INTERACTION_DEFINITIONS
 from bot.app import MeyayaBot
-from bot.services.interactions import InteractionDefinition, InteractionResult, InteractionService
+from bot.services.interactions import InteractionDefinition, InteractionResult
 from bot.utils.embeds import build_interaction_embed
 from bot.views.interactions import InteractionResponseView
 
@@ -128,7 +128,7 @@ class InteractionsCog(commands.Cog):
                 await ctx.send("GIF support is not configured.")
                 return
 
-            result = await gif_service.random_gif(query)
+            result = await gif_service.random_anime_gif(query)
             if result.url is None:
                 await ctx.send(f"I could not find a GIF for `{query}`.")
                 return
@@ -151,16 +151,16 @@ class InteractionsCog(commands.Cog):
                 lines.append(f"`uwu {command.name} ...`")
             lines.append("`uwu gif <query>`")
             lines.append("`uwu help`")
-            lines.append("`uwu dailyiq [member]`")
-            lines.append("`uwu dailydumbest`")
-            lines.append("`uwu dailysmartest`")
-            lines.append("`uwu dailyclown`")
+            lines.append("`uwu iq [member]`")
+            lines.append("`uwu dumb`")
+            lines.append("`uwu smart`")
+            lines.append("`uwu clown`")
             lines.append("`uwu profile [member]`")
             lines.append("")
             lines.append("**Slash commands**")
             for command in INTERACTION_DEFINITIONS:
                 lines.append(f"`/{command.name}`")
-            lines.extend(["`/dailyiq`", "`/dailydumbest`", "`/dailysmartest`", "`/dailyclown`", "`/profile`"])
+            lines.extend(["`/iq`", "`/dumb`", "`/smart`", "`/clown`", "`/profile`"])
             embed.description = "\n".join(lines)
             await ctx.send(embed=embed)
 

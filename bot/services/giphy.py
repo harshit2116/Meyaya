@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 
 
 FALLBACK_GIF_URL = "https://media.giphy.com/media/ICOgUNjpvO0PC/giphy.gif"
+ANIME_QUERY_PREFIX = "anime"
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +46,12 @@ class GiphyService:
             search_result = await self._random_gif(normalized_query)
 
         return GifResult(url=search_result.url or FALLBACK_GIF_URL)
+
+    async def random_anime_gif(self, query: str) -> GifResult:
+        """Return a random anime GIF for a specific action or mood."""
+
+        normalized_query = self._normalize_anime_query(query)
+        return await self.random_gif(normalized_query)
 
     async def _search_gifs(self, query: str) -> GifResult:
         """Search Giphy for a query and return a random GIF from the result set."""
@@ -100,3 +107,13 @@ class GiphyService:
             return fallback_url
 
         return None
+
+    def _normalize_anime_query(self, query: str) -> str:
+        """Keep bot GIF searches anime-focused and action-specific."""
+
+        normalized = " ".join(query.lower().strip().split())
+        if not normalized:
+            return f"{ANIME_QUERY_PREFIX} reaction"
+        if ANIME_QUERY_PREFIX in normalized.split():
+            return normalized
+        return f"{ANIME_QUERY_PREFIX} {normalized}"
