@@ -14,6 +14,8 @@ from bot.config.settings import Settings, get_settings
 from bot.cache.redis import build_redis_client
 from bot.database.session import build_async_engine, build_session_factory
 from bot.logging.setup import configure_logging
+from bot.services.giphy import GiphyService
+from bot.services.interactions import InteractionService
 
 
 class MeyayaBot(commands.Bot):
@@ -22,7 +24,12 @@ class MeyayaBot(commands.Bot):
     def __init__(self, settings: Settings) -> None:
         intents = discord.Intents.default()
         intents.members = True
-        super().__init__(command_prefix=settings.command_prefix or "/", intents=intents)
+        intents.message_content = True
+        super().__init__(
+            command_prefix=commands.when_mentioned_or(settings.command_prefix or "uwu "),
+            intents=intents,
+            help_command=None,
+        )
         self.settings = settings
         self.engine = build_async_engine(settings.database_url)
         self.session_factory: async_sessionmaker[AsyncSession] = build_session_factory(self.engine)
@@ -59,6 +66,18 @@ class MeyayaBot(commands.Bot):
             await self.redis.aclose()
         await self.engine.dispose()
         await super().close()
+
+    def build_giphy_service(self) -> GiphyService | None:
+        """Create a Giphy service when the HTTP session and Redis client are ready."""
+
+        if self.http_session is None or self.redis is None:
+            return None
+        return GiphyService(self.settings.giphy_api_key, self.settings.giphy_rating, self.http_session, self.redis)
+
+    def build_interaction_service(self, session: AsyncSession) -> InteractionService:
+        """Create an interaction service bound to the current runtime resources."""
+
+        return InteractionService(session, self.build_giphy_service())
 
     async def on_ready(self) -> None:
         """Log the connected bot account."""

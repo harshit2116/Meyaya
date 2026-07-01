@@ -5,7 +5,7 @@ from __future__ import annotations
 import discord
 
 from bot.app import MeyayaBot
-from bot.services.interactions import InteractionDefinition, InteractionService
+from bot.services.interactions import InteractionDefinition
 from bot.utils.embeds import build_interaction_embed
 
 
@@ -16,7 +16,6 @@ class InteractionResponseView(discord.ui.View):
         self,
         *,
         bot: MeyayaBot,
-        service: InteractionService,
         definition: InteractionDefinition,
         actor_id: int,
         target_id: int,
@@ -44,7 +43,7 @@ class InteractionResponseView(discord.ui.View):
         """Trigger the same interaction in reverse."""
 
         async with self.bot.db_session() as session:
-            service = InteractionService(session)
+            service = self.bot.build_interaction_service(session)
             result = await service.perform(interaction.user.id, self.actor_id, self.definition)
         target_member = interaction.guild.get_member(self.actor_id) if interaction.guild else None
         target_avatar = str(target_member.display_avatar.url) if target_member else str(interaction.user.display_avatar.url)
