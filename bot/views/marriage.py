@@ -7,7 +7,7 @@ import discord
 from bot.app import MeyayaBot
 from bot.services.marriage import AlreadyMarriedError
 
-CEREMONY_GIF_QUERY = "anime wedding kiss ring"
+CEREMONY_GIF_QUERY = "wedding kiss ring"
 
 
 class MarriageProposalView(discord.ui.View):
@@ -23,7 +23,8 @@ class MarriageProposalView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.target_id:
             await interaction.response.send_message(
-                "💌 This proposal isn't addressed to you.", ephemeral=True
+                "💌 This proposal isn't addressed to you.",
+                ephemeral=True,
             )
             return False
         return True
@@ -31,6 +32,7 @@ class MarriageProposalView(discord.ui.View):
     async def on_timeout(self) -> None:
         for item in self.children:
             item.disabled = True
+
         if self.message is not None:
             try:
                 await self.message.edit(
@@ -41,7 +43,11 @@ class MarriageProposalView(discord.ui.View):
                 pass
 
     @discord.ui.button(label="Accept", emoji="💍", style=discord.ButtonStyle.success)
-    async def accept(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def accept(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
         for item in self.children:
             item.disabled = True
 
@@ -62,25 +68,53 @@ class MarriageProposalView(discord.ui.View):
             gif_result = await giphy.random_anime_gif(CEREMONY_GIF_QUERY)
             gif_url = gif_result.url if gif_result else ""
 
-        content = (
+        wedding_message = (
             "# 💒 Wedding Ceremony 💒\n\n"
             f"<@{self.proposer_id}> **and** <@{self.target_id}> **are now married!** 🎉\n\n"
             "───────────────────────\n"
-            "*Until anime cancels it...* 💞\n"
+            "*Until someone uses `/divorce`...* 💞\n"
             "───────────────────────"
         )
-        if gif_url:
-            content += f"\n\n{gif_url}"
 
-        await interaction.response.edit_message(content=content, view=self)
+        wedding_embed = None
+        if gif_url:
+            wedding_embed = discord.Embed(
+                color=discord.Color.from_rgb(255, 182, 193)
+            )
+            wedding_embed.set_image(url=gif_url)
+
+        # Edit the proposal message to disable buttons and show accepted
+        await interaction.response.edit_message(
+            content=(
+                "## 💍 Proposal Accepted!\n\n"
+                f"<@{self.target_id}> accepted <@{self.proposer_id}>'s proposal.\n\n"
+                "🎉 Wedding ceremony posted below!"
+            ),
+            view=self,
+        )
+
+        # Send a brand new wedding announcement
+        await interaction.followup.send(
+            content=wedding_message,
+            embed=wedding_embed,
+            allowed_mentions=discord.AllowedMentions(users=True),
+        )
 
     @discord.ui.button(label="Reject", emoji="💔", style=discord.ButtonStyle.danger)
-    async def reject(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+    async def reject(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
+    ) -> None:
         for item in self.children:
             item.disabled = True
-        content = (
-            "# 💔 Proposal Declined\n\n"
-            f"<@{self.target_id}> **turned down** <@{self.proposer_id}>**'s proposal.**\n\n"
-            "*Better luck next time...* 😔"
+
+        await interaction.response.edit_message(
+            content=(
+                "# 💔 Proposal Declined\n\n"
+                f"<@{self.target_id}> **turned down** "
+                f"<@{self.proposer_id}>'s proposal.\n\n"
+                "*Better luck next time...* 😔"
+            ),
+            view=self,
         )
-        await interaction.response.edit_message(content=content, view=self)

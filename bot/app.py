@@ -82,6 +82,11 @@ class MeyayaBot(commands.Bot):
 
         return InteractionService(session, self.build_giphy_service())
 
+    def build_marriage_service(self, session: AsyncSession) -> MarriageService:
+        """Create a marriage service bound to the current database session."""
+
+        return MarriageService(session)
+    
     async def on_ready(self) -> None:
         """Log the connected bot account."""
 

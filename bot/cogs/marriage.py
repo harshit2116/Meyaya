@@ -14,7 +14,7 @@ from bot.views.marriage import MarriageProposalView
 
 logger = logging.getLogger(__name__)
 
-PROPOSAL_GIF_QUERY = "anime marriage proposal ring"
+PROPOSAL_GIF_QUERY = "animation propose ring"
 
 
 class MarriageCog(commands.Cog):
@@ -35,8 +35,16 @@ class MarriageCog(commands.Cog):
     @app_commands.describe(user="The user you want to propose to")
     async def marry(self, interaction: discord.Interaction, user: discord.Member) -> None:
         await interaction.response.defer()
-        content, view = await self._build_proposal(interaction.user, user)
-        message = await interaction.followup.send(content, view=view or discord.utils.MISSING, wait=True)
+
+        content, embed, view = await self._build_proposal(interaction.user, user)
+
+        message = await interaction.followup.send(
+            content=content,
+            embed=embed,
+            view=view or discord.utils.MISSING,
+            wait=True,
+        )
+
         if view is not None:
             view.message = message
 
@@ -51,8 +59,14 @@ class MarriageCog(commands.Cog):
     def _build_text_commands(self) -> None:
         @commands.command(name="marry")
         async def marry_text(ctx: commands.Context, user: discord.Member) -> None:
-            content, view = await self._build_proposal(ctx.author, user)
-            message = await ctx.send(content, view=view or discord.utils.MISSING)
+            content, embed, view = await self._build_proposal(ctx.author, user)
+
+            message = await ctx.send(
+                content=content,
+                embed=embed,
+                view=view or discord.utils.MISSING,
+            )
+
             if view is not None:
                 view.message = message
 
@@ -71,22 +85,41 @@ class MarriageCog(commands.Cog):
         self,
         proposer: discord.abc.User,
         target: discord.abc.User,
-    ) -> tuple[str, MarriageProposalView | None]:
+    ) -> tuple[str, discord.Embed | None, MarriageProposalView | None]:
         if proposer.id == target.id:
-            return "💔 **You can't propose to yourself.** *...or can you?* 😳", None
+            return (
+                "💔 **You can't propose to yourself.** *...or can you?* 😳",
+                None,
+                None,
+            )
 
         if target.bot:
-            return "💔 **That's a bot.** They'll never text back.", None
+            return (
+                "💔 **That's a bot.** They'll never text back.",
+                None,
+                None,
+            )
 
         async with self.bot.db_session() as session:
             service = self.bot.build_marriage_service(session)
+
             if await service.get_active_marriage(proposer.id) is not None:
-                return "💍 **You're already married!** Use `/divorce` first.", None
+                return (
+                    "💍 **You're already married!** Use `/divorce` first.",
+                    None,
+                    None,
+                )
+
             if await service.get_active_marriage(target.id) is not None:
-                return f"💔 **{target.display_name} is already married** to someone else.", None
+                return (
+                    f"💔 **{target.display_name} is already married** to someone else.",
+                    None,
+                    None,
+                )
 
         gif_url = ""
         giphy = self.bot.build_giphy_service()
+
         if giphy is not None:
             gif_result = await giphy.random_anime_gif(PROPOSAL_GIF_QUERY)
             gif_url = gif_result.url if gif_result else ""
@@ -98,21 +131,38 @@ class MarriageCog(commands.Cog):
             "> *\"Will you marry me?\"* 🥺\n"
             "───────────────────────"
         )
-        if gif_url:
-            content += f"\n\n{gif_url}"
 
-        view = MarriageProposalView(self.bot, proposer.id, target.id)
-        return content, view
+        embed = None
+
+        if gif_url:
+            embed = discord.Embed(
+                color=discord.Color.from_rgb(255, 182, 193)
+            )
+            embed.set_image(url=gif_url)
+
+        view = MarriageProposalView(
+            self.bot,
+            proposer.id,
+            target.id,
+        )
+
+        return content, embed, view
 
     async def _build_divorce(self, user_id: int) -> str:
         async with self.bot.db_session() as session:
             service = self.bot.build_marriage_service(session)
+
             try:
                 result = await service.divorce(user_id)
             except NotMarriedError:
                 return "💔 **You're not married to anyone right now.**"
 
-        other_id = result.user_b_id if result.user_a_id == user_id else result.user_a_id
+        other_id = (
+            result.user_b_id
+            if result.user_a_id == user_id
+            else result.user_a_id
+        )
+
         return (
             "# 💔 Divorce Finalized 💔\n\n"
             f"<@{user_id}> **and** <@{other_id}> **are no longer married.**\n\n"

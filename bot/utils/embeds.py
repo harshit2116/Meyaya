@@ -53,8 +53,8 @@ def build_profile_embed(target: discord.Member, summary: ProfileSummaryLike) -> 
         description=(
             "## 🌸 Profile\n\n"
             f"### {target.display_name}\n\n"
-            f"❤️ **Given** • **{summary.total_given:,}**\n"
-            f"💌 **Received** • **{summary.total_received:,}**\n\n"
+            f"❤️ **Given Interaction** • **{summary.total_given:,}**\n"
+            f"💌 **Received Interaction** • **{summary.total_received:,}**\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "🏆 **Favorite**\n"
             f"> 💋 {favorite}\n\n"
