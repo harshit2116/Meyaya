@@ -16,6 +16,7 @@ from bot.database.session import build_async_engine, build_session_factory
 from bot.logging.setup import configure_logging
 from bot.services.giphy import GiphyService
 from bot.services.interactions import InteractionService
+from bot.services.marriage import MarriageService
 
 
 class MeyayaBot(commands.Bot):
@@ -52,6 +53,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.daily")
         await self.load_extension("bot.cogs.profile")
         await self.load_extension("bot.cogs.ship")
+        await self.load_extension("bot.cogs.marriage")
         if self.settings.guild_id:
             guild = discord.Object(id=self.settings.guild_id)
             await self.tree.sync(guild=guild)
