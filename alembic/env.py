@@ -9,7 +9,8 @@ from sqlalchemy import engine_from_config, pool
 
 from bot.config.settings import get_settings
 from bot.database.base import Base
-from bot.models import daily, relationship, user  # noqa: F401
+from bot.models import daily, relationship, user
+from bot.models import marriage  # noqa: F401  # noqa: F401
 
 config = context.config
 fileConfig(config.config_file_name) if config.config_file_name else None

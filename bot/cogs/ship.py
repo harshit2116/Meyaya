@@ -23,6 +23,7 @@ FILENAME = "ship.png"
 
 
 class ShipCog(commands.Cog):
+
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
         self._text_command: commands.Command | None = None
@@ -73,7 +74,8 @@ class ShipCog(commands.Cog):
         gif_result = None
         giphy = self.bot.build_giphy_service()
         if giphy is not None:
-            gif_result = await giphy.random_anime_gif("love couple romance")
+            query = self._gif_query_for_percentage(result.percentage)
+            gif_result = await giphy.random_anime_gif(query)
         gif_url = gif_result.url if gif_result else ""
 
         image_bytes = await self._build_side_by_side_image(user_one, user_two)
@@ -91,6 +93,18 @@ class ShipCog(commands.Cog):
             embed.set_thumbnail(url=gif_url)
 
         return embed, file
+
+    @staticmethod
+    def _gif_query_for_percentage(percentage: int) -> str:
+        if percentage >= 90:
+            return "anime wedding soulmates"
+        if percentage >= 70:
+            return "anime couple kiss hug"
+        if percentage >= 50:
+            return "anime blushing love"
+        if percentage >= 30:
+            return "anime awkward crush"
+        return "anime rejected sad friendzone"
 
     async def _build_side_by_side_image(
         self,

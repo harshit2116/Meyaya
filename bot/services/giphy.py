@@ -57,7 +57,7 @@ class GiphyService:
         """Search Giphy for a query and return a random GIF from the result set."""
 
         endpoint = "https://api.giphy.com/v1/gifs/search"
-        params = {"api_key": self.api_key, "q": query, "limit": 50, "rating": self.rating}
+        params = {"api_key": self.api_key, "q": query, "limit": 30, "rating": self.rating}
         try:
             async with self.http_session.get(endpoint, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
                 response.raise_for_status()
