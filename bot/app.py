@@ -17,6 +17,7 @@ from bot.logging.setup import configure_logging
 from bot.services.giphy import GiphyService
 from bot.services.interactions import InteractionService
 from bot.services.marriage import MarriageService
+from bot.services.gemini import GeminiService
 
 
 class MeyayaBot(commands.Bot):
@@ -54,6 +55,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.profile")
         await self.load_extension("bot.cogs.ship")
         await self.load_extension("bot.cogs.marriage")
+        await self.load_extension("bot.cogs.chat")
         if self.settings.guild_id:
             guild = discord.Object(id=self.settings.guild_id)
             await self.tree.sync(guild=guild)
@@ -76,6 +78,13 @@ class MeyayaBot(commands.Bot):
         if self.http_session is None or self.redis is None:
             return None
         return GiphyService(self.settings.giphy_api_key, self.settings.giphy_rating, self.http_session, self.redis)
+    
+    def build_gemini_service(self) -> GeminiService | None:
+        """Create a Gemini service when the HTTP session is ready."""
+
+        if self.http_session is None:
+            return None
+        return GeminiService(self.settings.gemini_api_key, self.settings.gemini_model, self.http_session)
 
     def build_interaction_service(self, session: AsyncSession) -> InteractionService:
         """Create an interaction service bound to the current runtime resources."""
