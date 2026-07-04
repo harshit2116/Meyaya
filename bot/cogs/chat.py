@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 import discord
 from discord.ext import commands
@@ -21,6 +22,8 @@ MENTION_PATTERN = re.compile(r"<@!?(\d+)>")
 class ChatCog(commands.Cog):
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
+        self._last_reply_at: dict[int, float] = {}
+        self._cooldown_seconds = 15.0
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -30,6 +33,11 @@ class ChatCog(commands.Cog):
             return
         if message.mention_everyone:
             return
+        now = time.monotonic()
+        last = self._last_reply_at.get(message.channel.id, 0.0)
+        if now - last < self._cooldown_seconds:
+            return
+        self._last_reply_at[message.channel.id] = now
 
         user_text = MENTION_PATTERN.sub("", message.content).strip()
         if not user_text:

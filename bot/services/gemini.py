@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 REQUEST_TIMEOUT_SECONDS = 20
-MAX_OUTPUT_TOKENS = 600
-MAX_REPLY_WORDS = 50
+MAX_OUTPUT_TOKENS = 400
+MAX_REPLY_WORDS = 30
 
 
 @dataclass(frozen=True)
@@ -55,10 +55,14 @@ class GeminiService:
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS),
             ) as response:
+                if response.status == 429:
+                    logger.warning("Gemini rate limit hit.")
+                    return GeminiReply(text="*yawns* ...I'm all out of energy for now, ask me again in a bit! 😴")
                 if response.status != 200:
                     body = await response.text()
                     logger.error("Gemini request failed (%s): %s", response.status, body)
                     return None
+                
                 data = await response.json()
         except (aiohttp.ClientError, TimeoutError) as exc:
             logger.error("Gemini request errored: %s", exc)

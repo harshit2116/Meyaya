@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     discord_token: str = Field(alias="DISCORD_TOKEN")
     database_url: str = Field(alias="DATABASE_URL")
     redis_url: str = Field(alias="REDIS_URL")
+    giphy_api_key: str = Field(default="", alias="GIPHY_API_KEY")
     giphy_rating: str = Field(default="g", alias="GIPHY_RATING")
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
