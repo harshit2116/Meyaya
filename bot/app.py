@@ -18,6 +18,7 @@ from bot.services.giphy import GiphyService
 from bot.services.interactions import InteractionService
 from bot.services.marriage import MarriageService
 from bot.services.gemini import GeminiService
+from bot.services.chat_memory import ChatMemoryService
 
 
 class MeyayaBot(commands.Bot):
@@ -78,6 +79,13 @@ class MeyayaBot(commands.Bot):
         if self.http_session is None or self.redis is None:
             return None
         return GiphyService(self.settings.giphy_api_key, self.settings.giphy_rating, self.http_session, self.redis)
+    
+    def build_chat_memory_service(self) -> ChatMemoryService | None:
+        """Create a chat memory service when Redis is ready."""
+
+        if self.redis is None:
+            return None
+        return ChatMemoryService(self.redis)
     
     def build_gemini_service(self) -> GeminiService | None:
         """Create a Gemini service when the HTTP session is ready."""

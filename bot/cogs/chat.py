@@ -1,16 +1,16 @@
-"""Mention-triggered Gemini chat responses."""
+"""Mention-triggered Gemini chat responses with short-term and permanent memory."""
 
 from __future__ import annotations
 
 import logging
 import re
-import time
 
 import discord
 from discord.ext import commands
 
 from bot.app import MeyayaBot
 from bot.data.gemini_persona import build_system_instruction
+from bot.repositories.memories import MemoryRepository
 from bot.services.profiles import ProfileService
 
 logger = logging.getLogger(__name__)
@@ -22,8 +22,6 @@ MENTION_PATTERN = re.compile(r"<@!?(\d+)>")
 class ChatCog(commands.Cog):
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
-        self._last_reply_at: dict[int, float] = {}
-        self._cooldown_seconds = 15.0
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -33,25 +31,26 @@ class ChatCog(commands.Cog):
             return
         if message.mention_everyone:
             return
-        now = time.monotonic()
-        last = self._last_reply_at.get(message.channel.id, 0.0)
-        if now - last < self._cooldown_seconds:
-            return
-        self._last_reply_at[message.channel.id] = now
 
         user_text = MENTION_PATTERN.sub("", message.content).strip()
         if not user_text:
             return
+
         gemini = self.bot.build_gemini_service()
         if gemini is None:
             await message.reply("💤 *rubs eyes* ...my brain isn't plugged in right now. Try again later!")
             return
 
+        guild_id = message.guild.id if message.guild else None
         context_lines = await self._build_context_lines(message)
-        system_instruction = build_system_instruction(context_lines=context_lines)
+        memory_lines = await self._load_memories(guild_id)
+        system_instruction = build_system_instruction(context_lines=context_lines, memory_lines=memory_lines)
+
+        chat_memory = self.bot.build_chat_memory_service()
+        history = await chat_memory.get_history(message.channel.id) if chat_memory else []
 
         async with message.channel.typing():
-            reply = await gemini.generate(system_instruction, user_text)
+            reply = await gemini.generate(system_instruction, user_text, history=history)
 
         if reply is None:
             await message.reply("😵 *short-circuits* ...I couldn't think of anything, sorry!")
@@ -59,6 +58,22 @@ class ChatCog(commands.Cog):
 
         for chunk in self._chunk_text(reply.text):
             await message.reply(chunk)
+
+        if chat_memory is not None:
+            await chat_memory.append_turn(message.channel.id, user_text, reply.text)
+
+        if reply.memories:
+            async with self.bot.db_session() as session:
+                repo = MemoryRepository(session)
+                for fact in reply.memories:
+                    await repo.create(guild_id, fact)
+                await session.commit()
+
+    async def _load_memories(self, guild_id: int | None) -> list[str]:
+        async with self.bot.db_session() as session:
+            repo = MemoryRepository(session)
+            records = await repo.list_recent(guild_id)
+        return [record.content for record in records]
 
     async def _build_context_lines(self, message: discord.Message) -> list[str]:
         lines = [
