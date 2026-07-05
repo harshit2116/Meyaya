@@ -12,6 +12,7 @@ from bot.database.base import Base
 
 # Import all models so Alembic can detect them
 from bot.models import daily, marriage, relationship, user  # noqa: F401
+from bot.models import memory  # noqa: F401
 
 config = context.config
 

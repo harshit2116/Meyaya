@@ -41,8 +41,7 @@ class ChatCog(commands.Cog):
 
         user_text = MENTION_PATTERN.sub("", message.content).strip()
         if not user_text:
-            user_text = "Say hi and ask what I want to talk about."
-
+            return
         gemini = self.bot.build_gemini_service()
         if gemini is None:
             await message.reply("💤 *rubs eyes* ...my brain isn't plugged in right now. Try again later!")
