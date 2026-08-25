@@ -67,6 +67,12 @@ class GeminiService:
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS),
             ) as response:
+                logger.debug(
+                    "Gemini request sent model=%s status=%s payload_keys=%s",
+                    self.model,
+                    response.status,
+                    list(payload.keys()),
+                )
                 if response.status == 429:
                     logger.warning("Gemini rate limit hit.")
                     return GeminiReply(
@@ -76,17 +82,31 @@ class GeminiService:
                 if response.status != 200:
                     body = await response.text()
                     logger.error("Gemini request failed (%s): %s", response.status, body)
+                    # include a small snippet for debugging (redacted of keys)
+                    logger.debug("Gemini failure body_snippet=%s", body[:1000])
                     return None
                 data = await response.json()
         except (aiohttp.ClientError, TimeoutError) as exc:
             logger.error("Gemini request errored: %s", exc)
+            logger.exception("Gemini exception")
             return None
 
         raw_text = self._extract_text(data)
+        # Log parsed response metadata for debugging
+        try:
+            resp_id = data.get("responseId") if isinstance(data, dict) else None
+            logger.debug("Gemini responseId=%s modelVersion=%s", resp_id, data.get("modelVersion") if isinstance(data, dict) else None)
+        except Exception:
+            logger.debug("Gemini response metadata missing or malformed")
         if not raw_text:
             return None
 
         visible_text, memories = self._split_memories(raw_text)
+        # Truncate visible_text in logs to avoid large outputs
+        try:
+            logger.debug("Gemini extracted_text_len=%d snippet=%s", len(visible_text), (visible_text[:300] + "...") if len(visible_text) > 300 else visible_text)
+        except Exception:
+            logger.debug("Gemini extracted_text unavailable for logging")
         visible_text = self._limit_words(visible_text, MAX_REPLY_WORDS)
         if not visible_text:
             return None

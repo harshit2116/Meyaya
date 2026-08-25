@@ -8,7 +8,7 @@ import logging
 import discord
 from discord import app_commands
 from discord.ext import commands
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageOps, ImageFilter
 
 from bot.app import MeyayaBot
 from bot.services.ship import ShipService
@@ -16,9 +16,9 @@ from bot.utils.embeds import build_ship_embed
 
 logger = logging.getLogger(__name__)
 
-AVATAR_SIZE = 512  # big, per side
-GAP = 24
-CANVAS_HEIGHT = AVATAR_SIZE
+AVATAR_SIZE = 256  # per-side size (smaller for speed)
+GAP = 20
+CANVAS_HEIGHT = 320
 FILENAME = "ship.png"
 
 
@@ -70,15 +70,38 @@ class ShipCog(commands.Cog):
     ) -> tuple[discord.Embed, discord.File]:
         service = ShipService()
         result = service.ship(user_one.id, user_two.id)
-
-        gif_result = None
+        # Try to fetch a themed GIF quickly (non-blocking if Klipy unavailable)
+        gif_url = ""
         klipy = self.bot.build_klipy_service()
         if klipy is not None:
-            query = self._gif_query_for_percentage(result.percentage)
-            gif_result = await klipy.random_anime_gif(query)
-        gif_url = gif_result.url if gif_result else ""
+            try:
+                query = self._gif_query_for_percentage(result.percentage)
+                gif_res = await klipy.random_gif(query, prefer_anime=True)
+                gif_url = gif_res.url or ""
+            except Exception:
+                logger.exception("KLIPY quick fetch failed for ship gif")
 
-        image_bytes = await self._build_side_by_side_image(user_one, user_two)
+        # Check Redis cache for a pre-rendered ship image to keep responses snappy
+        image_bytes = None
+        redis = getattr(self.bot, "redis", None)
+        cache_key = f"ship_img:{result.user_a_id}:{result.user_b_id}:{result.percentage}"
+        if redis is not None:
+            try:
+                cached = await redis.get(cache_key)
+                if cached:
+                    image_bytes = cached
+            except Exception:
+                logger.exception("Redis read failed for ship cache")
+
+        if image_bytes is None:
+            image_bytes = await self._build_side_by_side_image(user_one, user_two, result)
+            if redis is not None:
+                try:
+                    # cache briefly to speed repeated calls
+                    await redis.setex(cache_key, 60, image_bytes)
+                except Exception:
+                    logger.exception("Redis write failed for ship cache")
+
         file = discord.File(io.BytesIO(image_bytes), filename=FILENAME)
 
         embed = build_ship_embed(
@@ -110,27 +133,122 @@ class ShipCog(commands.Cog):
         self,
         user_one: discord.Member,
         user_two: discord.Member,
+        result: "ShipResult",
     ) -> bytes:
         avatar_bytes = []
         for member in (user_one, user_two):
             asset = member.display_avatar.replace(size=AVATAR_SIZE, format="png")
             avatar_bytes.append(await asset.read())
-
-        avatars = [ImageOps.fit(Image.open(io.BytesIO(b)).convert("RGBA"), (AVATAR_SIZE, AVATAR_SIZE)) for b in avatar_bytes]
+        # Build circular avatars for a polished look
+        avatars = []
+        for b in avatar_bytes:
+            im = Image.open(io.BytesIO(b)).convert("RGBA")
+            im = ImageOps.fit(im, (AVATAR_SIZE, AVATAR_SIZE))
+            mask = Image.new("L", (AVATAR_SIZE, AVATAR_SIZE), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.ellipse((0, 0, AVATAR_SIZE, AVATAR_SIZE), fill=255)
+            im.putalpha(mask)
+            avatars.append(im)
 
         canvas_width = AVATAR_SIZE * 2 + GAP
-        canvas = Image.new("RGBA", (canvas_width, CANVAS_HEIGHT), (0, 0, 0, 0))
+        canvas = Image.new("RGBA", (canvas_width, CANVAS_HEIGHT), (255, 255, 255, 0))
 
-        canvas.paste(avatars[0], (0, 0))
-        canvas.paste(avatars[1], (AVATAR_SIZE + GAP, 0))
-        # Heart divider in the gap.
-        heart_draw = ImageDraw.Draw(canvas)
-        cx = AVATAR_SIZE + GAP // 2
-        cy = CANVAS_HEIGHT // 2
-        heart_draw.ellipse((cx - GAP // 2, cy - GAP // 2, cx + GAP // 2, cy + GAP // 2), fill=(255, 77, 109, 255))
+        left_x = 40
+        right_x = left_x + AVATAR_SIZE + GAP - 40
+        y = 24
+        canvas.paste(avatars[0], (left_x, y), avatars[0])
+        canvas.paste(avatars[1], (right_x, y), avatars[1])
+
+        draw = ImageDraw.Draw(canvas)
+
+        # Compatibility helper for measuring text across Pillow versions
+        def _text_size(text: str, font) -> tuple[int, int]:
+            try:
+                # Pillow >= 8: textbbox available and accurate
+                bbox = draw.textbbox((0, 0), text, font=font)
+                return bbox[2] - bbox[0], bbox[3] - bbox[1]
+            except Exception:
+                try:
+                    # Older Pillow: Font.getsize
+                    return font.getsize(text)
+                except Exception:
+                    # Last resort: approximate size
+                    return (len(text) * 8, 16)
+
+        # Add soft shadows under avatars for depth
+        try:
+            shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+            sd = ImageDraw.Draw(shadow)
+            sd.ellipse((left_x + 8, y + AVATAR_SIZE - 18, left_x + AVATAR_SIZE - 8, y + AVATAR_SIZE + 6), fill=(0, 0, 0, 90))
+            sd.ellipse((right_x + 8, y + AVATAR_SIZE - 18, right_x + AVATAR_SIZE - 8, y + AVATAR_SIZE + 6), fill=(0, 0, 0, 90))
+            shadow = shadow.filter(ImageFilter.GaussianBlur(8))
+            canvas = Image.alpha_composite(shadow, canvas)
+            draw = ImageDraw.Draw(canvas)
+        except Exception:
+            # If ImageFilter not available, ignore shadow
+            pass
+
+        # Heart between avatars (stylized)
+        heart_x = canvas_width // 2
+        heart_y = y + AVATAR_SIZE // 2
+        heart_radius = 26
+        # outer ring
+        draw.ellipse((heart_x - heart_radius - 6, heart_y - heart_radius - 6, heart_x + heart_radius + 6, heart_y + heart_radius + 6), fill=(255, 200, 210, 120))
+        # core circle
+        draw.ellipse((heart_x - heart_radius, heart_y - heart_radius, heart_x + heart_radius, heart_y + heart_radius), fill=(255, 77, 109, 255))
+
+        # Percentage big text - try to load a nicer font, fallback to default
+        try:
+            from PIL import ImageFont
+
+            try:
+                font_large = ImageFont.truetype("arialbd.ttf", 64)
+            except Exception:
+                font_large = ImageFont.truetype("arial.ttf", 64)
+            font_small = ImageFont.truetype("arial.ttf", 20)
+        except Exception:
+            from PIL import ImageFont
+
+            font_large = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+
+        pct_text = f"{result.percentage}%"
+        w, h = _text_size(pct_text, font_large)
+        # Backdrop for percentage to ensure readability
+        pad_x, pad_y = 12, 6
+        box_x0 = canvas_width // 2 - w // 2 - pad_x
+        box_y0 = 8 - pad_y
+        box_x1 = canvas_width // 2 + w // 2 + pad_x
+        box_y1 = 8 + h + pad_y
+        try:
+            draw.rounded_rectangle((box_x0, box_y0, box_x1, box_y1), radius=12, fill=(0, 0, 0, 150))
+        except Exception:
+            draw.rectangle((box_x0, box_y0, box_x1, box_y1), fill=(0, 0, 0, 150))
+        try:
+            draw.text((canvas_width // 2 - w // 2, 8), pct_text, font=font_large, fill=(255, 77, 109, 255), stroke_width=2, stroke_fill=(10, 10, 10, 200))
+        except Exception:
+            draw.text((canvas_width // 2 - w // 2, 8), pct_text, font=font_large, fill=(255, 77, 109, 255))
+
+        # Label beneath percentage
+        label_text = result.label
+        w2, h2 = _text_size(label_text, font_small)
+        draw.text((canvas_width // 2 - w2 // 2, 8 + h + 6), label_text, font=font_small, fill=(120, 120, 120, 255))
+
+        # Small footer with names
+        name_y = y + AVATAR_SIZE + 12
+        left_name = user_one.display_name
+        right_name = user_two.display_name
+        fn_w, _ = _text_size(left_name, font_small)
+        # Draw a tiny shadow then the name for legibility on dark backgrounds
+        shadow_off = 1
+        draw.text((left_x + AVATAR_SIZE // 2 - fn_w // 2 + shadow_off, name_y + shadow_off), left_name, font=font_small, fill=(0, 0, 0, 160))
+        draw.text((left_x + AVATAR_SIZE // 2 - fn_w // 2, name_y), left_name, font=font_small, fill=(255, 255, 255, 230))
+        fn_w2, _ = _text_size(right_name, font=font_small)
+        draw.text((right_x + AVATAR_SIZE // 2 - fn_w2 // 2 + shadow_off, name_y + shadow_off), right_name, font=font_small, fill=(0, 0, 0, 160))
+        draw.text((right_x + AVATAR_SIZE // 2 - fn_w2 // 2, name_y), right_name, font=font_small, fill=(255, 255, 255, 230))
 
         buffer = io.BytesIO()
-        canvas.save(buffer, format="PNG")
+        canvas.save(buffer, format="PNG", optimize=True)
         return buffer.getvalue()
 
 
