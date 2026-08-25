@@ -51,6 +51,7 @@ class DailyCog(commands.Cog):
         if interaction.guild is None:
             await interaction.response.send_message("This command only works inside a server.", ephemeral=True)
             return
+        await interaction.response.defer()
         target = member or cast(discord.Member, interaction.user)
         bot = cast(MeyayaBot, interaction.client)
         async with bot.db_session() as session:
@@ -138,7 +139,7 @@ class DailyCog(commands.Cog):
                 f"Today's {title.lower()} is {winner_mention}.",
                 gif_queries,
                 color,
-                anime_only=kind == "smartest",
+                anime_only=True,
             )
 
         return commands.Command(callback, name=name, help=f"Choose the {kind} member of the day.")
@@ -154,9 +155,10 @@ class DailyCog(commands.Cog):
         if interaction.guild is None:
             await interaction.response.send_message("This command only works inside a server.", ephemeral=True)
             return
+        await interaction.response.defer()
         candidates = [member.id for member in interaction.guild.members if not member.bot]
         if not candidates:
-            await interaction.response.send_message("No eligible members were found.", ephemeral=True)
+            await interaction.followup.send("No eligible members were found.", ephemeral=True)
             return
         bot = cast(MeyayaBot, interaction.client)
         async with bot.db_session() as session:
@@ -172,7 +174,7 @@ class DailyCog(commands.Cog):
             f"Today's {title.lower()} is {winner_mention}.",
             gif_queries,
             color,
-            anime_only=kind == "smartest",
+            anime_only=True,
         )
 
     async def _send_daily_embed(
@@ -186,15 +188,12 @@ class DailyCog(commands.Cog):
         *,
         anime_only: bool = False,
     ) -> None:
-        gif_service = bot.build_giphy_service()
+        gif_service = bot.build_klipy_service()
         gif_url: str | None = None
         if gif_service is not None:
             gif_query = choice(gif_queries)
-            gif_result = (
-                await gif_service.random_anime_gif(gif_query)
-                if anime_only
-                else await gif_service.random_gif(gif_query)
-            )
+            # Prefer anime but allow non-anime when necessary for coverage and speed.
+            gif_result = await gif_service.random_gif(gif_query, prefer_anime=True)
             gif_url = gif_result.url
 
         description = f"**{message}**"
@@ -203,7 +202,7 @@ class DailyCog(commands.Cog):
             embed.set_image(url=gif_url)
 
         if isinstance(destination, discord.Interaction):
-            await destination.response.send_message(embed=embed)
+            await destination.followup.send(embed=embed)
             return
 
         await destination.send(embed=embed)

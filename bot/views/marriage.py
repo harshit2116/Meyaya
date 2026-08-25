@@ -63,9 +63,9 @@ class MarriageProposalView(discord.ui.View):
                 return
 
         gif_url = ""
-        giphy = self.bot.build_giphy_service()
-        if giphy is not None:
-            gif_result = await giphy.random_anime_gif(CEREMONY_GIF_QUERY)
+        klipy = self.bot.build_klipy_service()
+        if klipy is not None:
+            gif_result = await klipy.random_anime_gif(CEREMONY_GIF_QUERY)
             gif_url = gif_result.url if gif_result else ""
 
         wedding_message = (

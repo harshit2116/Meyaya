@@ -64,11 +64,12 @@ class InteractionsCog(commands.Cog):
                 await interaction.response.send_message("This command only works inside a server.", ephemeral=True)
                 return
 
+            await interaction.response.defer()
             bot = cast(MeyayaBot, interaction.client)
             async with bot.db_session() as session:
                 service = bot.build_interaction_service(session)
                 result = await service.perform(interaction.user.id, chosen_target.id, definition)
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     embed=build_interaction_embed(
                         title=result.title,
                         description=result.message.format(actor=interaction.user.mention, target=chosen_target.mention),
@@ -123,7 +124,7 @@ class InteractionsCog(commands.Cog):
             query: str,
         ) -> None:
             bot = cast(MeyayaBot, ctx.bot)
-            gif_service = bot.build_giphy_service()
+            gif_service = bot.build_klipy_service()
             if gif_service is None:
                 await ctx.send("GIF support is not configured.")
                 return
@@ -140,7 +141,7 @@ class InteractionsCog(commands.Cog):
         return commands.Command(
             callback,
             name="gif",
-            help="Fetch a GIF from Giphy with uwu gif <query>.",
+            help="Fetch a GIF from Klipy with uwu gif <query>.",
         )
 
     def _build_text_help_command(self) -> commands.Command:

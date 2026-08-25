@@ -25,7 +25,7 @@ Required environment values:
 - DISCORD_TOKEN
 - DATABASE_URL
 - REDIS_URL
-- GIPHY_API_KEY for GIF-backed interaction responses
+- KLIPY_API_KEY for GIF-backed interaction responses
 
 ## Project Layout
 

@@ -7,7 +7,7 @@ from random import choice
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.services.giphy import GiphyService
+from bot.services.klipy import KlipyService
 from bot.repositories.relationships import RelationshipRepository
 from bot.repositories.users import UserRepository
 
@@ -39,11 +39,11 @@ class InteractionResult:
 class InteractionService:
     """Business logic for relationship-based interaction commands."""
 
-    def __init__(self, session: AsyncSession, giphy: GiphyService | None = None) -> None:
+    def __init__(self, session: AsyncSession, klipy: KlipyService | None = None) -> None:
         self.session = session
         self.relationships = RelationshipRepository(session)
         self.users = UserRepository(session)
-        self.giphy = giphy
+        self.klipy = klipy
 
     async def perform(
         self,
@@ -77,10 +77,18 @@ class InteractionService:
             setattr(target_stats, target_received_field, getattr(target_stats, target_received_field) + 1)
         count = await self.relationships.increment(actor_id, target_id, definition.name)
         await self.session.commit()
-        gif_url = choice(definition.gif_urls) if definition.gif_urls else None
-        if gif_url is None and self.giphy and definition.gif_query:
-            gif_result = await self.giphy.random_gif(definition.gif_query)
+        gif_url = None
+        # Prefer a live Klipy anime GIF when available for more variety.
+        if self.klipy and definition.gif_query:
+            gif_result = await self.klipy.random_anime_gif(definition.gif_query)
             gif_url = gif_result.url
+            if gif_url is None:
+                # try a looser search (non-anime preferred) before falling back to static URLs
+                gif_result = await self.klipy.random_gif(definition.gif_query, prefer_anime=False)
+                gif_url = gif_result.url
+
+        if gif_url is None and definition.gif_urls:
+            gif_url = choice(definition.gif_urls)
 
         return InteractionResult(
             message=message,

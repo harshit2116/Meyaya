@@ -9,17 +9,19 @@ import discord
 from discord.ext import commands
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from redis.asyncio import Redis
+import logging
 
 from bot.config.settings import Settings, get_settings
 from bot.cache.redis import build_redis_client
 from bot.database.session import build_async_engine, build_session_factory
 from bot.logging.setup import configure_logging
-from bot.services.giphy import GiphyService
+from bot.services.klipy import KlipyService
 from bot.services.interactions import InteractionService
 from bot.services.marriage import MarriageService
 from bot.services.gemini import GeminiService
 from bot.services.chat_memory import ChatMemoryService
 
+logger = logging.getLogger(__name__)
 
 class MeyayaBot(commands.Bot):
     """Discord bot configured for slash-command interaction."""
@@ -73,12 +75,19 @@ class MeyayaBot(commands.Bot):
         await self.engine.dispose()
         await super().close()
 
-    def build_giphy_service(self) -> GiphyService | None:
-        """Create a Giphy service when the HTTP session and Redis client are ready."""
+    async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
+        """Suppress noisy tracebacks for expected command errors."""
+
+        if isinstance(error, commands.CommandNotFound):
+            return
+        logger.exception("Unhandled command error", exc_info=error)
+
+    def build_klipy_service(self) -> KlipyService | None:
+        """Create a Klipy service when the HTTP session and Redis client are ready."""
 
         if self.http_session is None or self.redis is None:
             return None
-        return GiphyService(self.settings.giphy_api_key, self.settings.giphy_rating, self.http_session, self.redis)
+        return KlipyService(self.settings.klipy_api_key, self.settings.klipy_rating, self.http_session, self.redis)
     
     def build_chat_memory_service(self) -> ChatMemoryService | None:
         """Create a chat memory service when Redis is ready."""
@@ -97,7 +106,7 @@ class MeyayaBot(commands.Bot):
     def build_interaction_service(self, session: AsyncSession) -> InteractionService:
         """Create an interaction service bound to the current runtime resources."""
 
-        return InteractionService(session, self.build_giphy_service())
+        return InteractionService(session, self.build_klipy_service())
 
     def build_marriage_service(self, session: AsyncSession) -> MarriageService:
         """Create a marriage service bound to the current database session."""

@@ -46,6 +46,7 @@ class ProfileCog(commands.Cog):
             )
             return
 
+        await interaction.response.defer()
         target = member or cast(discord.Member, interaction.user)
         bot = cast(MeyayaBot, interaction.client)
 
@@ -53,7 +54,7 @@ class ProfileCog(commands.Cog):
             service = ProfileService(session)
             summary = await service.build(target.id)
 
-        await interaction.response.send_message(embed=build_profile_embed(target, summary))
+        await interaction.followup.send(embed=build_profile_embed(target, summary))
 
     def _build_text_profile(self) -> commands.Command:
         async def callback(

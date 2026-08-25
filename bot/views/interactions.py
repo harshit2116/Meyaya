@@ -70,4 +70,7 @@ class InteractionResponseView(discord.ui.View):
 
         await interaction.response.send_message(embed=embed)
         if interaction.message is not None:
-            await interaction.message.edit(view=None)
+            try:
+                await interaction.message.edit(view=None)
+            except Exception:
+                pass

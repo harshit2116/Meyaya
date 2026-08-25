@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
+
+logger = logging.getLogger(__name__)
 
 HISTORY_TTL_SECONDS = 1800  # conversation resets after 30 minutes of silence
 MAX_TURNS = 12  # one turn = one user message + one model reply
@@ -21,9 +25,14 @@ class ChatMemoryService:
         return f"chat_history:{channel_id}"
 
     async def get_history(self, channel_id: int) -> list[dict]:
-        """Return Gemini-formatted conversation turns, oldest first."""
+        """Return Gemini-formatted conversation turns, oldest first. Empty on any Redis failure."""
 
-        raw = await self.redis.get(self._key(channel_id))
+        try:
+            raw = await self.redis.get(self._key(channel_id))
+        except RedisError as exc:
+            logger.warning("Redis unavailable, skipping chat history: %s", exc)
+            return []
+
         if not raw:
             return []
         try:
@@ -32,10 +41,14 @@ class ChatMemoryService:
             return []
 
     async def append_turn(self, channel_id: int, user_text: str, model_text: str) -> None:
-        """Append a completed exchange and trim/expire the history."""
+        """Append a completed exchange and trim/expire the history. No-ops on Redis failure."""
 
         history = await self.get_history(channel_id)
         history.append({"role": "user", "parts": [{"text": user_text}]})
         history.append({"role": "model", "parts": [{"text": model_text}]})
         history = history[-(MAX_TURNS * 2) :]
-        await self.redis.set(self._key(channel_id), json.dumps(history), ex=HISTORY_TTL_SECONDS)
+
+        try:
+            await self.redis.set(self._key(channel_id), json.dumps(history), ex=HISTORY_TTL_SECONDS)
+        except RedisError as exc:
+            logger.warning("Redis unavailable, could not save chat history: %s", exc)

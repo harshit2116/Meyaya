@@ -72,10 +72,10 @@ class ShipCog(commands.Cog):
         result = service.ship(user_one.id, user_two.id)
 
         gif_result = None
-        giphy = self.bot.build_giphy_service()
-        if giphy is not None:
+        klipy = self.bot.build_klipy_service()
+        if klipy is not None:
             query = self._gif_query_for_percentage(result.percentage)
-            gif_result = await giphy.random_anime_gif(query)
+            gif_result = await klipy.random_anime_gif(query)
         gif_url = gif_result.url if gif_result else ""
 
         image_bytes = await self._build_side_by_side_image(user_one, user_two)
