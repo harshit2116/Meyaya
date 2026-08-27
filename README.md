@@ -31,8 +31,10 @@ Optional voice/live environment values:
 
 - GEMINI_API_KEY for Gemini chat and Live voice sessions
 - GEMINI_LIVE_MODEL default `gemini-3.1-flash-live-preview`
-- GEMINI_VOICE default `Kore` (examples: `Kore`, `Leda`, `Aoede`)
-- GEMINI_LIVE_SYSTEM_INSTRUCTION to tune conversational behavior in VC
+- GEMINI_VOICE default `Leda` (examples: `Leda`, `Kore`, `Aoede`)
+- GEMINI_LIVE_SYSTEM_INSTRUCTION adds optional VC behavior on top of Meyaya's shared persona
+
+Commands can be invoked as `/command`, `uwu command` (case-insensitive), or `@Meyaya command`.
 
 ## Main Commands
 

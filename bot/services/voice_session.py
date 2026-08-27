@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - Python >= 3.13
 import discord
 
 from bot.app import MeyayaBot
+from bot.data.gemini_persona import build_voice_system_instruction
 from bot.services.audio import (
     PcmStreamAudioSource,
     ResampleState,
@@ -156,7 +157,9 @@ class VoiceChatSession:
             api_key=self.bot.settings.gemini_api_key,
             model=self.bot.settings.gemini_live_model,
             voice_name=self.bot.settings.gemini_voice,
-            system_instruction=self.bot.settings.gemini_live_system_instruction,
+            system_instruction=build_voice_system_instruction(
+                extra_instruction=self.bot.settings.gemini_live_system_instruction
+            ),
             on_output_audio=self._on_gemini_audio,
             on_interrupted=self._on_gemini_interrupted,
             on_input_audio_sent=self._on_gemini_input_sent,

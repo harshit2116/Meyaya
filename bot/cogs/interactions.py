@@ -37,6 +37,10 @@ class InteractionsCog(commands.Cog):
             self.bot.add_command(text_command)
             self._text_commands.append(text_command)
 
+        for app_command in (self._build_app_gif_command(), self._build_app_help_command()):
+            self.bot.tree.add_command(app_command)
+            self._app_commands.append(app_command)
+
         self._text_gif_command = self._build_text_gif_command()
         self._text_help_command = self._build_text_help_command()
         self.bot.add_command(self._text_gif_command)
@@ -156,44 +160,82 @@ class InteractionsCog(commands.Cog):
             help="Fetch a GIF from Klipy with uwu gif <query>.",
         )
 
+    def _build_app_gif_command(self) -> app_commands.Command:
+        async def callback(interaction: discord.Interaction, query: str) -> None:
+            await interaction.response.defer()
+            bot = cast(MeyayaBot, interaction.client)
+            gif_service = bot.build_klipy_service()
+            if gif_service is None:
+                await interaction.followup.send("GIF support is not configured.")
+                return
+
+            result = await gif_service.random_anime_gif(query)
+            if result.url is None:
+                await interaction.followup.send(f"I could not find a GIF for `{query}`.")
+                return
+
+            embed = discord.Embed(title=f"GIF: {query}", color=0x8ECAE6)
+            embed.set_image(url=result.url)
+            await interaction.followup.send(embed=embed)
+
+        return app_commands.Command(
+            name="gif",
+            description="Fetch an anime GIF from Klipy.",
+            callback=callback,
+        )
+
+    def _build_app_help_command(self) -> app_commands.Command:
+        async def callback(interaction: discord.Interaction) -> None:
+            await interaction.response.send_message(embed=self._build_help_embed())
+
+        return app_commands.Command(
+            name="help",
+            description="List Meyaya's commands and invocation styles.",
+            callback=callback,
+        )
+
     def _build_text_help_command(self) -> commands.Command:
         async def callback(ctx: commands.Context[commands.Bot]) -> None:
-            embed = discord.Embed(title="Meyaya Commands", color=0x8ECAE6)
-            lines = ["**Text commands**"]
-            for command in self._text_commands:
-                lines.append(f"`uwu {command.name} ...`")
-            lines.append("`uwu gif <query>`")
-            lines.append("`uwu help`")
-            lines.append("`uwu iq [member]`")
-            lines.append("`uwu dumb`")
-            lines.append("`uwu smart`")
-            lines.append("`uwu clown`")
-            lines.append("`uwu profile [member]`")
-            lines.append("`uwu ship <member> <member>`")
-            lines.append("")
-            lines.append("**Slash commands**")
-            for command in INTERACTION_DEFINITIONS:
-                lines.append(f"`/{command.name}`")
-            lines.extend(
-                [
-                    "`/iq`",
-                    "`/dumb`",
-                    "`/smart`",
-                    "`/clown`",
-                    "`/profile`",
-                    "`/ship`",
-                    "`/join`",
-                    "`/leave`",
-                ]
-            )
-            embed.description = "\n".join(lines)
-            await ctx.send(embed=embed)
+            await ctx.send(embed=self._build_help_embed())
 
         return commands.Command(
             callback,
             name="help",
             help="List all Meyaya commands.",
         )
+
+    def _build_help_embed(self) -> discord.Embed:
+        embed = discord.Embed(title="Meyaya Commands", color=0x8ECAE6)
+        command_names = [definition.name for definition in INTERACTION_DEFINITIONS]
+        command_names.extend(
+            [
+                "gif",
+                "iq",
+                "dumb",
+                "smart",
+                "clown",
+                "profile",
+                "ship",
+                "marry",
+                "divorce",
+                "join",
+                "leave",
+                "voice",
+                "voicecheck",
+                "voicediag",
+                "monitor_add",
+                "monitor_remove",
+                "monitor_list",
+                "help",
+            ]
+        )
+        invocation = (
+            "Use every command as `/command`, `uwu command`, `Uwu command`, "
+            "or `@Meyaya command`."
+        )
+        commands_text = ", ".join(f"`{name}`" for name in command_names)
+        embed.description = f"{invocation}\n\n{commands_text}"
+        return embed
 
     def _build_interaction_render(
         self,

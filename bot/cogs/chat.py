@@ -34,6 +34,13 @@ class ChatCog(commands.Cog):
         if message.mention_everyone:
             return
 
+        # A mention can be a command prefix (`@Meyaya ship ...`) or a normal
+        # conversation trigger. Let the command router exclusively handle the
+        # former so Meyaya doesn't send both a command response and an AI reply.
+        command_context = await self.bot.get_context(message)
+        if command_context.valid:
+            return
+
         user_text = MENTION_PATTERN.sub("", message.content).strip()
         if not user_text:
             return

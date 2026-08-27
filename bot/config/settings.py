@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     gemini_live_model: str = Field(
         default="gemini-3.1-flash-live-preview", alias="GEMINI_LIVE_MODEL"
     )
-    gemini_voice: str = Field(default="Kore", alias="GEMINI_VOICE")
+    gemini_voice: str = Field(default="Leda", alias="GEMINI_VOICE")
     gemini_live_system_instruction: str = Field(
         default=(
             "You are Meyaya in a Discord voice chat. Speak naturally and keep replies concise. "

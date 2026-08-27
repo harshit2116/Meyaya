@@ -24,6 +24,31 @@ from bot.services.chat_memory import ChatMemoryService
 logger = logging.getLogger(__name__)
 
 
+def _build_prefix_resolver(configured_prefix: str):
+    """Accept bot mentions plus case-insensitive written prefixes."""
+
+    written_prefixes = {"uwu"}
+    if configured_prefix.strip():
+        written_prefixes.add(configured_prefix.strip())
+
+    def resolve(bot: commands.Bot, message: discord.Message) -> list[str]:
+        prefixes = list(commands.when_mentioned(bot, message))
+        content = message.content or ""
+        for candidate in written_prefixes:
+            length = len(candidate)
+            if (
+                content[:length].casefold() == candidate.casefold()
+                and len(content) > length
+                and content[length].isspace()
+            ):
+                # Return the user's exact casing and one whitespace character so
+                # discord.py can match it literally before parsing the command.
+                prefixes.append(content[: length + 1])
+        return prefixes
+
+    return resolve
+
+
 class MeyayaBot(commands.Bot):
     """Discord bot configured for slash-command interaction."""
 
@@ -32,7 +57,8 @@ class MeyayaBot(commands.Bot):
         intents.members = True
         intents.message_content = True
         super().__init__(
-            command_prefix=commands.when_mentioned_or(settings.command_prefix or "uwu "),
+            command_prefix=_build_prefix_resolver(settings.command_prefix),
+            case_insensitive=True,
             intents=intents,
             help_command=None,
         )

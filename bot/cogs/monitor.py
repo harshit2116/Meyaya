@@ -10,9 +10,9 @@ Behavior:
 from __future__ import annotations
 
 import logging
-import time
+import random
 import re
-from typing import Iterable
+import time
 
 import discord
 from discord.ext import commands
@@ -26,11 +26,29 @@ MONITOR_CHANNELS_KEY = "monitor:channels"
 # Cooldown in seconds per user per channel for translation replies
 MONITOR_COOLDOWN_SECONDS = 25
 
-# Simple fallback language heuristic: consider message non-ASCII-heavy as non-English
-_NON_ASCII_RE = re.compile(r"[^\x00-\x7F]")
 _ROMANIZED_HINDI_HINT_RE = re.compile(
     r"\b(kya|kaise|kaisa|kaisi|haan|han|nahi|nahin|acha|accha|aur|haal|chaal|bhai|yaar|namaste|shukriya)\b",
     re.IGNORECASE,
+)
+_WORD_RE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)?")
+# Strong English/chat markers take precedence over statistical detection. Short
+# slang such as "ur" and "pls" is routinely misclassified by langdetect.
+_ENGLISH_CHAT_HINT_RE = re.compile(
+    r"\b(the|an|and|but|this|that|these|those|i|i'm|im|you|your|u|ur|we|they|he|she|it|"
+    r"is|are|was|were|have|has|do|does|don't|dont|can|could|would|should|please|pls|"
+    r"lol|lmao|bro|bruh)\b",
+    re.IGNORECASE,
+)
+
+ENGLISH_NUDGES = (
+    "Meyaya's language radar went beep—English, please 😼",
+    "Quick Meyaya checkpoint: let's keep it in English, please ✨",
+    "English mode, pretty please? Meyaya wants everyone in the loop 💫",
+    "I translated this one—use English next time so everyone can follow 😺",
+    "Tiny language bonk from Meyaya: English in here, please 🔨",
+    "Meyaya patrol reporting in: English chat, please 🫡",
+    "Let's switch that to English so nobody gets left out 🌸",
+    "Translation delivered! English for the next message, deal? 😸",
 )
 
 
@@ -40,6 +58,7 @@ class MonitorCog(commands.Cog):
         self.settings = get_settings()
         self._channels: set[int] = set(self.settings.monitor_channel_ids or [])
         self._last_seen: dict[tuple[int, int], float] = {}
+        self._nudge_cycle: list[str] = []
 
     async def cog_load(self) -> None:  # type: ignore[override]
         # Merge channels persisted in Redis (if available).
@@ -66,36 +85,62 @@ class MonitorCog(commands.Cog):
         parent_id = getattr(parent, "id", None)
         return parent_id in self._channels
 
-    @staticmethod
-    def _playful_english_nudge() -> str:
-        lines = [
-            "Meyaya is on duty, so let's keep chat in English please 😼",
-            "Tiny language check from Meyaya: English mode, pretty please ✨",
-            "Meyaya patrol says: English chat unlocked, let's gooo 💫",
-            "I can translate this one, but speak English next so I can yap faster 😺",
-        ]
-        # time-based variation without importing random
-        idx = int(time.time()) % len(lines)
-        return lines[idx]
+    def _playful_english_nudge(self) -> str:
+        """Return every variation once before reshuffling the set."""
+
+        if not self._nudge_cycle:
+            self._nudge_cycle = list(ENGLISH_NUDGES)
+            random.shuffle(self._nudge_cycle)
+        return self._nudge_cycle.pop()
 
     @staticmethod
     def _detect_lang(content: str) -> str:
-        # Prefer langdetect when available.
-        try:
-            from langdetect import detect
-
-            detected = detect(content)
-            if detected:
-                return detected
-        except Exception:
-            pass
-
-        # Fallback heuristics.
-        if _NON_ASCII_RE.search(content):
-            return "non-en"
+        # Explicit romanized-language signals must be checked before English
+        # hints because a message can contain words from both languages.
         if _ROMANIZED_HINDI_HINT_RE.search(content):
             return "hi-latin"
+        # Emoji and punctuation aren't language signals. Only route text with
+        # actual non-ASCII letters (Devanagari, accented Latin, CJK, etc.).
+        if any(ord(char) > 127 and char.isalpha() for char in content):
+            return "non-en"
+
+        words = _WORD_RE.findall(content)
+        if not words:
+            return "en"
+        if _ENGLISH_CHAT_HINT_RE.search(content):
+            return "en"
+
+        # Very short ASCII chat is too ambiguous for statistical detection.
+        # Defaulting it to English favors an occasional missed translation over
+        # publicly "correcting" a member who was already speaking English.
+        if len(words) < 3:
+            return "en"
+
+        # Use langdetect only for longer ASCII messages and require high
+        # confidence. Gemini performs a second verification before any reply.
+        try:
+            from langdetect import DetectorFactory, detect_langs
+
+            DetectorFactory.seed = 0
+            candidates = detect_langs(content)
+            if candidates and candidates[0].prob >= 0.90:
+                return candidates[0].lang
+        except Exception:
+            pass
         return "en"
+
+    @staticmethod
+    def _extract_translation(response_text: str) -> str | None:
+        """Accept only an explicitly classified non-English translation."""
+
+        response = response_text.strip()
+        if response.casefold() == "no_translation":
+            return None
+        prefix = "translation:"
+        if not response.casefold().startswith(prefix):
+            return None
+        translation = response[len(prefix) :].strip()
+        return translation or None
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -139,16 +184,20 @@ class MonitorCog(commands.Cog):
         if lang == "en" or lang.startswith("en"):
             # Nothing to do for English messages.
             return
-        self._last_seen[key] = now
-
-        # We detected a non-English message. Attempt translation using a smaller/faster request.
+        # The local detector only selects candidates. Gemini must independently
+        # confirm that the message is non-English before the bot addresses anyone.
         gemini = self.bot.build_gemini_service()
         translated = None
         if gemini is not None:
             try:
                 system = (
-                    "You are a concise translation assistant. Translate the user message into natural English. "
-                    "Return only the translated text, no explanations."
+                    "You are a strict language gate and translator for a Discord server. "
+                    "Decide whether the message is predominantly English. Treat English slang, "
+                    "abbreviations, misspellings, and casual or incorrect grammar as English; never "
+                    "rewrite or correct them. For English, output exactly NO_TRANSLATION. Only when "
+                    "the message is genuinely non-English, output exactly TRANSLATION: followed by a "
+                    "natural English translation. For mixed-language messages, translate only when "
+                    "the meaningful content is predominantly non-English. Add no explanation."
                 )
                 resp = await gemini.generate(
                     system,
@@ -157,19 +206,16 @@ class MonitorCog(commands.Cog):
                     timeout_seconds=8,
                 )
                 if resp is not None:
-                    translated = resp.text.strip()
+                    translated = self._extract_translation(resp.text)
             except Exception:
                 logger.exception("Gemini translation failed")
 
         if translated is None:
-            # Last-resort note.
-            try:
-                await message.reply(
-                    "I detected a non-English message and couldn't translate it right now."
-                )
-            except Exception:
-                logger.exception("Failed replying to message with translation-unavailable notice")
+            # Silence is intentional: the message was English/ambiguous, or the
+            # verifier was unavailable. Don't accuse the member on uncertainty.
             return
+
+        self._last_seen[key] = now
 
         # Reply with translation + playful English nudge in Meyaya style.
         reply_text = f"{self._playful_english_nudge()}\nTranslation: {translated}"

@@ -29,131 +29,103 @@ class VoiceLiveCog(commands.Cog):
             self._sessions[guild_id] = VoiceChatSession(self.bot, guild_id)
         return self._sessions[guild_id]
 
-    @app_commands.command(
+    @commands.hybrid_command(
         name="join", description="Join your voice channel and start Gemini live chat"
     )
-    async def join(self, interaction: discord.Interaction) -> None:
-        if interaction.guild is None or interaction.user is None:
-            await interaction.response.send_message(
-                "This command can only be used in a server.", ephemeral=True
-            )
+    async def join(self, ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
 
-        member = interaction.user
+        member = ctx.author
         if not isinstance(member, discord.Member):
-            await interaction.response.send_message(
-                "Could not resolve your member profile.", ephemeral=True
-            )
+            await ctx.send("Could not resolve your member profile.", ephemeral=True)
             return
 
         if member.voice is None or member.voice.channel is None:
-            await interaction.response.send_message(
-                "Join a voice channel first, then run `/join`.", ephemeral=True
-            )
+            await ctx.send("Join a voice channel first, then use `join`.", ephemeral=True)
             return
 
         channel = member.voice.channel
         if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
-            await interaction.response.send_message(
-                "Unsupported channel type for voice chat.", ephemeral=True
-            )
+            await ctx.send("Unsupported channel type for voice chat.", ephemeral=True)
             return
 
-        await interaction.response.defer(thinking=True, ephemeral=True)
-        session = self._get_guild_session(interaction.guild.id)
+        await ctx.defer(ephemeral=True)
+        session = self._get_guild_session(ctx.guild.id)
 
         try:
             await session.connect_and_start(channel)
         except Exception as exc:
             logger.exception("Failed to start VC live session")
-            await interaction.followup.send(f"Could not start voice chat: {exc}", ephemeral=True)
+            await ctx.send(f"Could not start voice chat: {exc}", ephemeral=True)
             return
 
-        await interaction.followup.send(
-            f"Joined {channel.mention} with Gemini Live voice `{self.bot.settings.gemini_voice}`.",
-            ephemeral=True,
-        )
+        await ctx.send("Meyaya connected and ready to speak.", ephemeral=True)
 
-    @app_commands.command(name="leave", description="Leave voice chat and stop Gemini live chat")
-    async def leave(self, interaction: discord.Interaction) -> None:
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command can only be used in a server.", ephemeral=True
-            )
+    @commands.hybrid_command(name="leave", description="Leave voice chat and stop Gemini live chat")
+    async def leave(self, ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
 
-        session = self._sessions.get(interaction.guild.id)
+        session = self._sessions.get(ctx.guild.id)
         if session is None:
-            await interaction.response.send_message(
-                "No active voice chat session in this server.", ephemeral=True
-            )
+            await ctx.send("No active voice chat session in this server.", ephemeral=True)
             return
 
-        await interaction.response.defer(ephemeral=True)
-        await session.close(reason=f"/leave requested by user {interaction.user.id}")
-        self._sessions.pop(interaction.guild.id, None)
-        await interaction.followup.send(
-            "Voice chat session stopped and disconnected.", ephemeral=True
-        )
+        await ctx.defer(ephemeral=True)
+        await session.close(reason=f"leave requested by user {ctx.author.id}")
+        self._sessions.pop(ctx.guild.id, None)
+        await ctx.send("Voice chat session stopped and disconnected.", ephemeral=True)
 
-    @app_commands.command(
+    @commands.hybrid_command(
         name="voicecheck",
         description="Verify Gemini audio playback in the active voice channel",
     )
-    async def voicecheck(self, interaction: discord.Interaction) -> None:
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command can only be used in a server.", ephemeral=True
-            )
+    async def voicecheck(self, ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
 
-        session = self._sessions.get(interaction.guild.id)
+        session = self._sessions.get(ctx.guild.id)
         if session is None:
-            await interaction.response.send_message(
-                "Start voice chat with `/join` first.", ephemeral=True
-            )
+            await ctx.send("Start voice chat with `join` first.", ephemeral=True)
             return
 
-        await interaction.response.defer(ephemeral=True)
+        await ctx.defer(ephemeral=True)
         try:
             await session.run_voice_check()
         except Exception as exc:
             logger.exception("Voice playback check failed")
-            await interaction.followup.send(f"Voice check failed: {exc}", ephemeral=True)
+            await ctx.send(f"Voice check failed: {exc}", ephemeral=True)
             return
 
-        await interaction.followup.send(
+        await ctx.send(
             "Voice check requested; listen for Meyaya in the channel.", ephemeral=True
         )
 
-    @app_commands.command(
+    @commands.hybrid_command(
         name="voicediag",
         description="Show live voice receive, DAVE, Gemini, and playback counters",
     )
-    async def voicediag(self, interaction: discord.Interaction) -> None:
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "This command can only be used in a server.", ephemeral=True
-            )
+    async def voicediag(self, ctx: commands.Context) -> None:
+        if ctx.guild is None:
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
 
-        session = self._sessions.get(interaction.guild.id)
+        session = self._sessions.get(ctx.guild.id)
         if session is None:
-            await interaction.response.send_message(
-                "Start voice chat with `/join` first.", ephemeral=True
-            )
+            await ctx.send("Start voice chat with `join` first.", ephemeral=True)
             return
 
-        await interaction.response.send_message(
-            f"```text\n{session.diagnostic_report()}\n```",
-            ephemeral=True,
-        )
+        await ctx.send(f"```text\n{session.diagnostic_report()}\n```", ephemeral=True)
 
-    @app_commands.command(name="voice", description="Show or change Gemini live voice")
+    @commands.hybrid_command(name="voice", description="Show or change Gemini live voice")
     @app_commands.describe(name="Optional voice name, e.g. Kore, Leda, Aoede")
-    async def voice(self, interaction: discord.Interaction, name: str | None = None) -> None:
+    async def voice(self, ctx: commands.Context, name: str | None = None) -> None:
         if name is None:
-            await interaction.response.send_message(
+            await ctx.send(
                 f"Current live voice is `{self.bot.settings.gemini_voice}`. "
                 "Set `GEMINI_VOICE` in `.env` and restart to change globally.",
                 ephemeral=True,
@@ -162,7 +134,7 @@ class VoiceLiveCog(commands.Cog):
 
         # Runtime override for this process.
         self.bot.settings.gemini_voice = name.strip()
-        await interaction.response.send_message(
+        await ctx.send(
             f"Voice updated for new sessions: `{self.bot.settings.gemini_voice}`.",
             ephemeral=True,
         )

@@ -75,6 +75,17 @@ Permanent memory:
 - Never store embarrassing, private, or sensitive information this way.
 """
 
+VOICE_CHAT_RULES = """\
+Voice chat rules:
+- This is a live spoken Discord conversation. Keep casual replies short and natural so you do not \
+  monopolize the voice channel, but answer genuine questions fully when needed.
+- Speak plain conversational text. Never say markdown formatting, emoji names, URLs, memory tags, \
+  or stage directions aloud.
+- React naturally to interruptions and do not restart a sentence that was already heard unless \
+  someone asks you to repeat it.
+- The <remember> mechanism is unavailable in voice chat. Never emit <remember> tags while speaking.
+"""
+
 
 def build_system_instruction(
     *, context_lines: list[str], memory_lines: list[str] | None = None
@@ -96,3 +107,15 @@ def build_system_instruction(
         )
 
     return "\n".join(sections)
+
+
+def build_voice_system_instruction(*, extra_instruction: str = "") -> str:
+    """Build Meyaya's shared persona with rules tailored for spoken replies."""
+
+    sections = [BASE_PERSONALITY, VOICE_CHAT_RULES]
+    if extra_instruction.strip():
+        sections.append(
+            "Additional voice behavior configured by the server owner:\n"
+            f"{extra_instruction.strip()}"
+        )
+    return "\n\n".join(sections)
