@@ -37,6 +37,9 @@ class GeminiService:
         system_instruction: str,
         user_message: str,
         history: list[dict] | None = None,
+        *,
+        max_output_tokens: int | None = None,
+        timeout_seconds: int | None = None,
     ) -> GeminiReply | None:
         """Ask Gemini for a reply, optionally continuing a prior conversation."""
 
@@ -52,7 +55,7 @@ class GeminiService:
             "system_instruction": {"parts": [{"text": system_instruction}]},
             "contents": contents,
             "generationConfig": {
-                "maxOutputTokens": MAX_OUTPUT_TOKENS,
+                "maxOutputTokens": max_output_tokens or MAX_OUTPUT_TOKENS,
                 "thinkingConfig": {"thinkingBudget": 0},
             },
         }
@@ -65,7 +68,7 @@ class GeminiService:
                 json=payload,
                 headers=headers,
                 params=params,
-                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS),
+                timeout=aiohttp.ClientTimeout(total=timeout_seconds or REQUEST_TIMEOUT_SECONDS),
             ) as response:
                 logger.debug(
                     "Gemini request sent model=%s status=%s payload_keys=%s",
@@ -95,7 +98,11 @@ class GeminiService:
         # Log parsed response metadata for debugging
         try:
             resp_id = data.get("responseId") if isinstance(data, dict) else None
-            logger.debug("Gemini responseId=%s modelVersion=%s", resp_id, data.get("modelVersion") if isinstance(data, dict) else None)
+            logger.debug(
+                "Gemini responseId=%s modelVersion=%s",
+                resp_id,
+                data.get("modelVersion") if isinstance(data, dict) else None,
+            )
         except Exception:
             logger.debug("Gemini response metadata missing or malformed")
         if not raw_text:
@@ -104,7 +111,11 @@ class GeminiService:
         visible_text, memories = self._split_memories(raw_text)
         # Truncate visible_text in logs to avoid large outputs
         try:
-            logger.debug("Gemini extracted_text_len=%d snippet=%s", len(visible_text), (visible_text[:300] + "...") if len(visible_text) > 300 else visible_text)
+            logger.debug(
+                "Gemini extracted_text_len=%d snippet=%s",
+                len(visible_text),
+                (visible_text[:300] + "...") if len(visible_text) > 300 else visible_text,
+            )
         except Exception:
             logger.debug("Gemini extracted_text unavailable for logging")
         visible_text = self._limit_words(visible_text, MAX_REPLY_WORDS)

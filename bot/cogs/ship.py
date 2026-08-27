@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+from base64 import b64decode, b64encode
 
 import discord
 from discord import app_commands
@@ -20,6 +21,7 @@ AVATAR_SIZE = 256  # per-side size (smaller for speed)
 GAP = 20
 CANVAS_HEIGHT = 320
 FILENAME = "ship.png"
+SHIP_GIF_QUERY = "anime love couple hearts"
 
 
 class ShipCog(commands.Cog):
@@ -37,7 +39,9 @@ class ShipCog(commands.Cog):
 
     # ---------- slash command ----------
 
-    @app_commands.command(name="ship", description="Ship two users together and see the love percentage")
+    @app_commands.command(
+        name="ship", description="Ship two users together and see the love percentage"
+    )
     @app_commands.describe(user_one="First user", user_two="Second user")
     async def ship(
         self,
@@ -53,7 +57,9 @@ class ShipCog(commands.Cog):
 
     def _build_text_command(self) -> None:
         @commands.command(name="ship")
-        async def ship_text(ctx: commands.Context, user_one: discord.Member, user_two: discord.Member) -> None:
+        async def ship_text(
+            ctx: commands.Context, user_one: discord.Member, user_two: discord.Member
+        ) -> None:
             async with ctx.typing():
                 embed, file = await self._build_ship_response(user_one, user_two)
             await ctx.send(embed=embed, file=file)
@@ -75,8 +81,7 @@ class ShipCog(commands.Cog):
         klipy = self.bot.build_klipy_service()
         if klipy is not None:
             try:
-                query = self._gif_query_for_percentage(result.percentage)
-                gif_res = await klipy.random_gif(query, prefer_anime=True)
+                gif_res = await klipy.random_gif(SHIP_GIF_QUERY, prefer_anime=True)
                 gif_url = gif_res.url or ""
             except Exception:
                 logger.exception("KLIPY quick fetch failed for ship gif")
@@ -89,7 +94,7 @@ class ShipCog(commands.Cog):
             try:
                 cached = await redis.get(cache_key)
                 if cached:
-                    image_bytes = cached
+                    image_bytes = b64decode(cached)
             except Exception:
                 logger.exception("Redis read failed for ship cache")
 
@@ -98,7 +103,7 @@ class ShipCog(commands.Cog):
             if redis is not None:
                 try:
                     # cache briefly to speed repeated calls
-                    await redis.setex(cache_key, 60, image_bytes)
+                    await redis.setex(cache_key, 60, b64encode(image_bytes).decode("ascii"))
                 except Exception:
                     logger.exception("Redis write failed for ship cache")
 
@@ -112,22 +117,8 @@ class ShipCog(commands.Cog):
             gif_url=gif_url,
             attachment_filename=FILENAME,
         )
-        if gif_url:
-            embed.set_thumbnail(url=gif_url)
 
         return embed, file
-
-    @staticmethod
-    def _gif_query_for_percentage(percentage: int) -> str:
-        if percentage >= 90:
-            return "anime wedding soulmates"
-        if percentage >= 70:
-            return "anime couple kiss hug"
-        if percentage >= 50:
-            return "anime blushing love"
-        if percentage >= 30:
-            return "anime awkward crush"
-        return "anime rejected sad friendzone"
 
     async def _build_side_by_side_image(
         self,
@@ -179,8 +170,14 @@ class ShipCog(commands.Cog):
         try:
             shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
             sd = ImageDraw.Draw(shadow)
-            sd.ellipse((left_x + 8, y + AVATAR_SIZE - 18, left_x + AVATAR_SIZE - 8, y + AVATAR_SIZE + 6), fill=(0, 0, 0, 90))
-            sd.ellipse((right_x + 8, y + AVATAR_SIZE - 18, right_x + AVATAR_SIZE - 8, y + AVATAR_SIZE + 6), fill=(0, 0, 0, 90))
+            sd.ellipse(
+                (left_x + 8, y + AVATAR_SIZE - 18, left_x + AVATAR_SIZE - 8, y + AVATAR_SIZE + 6),
+                fill=(0, 0, 0, 90),
+            )
+            sd.ellipse(
+                (right_x + 8, y + AVATAR_SIZE - 18, right_x + AVATAR_SIZE - 8, y + AVATAR_SIZE + 6),
+                fill=(0, 0, 0, 90),
+            )
             shadow = shadow.filter(ImageFilter.GaussianBlur(8))
             canvas = Image.alpha_composite(shadow, canvas)
             draw = ImageDraw.Draw(canvas)
@@ -193,9 +190,25 @@ class ShipCog(commands.Cog):
         heart_y = y + AVATAR_SIZE // 2
         heart_radius = 26
         # outer ring
-        draw.ellipse((heart_x - heart_radius - 6, heart_y - heart_radius - 6, heart_x + heart_radius + 6, heart_y + heart_radius + 6), fill=(255, 200, 210, 120))
+        draw.ellipse(
+            (
+                heart_x - heart_radius - 6,
+                heart_y - heart_radius - 6,
+                heart_x + heart_radius + 6,
+                heart_y + heart_radius + 6,
+            ),
+            fill=(255, 200, 210, 120),
+        )
         # core circle
-        draw.ellipse((heart_x - heart_radius, heart_y - heart_radius, heart_x + heart_radius, heart_y + heart_radius), fill=(255, 77, 109, 255))
+        draw.ellipse(
+            (
+                heart_x - heart_radius,
+                heart_y - heart_radius,
+                heart_x + heart_radius,
+                heart_y + heart_radius,
+            ),
+            fill=(255, 77, 109, 255),
+        )
 
         # Percentage big text - try to load a nicer font, fallback to default
         try:
@@ -225,14 +238,28 @@ class ShipCog(commands.Cog):
         except Exception:
             draw.rectangle((box_x0, box_y0, box_x1, box_y1), fill=(0, 0, 0, 150))
         try:
-            draw.text((canvas_width // 2 - w // 2, 8), pct_text, font=font_large, fill=(255, 77, 109, 255), stroke_width=2, stroke_fill=(10, 10, 10, 200))
+            draw.text(
+                (canvas_width // 2 - w // 2, 8),
+                pct_text,
+                font=font_large,
+                fill=(255, 77, 109, 255),
+                stroke_width=2,
+                stroke_fill=(10, 10, 10, 200),
+            )
         except Exception:
-            draw.text((canvas_width // 2 - w // 2, 8), pct_text, font=font_large, fill=(255, 77, 109, 255))
+            draw.text(
+                (canvas_width // 2 - w // 2, 8), pct_text, font=font_large, fill=(255, 77, 109, 255)
+            )
 
         # Label beneath percentage
         label_text = result.label
         w2, h2 = _text_size(label_text, font_small)
-        draw.text((canvas_width // 2 - w2 // 2, 8 + h + 6), label_text, font=font_small, fill=(120, 120, 120, 255))
+        draw.text(
+            (canvas_width // 2 - w2 // 2, 8 + h + 6),
+            label_text,
+            font=font_small,
+            fill=(120, 120, 120, 255),
+        )
 
         # Small footer with names
         name_y = y + AVATAR_SIZE + 12
@@ -241,11 +268,31 @@ class ShipCog(commands.Cog):
         fn_w, _ = _text_size(left_name, font_small)
         # Draw a tiny shadow then the name for legibility on dark backgrounds
         shadow_off = 1
-        draw.text((left_x + AVATAR_SIZE // 2 - fn_w // 2 + shadow_off, name_y + shadow_off), left_name, font=font_small, fill=(0, 0, 0, 160))
-        draw.text((left_x + AVATAR_SIZE // 2 - fn_w // 2, name_y), left_name, font=font_small, fill=(255, 255, 255, 230))
+        draw.text(
+            (left_x + AVATAR_SIZE // 2 - fn_w // 2 + shadow_off, name_y + shadow_off),
+            left_name,
+            font=font_small,
+            fill=(0, 0, 0, 160),
+        )
+        draw.text(
+            (left_x + AVATAR_SIZE // 2 - fn_w // 2, name_y),
+            left_name,
+            font=font_small,
+            fill=(255, 255, 255, 230),
+        )
         fn_w2, _ = _text_size(right_name, font=font_small)
-        draw.text((right_x + AVATAR_SIZE // 2 - fn_w2 // 2 + shadow_off, name_y + shadow_off), right_name, font=font_small, fill=(0, 0, 0, 160))
-        draw.text((right_x + AVATAR_SIZE // 2 - fn_w2 // 2, name_y), right_name, font=font_small, fill=(255, 255, 255, 230))
+        draw.text(
+            (right_x + AVATAR_SIZE // 2 - fn_w2 // 2 + shadow_off, name_y + shadow_off),
+            right_name,
+            font=font_small,
+            fill=(0, 0, 0, 160),
+        )
+        draw.text(
+            (right_x + AVATAR_SIZE // 2 - fn_w2 // 2, name_y),
+            right_name,
+            font=font_small,
+            fill=(255, 255, 255, 230),
+        )
 
         buffer = io.BytesIO()
         canvas.save(buffer, format="PNG", optimize=True)

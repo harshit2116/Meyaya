@@ -17,10 +17,28 @@ class MemoryRepository(Repository):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
-    async def create(self, guild_id: int | None, content: str) -> BotMemory:
+    async def create(
+        self,
+        guild_id: int | None,
+        content: str,
+        *,
+        channel_id: int | None = None,
+        source_message_id: int | None = None,
+        source_user_id: int | None = None,
+        source_user_name: str | None = None,
+        conversation_summary: str | None = None,
+    ) -> BotMemory:
         """Store a new permanent memory."""
 
-        record = BotMemory(guild_id=guild_id, content=content)
+        record = BotMemory(
+            guild_id=guild_id,
+            channel_id=channel_id,
+            source_message_id=source_message_id,
+            source_user_id=source_user_id,
+            source_user_name=source_user_name,
+            content=content,
+            conversation_summary=conversation_summary,
+        )
         self.session.add(record)
         await self.session.flush()
         return record

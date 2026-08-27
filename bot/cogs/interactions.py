@@ -54,14 +54,18 @@ class InteractionsCog(commands.Cog):
         if self._text_help_command is not None:
             self.bot.remove_command(self._text_help_command.name)
 
-    def _build_app_command(self, definition: InteractionDefinition) -> app_commands.Command[commands.Cog, ..., None]:
+    def _build_app_command(
+        self, definition: InteractionDefinition
+    ) -> app_commands.Command[commands.Cog, ..., None]:
         async def callback(
             interaction: discord.Interaction,
             target: discord.Member | None = None,
         ) -> None:
             chosen_target = target or interaction.user
             if interaction.guild is None:
-                await interaction.response.send_message("This command only works inside a server.", ephemeral=True)
+                await interaction.response.send_message(
+                    "This command only works inside a server.", ephemeral=True
+                )
                 return
 
             await interaction.response.defer()
@@ -72,7 +76,9 @@ class InteractionsCog(commands.Cog):
                 await interaction.followup.send(
                     embed=build_interaction_embed(
                         title=result.title,
-                        description=result.message.format(actor=interaction.user.mention, target=chosen_target.mention),
+                        description=result.message.format(
+                            actor=interaction.user.mention, target=chosen_target.mention
+                        ),
                         color=definition.color,
                         actor_avatar=str(interaction.user.display_avatar.url),
                         target_avatar=str(chosen_target.display_avatar.url),
@@ -80,12 +86,16 @@ class InteractionsCog(commands.Cog):
                         count_label=f"{definition.name.title()}s between {interaction.user.display_name} & {chosen_target.display_name}",
                         count=result.count,
                     ),
-                    view=InteractionResponseView(
-                        bot=bot,
-                        definition=definition,
-                        actor_id=interaction.user.id,
-                        target_id=chosen_target.id,
-                    ) if definition.button_label else None,
+                    view=(
+                        InteractionResponseView(
+                            bot=bot,
+                            definition=definition,
+                            actor_id=interaction.user.id,
+                            target_id=chosen_target.id,
+                        )
+                        if definition.button_label
+                        else None
+                    ),
                 )
 
         return app_commands.Command(
@@ -108,7 +118,9 @@ class InteractionsCog(commands.Cog):
             async with bot.db_session() as session:
                 service = bot.build_interaction_service(session)
                 result = await service.perform(ctx.author.id, chosen_target.id, definition)
-                embed, view = self._build_interaction_render(bot, definition, ctx.author, chosen_target, result)
+                embed, view = self._build_interaction_render(
+                    bot, definition, ctx.author, chosen_target, result
+                )
                 await ctx.send(embed=embed, view=view)
 
         return commands.Command(
@@ -157,11 +169,23 @@ class InteractionsCog(commands.Cog):
             lines.append("`uwu smart`")
             lines.append("`uwu clown`")
             lines.append("`uwu profile [member]`")
+            lines.append("`uwu ship <member> <member>`")
             lines.append("")
             lines.append("**Slash commands**")
             for command in INTERACTION_DEFINITIONS:
                 lines.append(f"`/{command.name}`")
-            lines.extend(["`/iq`", "`/dumb`", "`/smart`", "`/clown`", "`/profile`"])
+            lines.extend(
+                [
+                    "`/iq`",
+                    "`/dumb`",
+                    "`/smart`",
+                    "`/clown`",
+                    "`/profile`",
+                    "`/ship`",
+                    "`/join`",
+                    "`/leave`",
+                ]
+            )
             embed.description = "\n".join(lines)
             await ctx.send(embed=embed)
 

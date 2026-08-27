@@ -22,7 +22,9 @@ class ChatMemoryService:
 
     @staticmethod
     def _key(channel_id: int) -> str:
-        return f"chat_history:{channel_id}"
+        # Identity labels were added after the original format. A versioned key
+        # prevents unlabelled multi-user turns from being mixed into new context.
+        return f"chat_history:v2:{channel_id}"
 
     async def get_history(self, channel_id: int) -> list[dict]:
         """Return Gemini-formatted conversation turns, oldest first. Empty on any Redis failure."""
@@ -40,11 +42,19 @@ class ChatMemoryService:
         except (json.JSONDecodeError, TypeError):
             return []
 
-    async def append_turn(self, channel_id: int, user_text: str, model_text: str) -> None:
+    async def append_turn(
+        self,
+        channel_id: int,
+        user_text: str,
+        model_text: str,
+        *,
+        speaker_label: str | None = None,
+    ) -> None:
         """Append a completed exchange and trim/expire the history. No-ops on Redis failure."""
 
         history = await self.get_history(channel_id)
-        history.append({"role": "user", "parts": [{"text": user_text}]})
+        history_text = f"[{speaker_label}] {user_text}" if speaker_label else user_text
+        history.append({"role": "user", "parts": [{"text": history_text}]})
         history.append({"role": "model", "parts": [{"text": model_text}]})
         history = history[-(MAX_TURNS * 2) :]
 

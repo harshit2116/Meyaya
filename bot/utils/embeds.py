@@ -99,9 +99,13 @@ def build_ship_embed(
         description=(
             f"**{user_a.display_name}** × **{user_b.display_name}**\n\n"
             f"{bar}\n"
-            f"**{percentage}%** — {label}"
+            f"**{percentage}% love**\n"
+            f"{label}"
         ),
         color=color,
     )
     embed.set_image(url=f"attachment://{attachment_filename}")
+    if gif_url:
+        embed.set_thumbnail(url=gif_url)
+    embed.set_footer(text="A tiny love calculation from Meyaya")
     return embed

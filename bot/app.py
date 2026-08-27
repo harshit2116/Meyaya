@@ -23,6 +23,7 @@ from bot.services.chat_memory import ChatMemoryService
 
 logger = logging.getLogger(__name__)
 
+
 class MeyayaBot(commands.Bot):
     """Discord bot configured for slash-command interaction."""
 
@@ -59,14 +60,25 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.ship")
         await self.load_extension("bot.cogs.marriage")
         await self.load_extension("bot.cogs.chat")
+        # Optional monitor cog (watches configured channels)
+        await self.load_extension("bot.cogs.monitor")
+        await self.load_extension("bot.cogs.voice_live")
         if self.settings.guild_id:
             guild = discord.Object(id=self.settings.guild_id)
+            self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
         else:
             await self.tree.sync()
 
     async def close(self) -> None:
         """Close external resources before shutting down the bot."""
+
+        voice_cog = self.get_cog("VoiceLiveCog")
+        if voice_cog is not None:
+            try:
+                await voice_cog.cog_unload()
+            except Exception:
+                logger.exception("Failed to unload VoiceLiveCog cleanly")
 
         if self.http_session is not None and not self.http_session.closed:
             await self.http_session.close()
@@ -87,21 +99,25 @@ class MeyayaBot(commands.Bot):
 
         if self.http_session is None or self.redis is None:
             return None
-        return KlipyService(self.settings.klipy_api_key, self.settings.klipy_rating, self.http_session, self.redis)
-    
+        return KlipyService(
+            self.settings.klipy_api_key, self.settings.klipy_rating, self.http_session, self.redis
+        )
+
     def build_chat_memory_service(self) -> ChatMemoryService | None:
         """Create a chat memory service when Redis is ready."""
 
         if self.redis is None:
             return None
         return ChatMemoryService(self.redis)
-    
+
     def build_gemini_service(self) -> GeminiService | None:
         """Create a Gemini service when the HTTP session is ready."""
 
         if self.http_session is None:
             return None
-        return GeminiService(self.settings.gemini_api_key, self.settings.gemini_model, self.http_session)
+        return GeminiService(
+            self.settings.gemini_api_key, self.settings.gemini_model, self.http_session
+        )
 
     def build_interaction_service(self, session: AsyncSession) -> InteractionService:
         """Create an interaction service bound to the current runtime resources."""
@@ -112,7 +128,7 @@ class MeyayaBot(commands.Bot):
         """Create a marriage service bound to the current database session."""
 
         return MarriageService(session)
-    
+
     async def on_ready(self) -> None:
         """Log the connected bot account."""
 

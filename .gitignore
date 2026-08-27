@@ -5,6 +5,7 @@ __pycache__/
 .mypy_cache/
 .venv/
 .venv-win/
+.venv-win-broken/
 .env
 .DS_Store
 dist/
