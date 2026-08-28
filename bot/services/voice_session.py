@@ -14,9 +14,11 @@ except ImportError:  # pragma: no cover - Python >= 3.13
     import audioop_lts as audioop
 
 import discord
+from sqlalchemy.exc import SQLAlchemyError
 
 from bot.app import MeyayaBot
 from bot.data.gemini_persona import build_voice_system_instruction
+from bot.repositories.server_lore import ServerLoreRepository
 from bot.services.audio import (
     PcmStreamAudioSource,
     ResampleState,
@@ -24,6 +26,7 @@ from bot.services.audio import (
     gemini_pcm_24k_mono_to_discord_pcm_48k_stereo,
 )
 from bot.services.gemini_live import GeminiLiveSession
+from bot.services.meyaya_system import MeyayaSystemService
 from bot.services.voice_diagnostics import VoiceDiagnostics
 
 logger = logging.getLogger(__name__)
@@ -79,7 +82,7 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
 
         if self._consecutive_speech_frames >= SPEECH_CONFIRM_FRAMES:
             self.owner.diagnostics.increment("speech_frames")
-            self.owner.notify_user_speaking()
+            self.owner.notify_user_speaking(user)
 
         try:
             pcm16 = discord_pcm_48k_stereo_to_gemini_pcm_16k_mono(pcm, self._state)
@@ -153,12 +156,14 @@ class VoiceChatSession:
             await self.voice_client.move_to(channel)
 
         assert self.voice_client is not None
+        state_lines = await self._load_meyaya_state_lines(channel)
         self._gemini = GeminiLiveSession(
             api_key=self.bot.settings.gemini_api_key,
             model=self.bot.settings.gemini_live_model,
             voice_name=self.bot.settings.gemini_voice,
             system_instruction=build_voice_system_instruction(
-                extra_instruction=self.bot.settings.gemini_live_system_instruction
+                extra_instruction=self.bot.settings.gemini_live_system_instruction,
+                state_lines=state_lines,
             ),
             on_output_audio=self._on_gemini_audio,
             on_interrupted=self._on_gemini_interrupted,
@@ -310,15 +315,18 @@ class VoiceChatSession:
             "Say exactly: Voice connection is working. Do not add anything else."
         )
 
-    def notify_user_speaking(self) -> None:
+    def notify_user_speaking(self, user: discord.Member | discord.User) -> None:
         """Handle speech from the receive thread on the bot's asyncio loop."""
 
         if self._closed:
             return
 
-        self._loop.call_soon_threadsafe(self._on_user_speaking)
+        self._loop.call_soon_threadsafe(
+            self._on_user_speaking,
+            user.id,
+        )
 
-    def _on_user_speaking(self) -> None:
+    def _on_user_speaking(self, user_id: int) -> None:
         """Reset the utterance timer and interrupt audio once per utterance."""
 
         if self._closed:
@@ -335,6 +343,10 @@ class VoiceChatSession:
             return
         self._user_is_speaking = True
         self.diagnostics.increment("interruptions")
+        asyncio.create_task(
+            self._record_voice_conversation(user_id),
+            name=f"meyaya-voice-state-{user_id}",
+        )
 
         # Barge-in only needs to discard queued model audio. VoiceRecvClient.stop()
         # stops BOTH playback and inbound listening, which made the receiver go
@@ -377,3 +389,41 @@ class VoiceChatSession:
     async def _on_gemini_interrupted(self) -> None:
         # Server detected interruption; clear pending playback to align with latest turn.
         self.play_source.clear()
+
+    async def _load_meyaya_state_lines(
+        self, channel: discord.VoiceChannel | discord.StageChannel
+    ) -> list[str]:
+        """Load current mood and relationships for members present when VC starts."""
+
+        members = [
+            (member.id, member.display_name)
+            for member in channel.members
+            if not member.bot
+        ]
+        try:
+            async with self.bot.db_session() as session:
+                service = MeyayaSystemService(session)
+                lines = await service.voice_prompt_lines(self.guild_id, members)
+                lore = await ServerLoreRepository(session).list_current(
+                    self.guild_id, limit=12
+                )
+                if lore:
+                    lines.append(
+                        "Shared server lore and inside jokes. Reference these only when naturally "
+                        "relevant:\n" + "\n".join(f"- {item.content}" for item in lore)
+                    )
+                return lines
+        except SQLAlchemyError:
+            logger.exception("Meyaya System state unavailable for voice; using base persona")
+            return []
+
+    async def _record_voice_conversation(self, user_id: int) -> None:
+        """Update familiarity once when a member begins a voice utterance."""
+
+        try:
+            async with self.bot.db_session() as session:
+                service = MeyayaSystemService(session)
+                await service.record_conversation(self.guild_id, user_id)
+                await session.commit()
+        except SQLAlchemyError:
+            logger.exception("Failed to update Meyaya System voice familiarity")

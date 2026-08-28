@@ -2,23 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date
+from hashlib import blake2b
 from random import Random
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.repositories.daily import DailyRepository
-from bot.repositories.users import UserRepository
-
-
-@dataclass(frozen=True, slots=True)
-class DailySelection:
-    """A guild-scoped daily winner or score."""
-
-    value: int | None = None
-    member_id: int | None = None
-
 
 class DailyService:
     """Resolve daily IQ and winner-style fun results."""
@@ -26,16 +16,13 @@ class DailyService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.daily = DailyRepository(session)
-        self.users = UserRepository(session)
 
-    async def iq_score(self, guild_id: int, user_id: int, day: date) -> int:
+    @staticmethod
+    def iq_score(guild_id: int, user_id: int, day: date) -> int:
         """Return a stable daily IQ score for a guild member."""
 
-        await self.users.ensure_user(user_id)
         rng = Random(f"{guild_id}:{user_id}:{day.isoformat()}")
-        score = rng.randint(1, 200)
-        await self.session.commit()
-        return score
+        return rng.randint(1, 200)
 
     async def daily_winner(self, guild_id: int, day: date, kind: str, candidates: list[int]) -> int:
         """Return a stable daily winner from the provided candidate IDs."""
@@ -59,6 +46,10 @@ class DailyService:
             record.clown_member_id = winner
         else:
             raise ValueError(f"Unknown daily winner kind: {kind}")
-        record.iq_seed = abs(hash(seed)) % 1_000_000
+        # Python's built-in hash is randomized between processes. Persist a
+        # stable compact value so restarts never alter stored metadata.
+        record.iq_seed = int.from_bytes(
+            blake2b(seed.encode("utf-8"), digest_size=4).digest(), "big"
+        ) % 1_000_000
         await self.session.commit()
         return winner

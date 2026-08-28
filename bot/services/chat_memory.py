@@ -21,30 +21,38 @@ class ChatMemoryService:
         self.redis = redis
 
     @staticmethod
-    def _key(channel_id: int) -> str:
-        # Identity labels were added after the original format. A versioned key
-        # prevents unlabelled multi-user turns from being mixed into new context.
-        return f"chat_history:v2:{channel_id}"
+    def _key(channel_id: int, user_id: int) -> str:
+        # Direct conversations are isolated by both channel and member. This
+        # prevents one person's Meyaya conversation from leaking into another's.
+        # v5 stores each message as one Redis list item. This makes appends
+        # atomic and avoids a read/modify/write race between overlapping turns.
+        return f"chat_history:v5:{channel_id}:{user_id}"
 
-    async def get_history(self, channel_id: int) -> list[dict]:
+    async def get_history(self, channel_id: int, user_id: int) -> list[dict]:
         """Return Gemini-formatted conversation turns, oldest first. Empty on any Redis failure."""
 
         try:
-            raw = await self.redis.get(self._key(channel_id))
+            raw_items = await self.redis.lrange(
+                self._key(channel_id, user_id), 0, MAX_TURNS * 2 - 1
+            )
         except RedisError as exc:
             logger.warning("Redis unavailable, skipping chat history: %s", exc)
             return []
 
-        if not raw:
-            return []
-        try:
-            return json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            return []
+        history: list[dict] = []
+        for raw in raw_items:
+            try:
+                item = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(item, dict):
+                history.append(item)
+        return history
 
     async def append_turn(
         self,
         channel_id: int,
+        user_id: int,
         user_text: str,
         model_text: str,
         *,
@@ -52,13 +60,18 @@ class ChatMemoryService:
     ) -> None:
         """Append a completed exchange and trim/expire the history. No-ops on Redis failure."""
 
-        history = await self.get_history(channel_id)
         history_text = f"[{speaker_label}] {user_text}" if speaker_label else user_text
-        history.append({"role": "user", "parts": [{"text": history_text}]})
-        history.append({"role": "model", "parts": [{"text": model_text}]})
-        history = history[-(MAX_TURNS * 2) :]
+        entries = (
+            {"role": "user", "parts": [{"text": history_text}]},
+            {"role": "model", "parts": [{"text": model_text}]},
+        )
+        key = self._key(channel_id, user_id)
 
         try:
-            await self.redis.set(self._key(channel_id), json.dumps(history), ex=HISTORY_TTL_SECONDS)
+            async with self.redis.pipeline(transaction=False) as pipe:
+                pipe.rpush(key, *(json.dumps(entry) for entry in entries))
+                pipe.ltrim(key, -(MAX_TURNS * 2), -1)
+                pipe.expire(key, HISTORY_TTL_SECONDS)
+                await pipe.execute()
         except RedisError as exc:
             logger.warning("Redis unavailable, could not save chat history: %s", exc)

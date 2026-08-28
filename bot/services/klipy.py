@@ -20,6 +20,39 @@ FALLBACK_GIF_URLS = (
 FALLBACK_GIF_URL = FALLBACK_GIF_URLS[0]
 ANIME_QUERY_PREFIX = "anime"
 KLIPY_BASE_URL = "https://api.klipy.com/api/v1"
+KLIPY_TIMEOUT = aiohttp.ClientTimeout(total=10)
+SECURE_RANDOM = SystemRandom()
+
+ACTION_RELEVANCE_TERMS: dict[str, tuple[str, ...]] = {
+    "hug": ("hug", "embrace"),
+    "kiss": ("kiss", "kissing"),
+    "pat": ("headpat", "head pat", "patting"),
+    "cuddle": ("cuddle", "cuddling", "snuggle"),
+    "headpat": ("headpat", "head pat"),
+    "boop": ("boop", "nose poke"),
+    "poke": ("poke", "poking"),
+    "bite": ("bite", "biting", "nibble"),
+    "slap": ("slap", "slapping", "smack"),
+    "bonk": ("bonk", "bonking"),
+    "tickle": ("tickle", "tickling"),
+    "highfive": ("highfive", "high five", "high-five"),
+    "handhold": ("handhold", "holding hands", "hold hands"),
+    "wave": ("wave", "waving"),
+    "dance": ("dance", "dancing"),
+    "laugh": ("laugh", "laughing"),
+    "cry": ("cry", "crying", "tears"),
+    "smile": ("smile", "smiling"),
+    "blush": ("blush", "blushing"),
+    "cheer": ("cheer", "cheering", "celebrate"),
+    "facepalm": ("facepalm", "face palm"),
+}
+
+ACTION_NEGATIVE_TERMS: dict[str, tuple[str, ...]] = {
+    "slap": ("kiss", "hug", "love", "valentine", "cuddle", "romance"),
+    "bonk": ("kiss", "love", "valentine", "cuddle"),
+    "bite": ("kiss", "love", "valentine"),
+    "poke": ("kiss", "love", "valentine"),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,52 +71,30 @@ class KlipyService:
         self.http_session = http_session
         self.cache = cache
 
-    async def random_gif(self, query: str) -> GifResult:
-        """Return a random GIF result for a query.
-
-        The service intentionally avoids caching the selected URL so each command
-        invocation can show a different GIF.
-        """
+    async def random_anime_gif(self, query: str) -> GifResult:
+        """Return an action-relevant anime GIF or no GIF at all."""
 
         if not self.api_key:
-            return GifResult(url=self._fallback_gif_url())
-
-        normalized_query = query.strip().lower() or "reaction"
-
-        search_result = await self._search_gifs(normalized_query)
-        if search_result.url is None:
-            search_result = await self._random_gif(normalized_query)
-
-        return GifResult(url=search_result.url or self._fallback_gif_url())
-
-    async def random_anime_gif(self, query: str) -> GifResult:
-        """Return a random anime GIF for a specific action or mood."""
+            return GifResult(url=None)
         normalized_query = self._normalize_anime_query(query)
-        # Prefer anime but allow non-anime occasionally for variety/coverage.
-        # Use the new wrapper to get weighted behavior.
-        return await self.random_gif(normalized_query, prefer_anime=True)
+        return await self._search_gifs(normalized_query, strict_action=True)
 
-    async def _search_gifs(self, query: str) -> GifResult:
+    async def _search_gifs(self, query: str, *, strict_action: bool = False) -> GifResult:
         """Search Klipy for a query and return a random GIF from the result set."""
 
         if not self.api_key:
             return GifResult(url=None)
 
         endpoint = f"{KLIPY_BASE_URL}/{self.api_key}/gifs/search"
-        # Fetch a modest number of results for speed; randomize page a bit
-        params = {"q": query, "page": 1, "per_page": 12}
-        # choose a small random page window to spread results without hurting relevancy
-        try:
-            page = SystemRandom().randint(1, 2)
-            params["page"] = page
-        except Exception:
-            params["page"] = 1
+        # Search engines rank page one most strongly. Going deeper randomly can
+        # return visually popular but unrelated results.
+        params = {"q": query, "page": 1, "per_page": 24}
         try:
             async with self.http_session.get(
                 endpoint,
                 params=params,
                 headers={"Accept": "application/json", "User-Agent": "Meyaya/1.0"},
-                timeout=aiohttp.ClientTimeout(total=10),
+                timeout=KLIPY_TIMEOUT,
             ) as response:
                 payload = await response.json()
                 logger.debug(
@@ -109,7 +120,10 @@ class KlipyService:
             if isinstance(url, str) and url:
                 pairs.append((it, url))
 
-        rng = SystemRandom()
+        pairs = self._rank_action_candidates(query, pairs, strict_action=strict_action)
+        if not pairs:
+            logger.warning("KLIPY returned no relevant action GIF query=%s", query)
+            return GifResult(url=None)
 
         # Try to avoid recently-used URLs tracked in Redis to increase diversity.
         chosen_item: dict[str, object] | None = None
@@ -118,9 +132,9 @@ class KlipyService:
                 KEY = "klipy:recent_urls"
                 recent = await self.cache.zrange(KEY, 0, -1)
                 recent_set = {r.decode() if isinstance(r, (bytes, bytearray)) else str(r) for r in recent}
-                candidates = [p for p, u in pairs if u not in recent_set]
+                candidates = [p for p, u in pairs[:8] if u not in recent_set]
                 if candidates:
-                    chosen_item = rng.choice(candidates)
+                    chosen_item = SECURE_RANDOM.choice(candidates)
                     logger.debug("KLIPY picked non-recent candidate for query=%s", query)
 
         except Exception:
@@ -130,9 +144,9 @@ class KlipyService:
         if chosen_item is None:
             # If we didn't find a candidate that avoids recent URLs, pick from pairs
             if pairs:
-                chosen_item = rng.choice([p for p, u in pairs])
+                chosen_item = SECURE_RANDOM.choice([p for p, u in pairs[:8]])
             else:
-                chosen_item = rng.choice(items)
+                chosen_item = SECURE_RANDOM.choice(items)
 
         chosen_url = self._extract_url(chosen_item)
         logger.debug("KLIPY chosen_url=%s for query=%s", chosen_url, query)
@@ -166,25 +180,13 @@ class KlipyService:
         normalized = query.strip().lower() or "reaction"
 
         if prefer_anime:
-            # 95% chance to add anime prefix, 5% plain — bias strongly toward anime
-            if SystemRandom().random() < 0.95:
-                logger.debug("KLIPY prefer_anime: using anime-prefixed query=%s", f"{ANIME_QUERY_PREFIX} {normalized}")
-                result = await self._search_gifs(f"{ANIME_QUERY_PREFIX} {normalized}")
-            else:
-                result = await self._search_gifs(normalized)
+            anime_query = self._normalize_anime_query(normalized)
+            logger.debug("KLIPY prefer_anime: using query=%s", anime_query)
+            result = await self._search_gifs(anime_query)
         else:
             result = await self._search_gifs(normalized)
 
-        # If search returned nothing, try a looser random fallback
-        if result.url is None:
-            result = await self._random_gif(normalized)
-
         return GifResult(url=result.url or self._fallback_gif_url())
-
-    async def _random_gif(self, query: str) -> GifResult:
-        """Ask Klipy for a random GIF as a fallback when search returns nothing."""
-
-        return await self._search_gifs(query)
 
     def _extract_items(self, payload: object) -> list[dict[str, object]]:
         """Flatten the current KLIPY response structure into a list of media objects."""
@@ -252,10 +254,72 @@ class KlipyService:
 
         return None
 
+    def _rank_action_candidates(
+        self,
+        query: str,
+        pairs: list[tuple[dict[str, object], str]],
+        *,
+        strict_action: bool,
+    ) -> list[tuple[dict[str, object], str]]:
+        """Keep action GIFs relevant using provider titles, tags, and result rank."""
+
+        normalized_query = query.casefold().replace("-", " ")
+        query_tokens = set(normalized_query.split())
+        action = next(
+            (
+                name
+                for name, terms in ACTION_RELEVANCE_TERMS.items()
+                if name in query_tokens or any(term.replace("-", " ") in normalized_query for term in terms)
+            ),
+            None,
+        )
+        if action is None:
+            return pairs
+
+        positives = ACTION_RELEVANCE_TERMS[action]
+        negatives = ACTION_NEGATIVE_TERMS.get(action, ())
+        ranked: list[tuple[int, bool, tuple[dict[str, object], str]]] = []
+        has_metadata = False
+        for index, pair in enumerate(pairs):
+            metadata = self._item_search_text(pair[0])
+            has_metadata = has_metadata or bool(metadata)
+            positive_match = any(term in metadata for term in positives)
+            score = max(0, 12 - index)
+            if positive_match:
+                score += 100
+            if any(term in metadata for term in negatives):
+                score -= 150
+            ranked.append((score, positive_match, pair))
+
+        if strict_action and has_metadata:
+            ranked = [candidate for candidate in ranked if candidate[1] and candidate[0] > 0]
+        ranked.sort(key=lambda candidate: candidate[0], reverse=True)
+        return [pair for _, _, pair in ranked]
+
+    @staticmethod
+    def _item_search_text(item: dict[str, object]) -> str:
+        """Flatten common KLIPY metadata fields for relevance checks."""
+
+        values: list[str] = []
+        for key in ("title", "slug", "description", "content_description", "name"):
+            value = item.get(key)
+            if isinstance(value, str):
+                values.append(value)
+        tags = item.get("tags")
+        if isinstance(tags, list):
+            for tag in tags:
+                if isinstance(tag, str):
+                    values.append(tag)
+                elif isinstance(tag, dict):
+                    value = tag.get("name")
+                    if isinstance(value, str):
+                        values.append(value)
+        return " ".join(values).casefold().replace("-", " ")
+
     def _fallback_gif_url(self) -> str:
         """Return a valid fallback animation if Klipy is unavailable or empty."""
 
-        return SystemRandom().choice(FALLBACK_GIF_URLS)
+        return SECURE_RANDOM.choice(FALLBACK_GIF_URLS)
 
     def _normalize_anime_query(self, query: str) -> str:
         """Keep bot GIF searches anime-focused and action-specific."""

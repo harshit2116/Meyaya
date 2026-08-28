@@ -3,7 +3,6 @@
 Behavior:
 - Loads monitored channels from settings and Redis.
 - Supports text channels and voice channel events.
-- Stores monitored message activity in chat memory when possible.
 - Detects non-English text and asks for English with a playful Meyaya tone.
 """
 
@@ -41,10 +40,10 @@ _ENGLISH_CHAT_HINT_RE = re.compile(
 )
 
 ENGLISH_NUDGES = (
-    "Meyaya's language radar went beep—English, please 😼",
+    "Meyaya's language radar went beep - English, please 😼",
     "Quick Meyaya checkpoint: let's keep it in English, please ✨",
     "English mode, pretty please? Meyaya wants everyone in the loop 💫",
-    "I translated this one—use English next time so everyone can follow 😺",
+    "I translated this one - use English next time so everyone can follow 😺",
     "Tiny language bonk from Meyaya: English in here, please 🔨",
     "Meyaya patrol reporting in: English chat, please 🫡",
     "Let's switch that to English so nobody gets left out 🌸",
@@ -75,7 +74,9 @@ class MonitorCog(commands.Cog):
                 logger.exception("Failed to read monitor channels from Redis")
         logger.info("MonitorCog loaded watching channels=%s", self._channels)
 
-    def _is_channel_monitored(self, message: discord.Message) -> bool:
+    def is_channel_monitored(self, message: discord.Message) -> bool:
+        """Return whether a message belongs to an owner-approved monitored channel."""
+
         channel_id = getattr(message.channel, "id", None)
         if channel_id in self._channels:
             return True
@@ -84,6 +85,11 @@ class MonitorCog(commands.Cog):
         parent = getattr(message.channel, "parent", None)
         parent_id = getattr(parent, "id", None)
         return parent_id in self._channels
+
+    def _is_channel_monitored(self, message: discord.Message) -> bool:
+        """Backward-compatible internal alias."""
+
+        return self.is_channel_monitored(message)
 
     def _playful_english_nudge(self) -> str:
         """Return every variation once before reshuffling the set."""
@@ -160,19 +166,6 @@ class MonitorCog(commands.Cog):
         if not content:
             return
 
-        # Log monitored message activity to short-term memory whenever possible.
-        try:
-            chat_mem = self.bot.build_chat_memory_service()
-            if chat_mem is not None:
-                await chat_mem.append_turn(
-                    channel_id,
-                    content,
-                    "",
-                    speaker_label=self._speaker_label(message.author),
-                )
-        except Exception:
-            logger.exception("Failed to persist monitored message to chat memory")
-
         # Translation reply cooldown per-user per-channel.
         key = (channel_id, message.author.id)
         now = time.time()
@@ -224,19 +217,6 @@ class MonitorCog(commands.Cog):
         except Exception:
             logger.exception("Failed to send translation reply")
 
-        # Persist the message and (if available) translation to chat memory when possible
-        try:
-            chat_mem = self.bot.build_chat_memory_service()
-            if chat_mem is not None:
-                await chat_mem.append_turn(
-                    message.channel.id,
-                    content,
-                    translated,
-                    speaker_label=self._speaker_label(message.author),
-                )
-        except Exception:
-            logger.exception("Failed to persist message to chat memory")
-
     @commands.hybrid_command(name="monitor_add", with_app_command=True)
     @commands.has_guild_permissions(manage_guild=True)
     async def monitor_add(self, ctx: commands.Context, channel: discord.abc.GuildChannel) -> None:
@@ -286,46 +266,6 @@ class MonitorCog(commands.Cog):
         for cid in sorted(self._channels):
             mentions.append(f"<#{cid}>")
         await ctx.send("Monitored channels:\n" + "\n".join(mentions))
-
-    @commands.Cog.listener()
-    async def on_voice_state_update(
-        self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
-    ) -> None:
-        # Log voice joins/leaves into chat memory (if the voice channel is monitored).
-        vc_before = before.channel.id if before and before.channel else None
-        vc_after = after.channel.id if after and after.channel else None
-        try:
-            # When a user joins a monitored voice channel, persist an event.
-            if vc_after and int(vc_after) in self._channels:
-                chat_mem = self.bot.build_chat_memory_service()
-                if chat_mem is not None:
-                    text = f"[Voice] {member.display_name} joined voice channel"
-                    await chat_mem.append_turn(
-                        vc_after,
-                        text,
-                        "",
-                        speaker_label=self._speaker_label(member),
-                    )
-            if vc_before and int(vc_before) in self._channels and (vc_after != vc_before):
-                chat_mem = self.bot.build_chat_memory_service()
-                if chat_mem is not None:
-                    text = f"[Voice] {member.display_name} left voice channel"
-                    await chat_mem.append_turn(
-                        vc_before,
-                        text,
-                        "",
-                        speaker_label=self._speaker_label(member),
-                    )
-        except Exception:
-            logger.exception("Failed to log voice state change to chat memory")
-
-    @staticmethod
-    def _speaker_label(author: discord.abc.User) -> str:
-        handle = getattr(author, "name", None) or str(author)
-        return (
-            f'Discord user display name "{author.display_name}", handle "@{handle}", ID {author.id}'
-        )
-
 
 async def setup(bot: MeyayaBot) -> None:
     await bot.add_cog(MonitorCog(bot))

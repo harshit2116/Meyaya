@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     command_prefix: str = Field(default="", alias="COMMAND_PREFIX")
     guild_id: int | None = Field(default=None, alias="GUILD_ID")
     monitor_channel_ids: list[int] = Field(default_factory=list, alias="MONITOR_CHANNEL_IDS")
+    proactive_enabled: bool = Field(default=False, alias="PROACTIVE_ENABLED")
+    proactive_chance: float = Field(
+        default=0.01, ge=0.0, le=1.0, alias="PROACTIVE_CHANCE"
+    )
+    proactive_guild_cooldown_minutes: int = Field(
+        default=180, ge=15, alias="PROACTIVE_GUILD_COOLDOWN_MINUTES"
+    )
+    proactive_channel_cooldown_minutes: int = Field(
+        default=120, ge=15, alias="PROACTIVE_CHANNEL_COOLDOWN_MINUTES"
+    )
 
     @field_validator("guild_id", mode="before")
     @classmethod

@@ -7,6 +7,7 @@ __pycache__/
 .venv-win/
 .venv-win-broken/
 .env
+bot/private/
 .DS_Store
 dist/
 build/

@@ -76,7 +76,12 @@ class InteractionsCog(commands.Cog):
             bot = cast(MeyayaBot, interaction.client)
             async with bot.db_session() as session:
                 service = bot.build_interaction_service(session)
-                result = await service.perform(interaction.user.id, chosen_target.id, definition)
+                result = await service.perform(
+                    interaction.user.id,
+                    chosen_target.id,
+                    definition,
+                    guild_id=interaction.guild.id,
+                )
                 await interaction.followup.send(
                     embed=build_interaction_embed(
                         title=result.title,
@@ -84,11 +89,7 @@ class InteractionsCog(commands.Cog):
                             actor=interaction.user.mention, target=chosen_target.mention
                         ),
                         color=definition.color,
-                        actor_avatar=str(interaction.user.display_avatar.url),
-                        target_avatar=str(chosen_target.display_avatar.url),
                         gif_url=result.gif_url,
-                        count_label=f"{definition.name.title()}s between {interaction.user.display_name} & {chosen_target.display_name}",
-                        count=result.count,
                     ),
                     view=(
                         InteractionResponseView(
@@ -121,7 +122,12 @@ class InteractionsCog(commands.Cog):
             bot = cast(MeyayaBot, ctx.bot)
             async with bot.db_session() as session:
                 service = bot.build_interaction_service(session)
-                result = await service.perform(ctx.author.id, chosen_target.id, definition)
+                result = await service.perform(
+                    ctx.author.id,
+                    chosen_target.id,
+                    definition,
+                    guild_id=ctx.guild.id,
+                )
                 embed, view = self._build_interaction_render(
                     bot, definition, ctx.author, chosen_target, result
                 )
@@ -249,11 +255,7 @@ class InteractionsCog(commands.Cog):
             title=result.title,
             description=result.message.format(actor=actor.mention, target=target.mention),
             color=definition.color,
-            actor_avatar=str(actor.display_avatar.url),
-            target_avatar=str(target.display_avatar.url),
             gif_url=result.gif_url,
-            count_label=f"{definition.name.title()}s between {actor.display_name} & {target.display_name}",
-            count=result.count,
         )
         view = (
             InteractionResponseView(

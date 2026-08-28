@@ -52,7 +52,7 @@ class ProfileCog(commands.Cog):
 
         async with bot.db_session() as session:
             service = ProfileService(session)
-            summary = await service.build(target.id)
+            summary = await service.build(target.id, interaction.guild.id)
 
         await interaction.followup.send(embed=build_profile_embed(target, summary))
 
@@ -70,7 +70,7 @@ class ProfileCog(commands.Cog):
 
             async with bot.db_session() as session:
                 service = ProfileService(session)
-                summary = await service.build(target.id)
+                summary = await service.build(target.id, ctx.guild.id)
 
             await ctx.send(embed=build_profile_embed(target, summary))
 

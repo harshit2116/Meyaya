@@ -51,9 +51,13 @@ class InteractionResponseView(discord.ui.View):
 
         async with self.bot.db_session() as session:
             service = self.bot.build_interaction_service(session)
-            result = await service.perform(interaction.user.id, self.actor_id, self.definition)
+            result = await service.perform(
+                interaction.user.id,
+                self.actor_id,
+                self.definition,
+                guild_id=interaction.guild.id if interaction.guild else None,
+            )
         target_member = interaction.guild.get_member(self.actor_id) if interaction.guild else None
-        target_avatar = str(target_member.display_avatar.url) if target_member else str(interaction.user.display_avatar.url)
         embed = build_interaction_embed(
             title=result.title,
             description=result.message.format(
@@ -61,11 +65,7 @@ class InteractionResponseView(discord.ui.View):
                 target=target_member.mention if target_member else f"<@{self.actor_id}>",
             ),
             color=self.definition.color,
-            actor_avatar=str(interaction.user.display_avatar.url),
-            target_avatar=target_avatar,
             gif_url=result.gif_url,
-            count_label=f"{self.definition.name.title()}s between {interaction.user.display_name} & {target_member.display_name if target_member else self.actor_id}",
-            count=result.count,
         )
 
         await interaction.response.send_message(embed=embed)

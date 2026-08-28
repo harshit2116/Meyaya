@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 
 import aiohttp
 import discord
 from discord.ext import commands
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from redis.asyncio import Redis
-import logging
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from bot.config.settings import Settings, get_settings
 from bot.cache.redis import build_redis_client
+from bot.config.settings import Settings, get_settings
 from bot.database.session import build_async_engine, build_session_factory
 from bot.logging.setup import configure_logging
-from bot.services.klipy import KlipyService
-from bot.services.interactions import InteractionService
-from bot.services.marriage import MarriageService
-from bot.services.gemini import GeminiService
 from bot.services.chat_memory import ChatMemoryService
+from bot.services.gemini import GeminiService
+from bot.services.interactions import InteractionService
+from bot.services.klipy import KlipyService
+from bot.services.marriage import MarriageService
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,9 @@ class MeyayaBot(commands.Bot):
         self.session_factory: async_sessionmaker[AsyncSession] = build_session_factory(self.engine)
         self.redis: Redis | None = None
         self.http_session: aiohttp.ClientSession | None = None
+        self._klipy_service: KlipyService | None = None
+        self._chat_memory_service: ChatMemoryService | None = None
+        self._gemini_service: GeminiService | None = None
 
     @asynccontextmanager
     async def db_session(self) -> AsyncSession:
@@ -80,6 +83,20 @@ class MeyayaBot(commands.Bot):
 
         self.redis = build_redis_client(self.settings.redis_url)
         self.http_session = aiohttp.ClientSession()
+        # These services are stateless wrappers around shared clients. Reuse
+        # them instead of allocating a new wrapper for every command/message.
+        self._klipy_service = KlipyService(
+            self.settings.klipy_api_key,
+            self.settings.klipy_rating,
+            self.http_session,
+            self.redis,
+        )
+        self._chat_memory_service = ChatMemoryService(self.redis)
+        self._gemini_service = GeminiService(
+            self.settings.gemini_api_key,
+            self.settings.gemini_model,
+            self.http_session,
+        )
         await self.load_extension("bot.cogs.interactions")
         await self.load_extension("bot.cogs.daily")
         await self.load_extension("bot.cogs.profile")
@@ -121,34 +138,28 @@ class MeyayaBot(commands.Bot):
         logger.exception("Unhandled command error", exc_info=error)
 
     def build_klipy_service(self) -> KlipyService | None:
-        """Create a Klipy service when the HTTP session and Redis client are ready."""
+        """Return the shared Klipy service once runtime clients are ready."""
 
-        if self.http_session is None or self.redis is None:
-            return None
-        return KlipyService(
-            self.settings.klipy_api_key, self.settings.klipy_rating, self.http_session, self.redis
-        )
+        return self._klipy_service
 
     def build_chat_memory_service(self) -> ChatMemoryService | None:
-        """Create a chat memory service when Redis is ready."""
+        """Return the shared short-term chat memory service."""
 
-        if self.redis is None:
-            return None
-        return ChatMemoryService(self.redis)
+        return self._chat_memory_service
 
     def build_gemini_service(self) -> GeminiService | None:
-        """Create a Gemini service when the HTTP session is ready."""
+        """Return the shared Gemini service once the HTTP client is ready."""
 
-        if self.http_session is None:
-            return None
-        return GeminiService(
-            self.settings.gemini_api_key, self.settings.gemini_model, self.http_session
-        )
+        return self._gemini_service
 
     def build_interaction_service(self, session: AsyncSession) -> InteractionService:
         """Create an interaction service bound to the current runtime resources."""
 
-        return InteractionService(session, self.build_klipy_service())
+        return InteractionService(
+            session,
+            self.build_klipy_service(),
+            meyaya_user_id=self.user.id if self.user is not None else None,
+        )
 
     def build_marriage_service(self, session: AsyncSession) -> MarriageService:
         """Create a marriage service bound to the current database session."""

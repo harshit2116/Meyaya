@@ -13,9 +13,6 @@ from discord.ext import commands
 from bot.app import MeyayaBot
 from bot.services.daily import DailyService
 
-IQ_GIF_QUERIES = ("anime iq smart brain", "anime genius thinking", "anime smart")
-SMART_GIF_QUERIES = ("anime smart genius", "anime clever", "anime thinking")
-DUMB_GIF_QUERIES = ("anime dumb funny", "dumb dog funny", "dumb cat funny", "dumb funny")
 CLOWN_GIF_QUERIES = ("cat clown funny", "dog clown funny", "clown dog cat")
 
 
@@ -31,8 +28,8 @@ class DailyCog(commands.Cog):
 
         commands_to_add = [
             self._build_text_iq(),
-            self._build_text_dailywinners("dumb", "dumbest", "Dumbest Person", DUMB_GIF_QUERIES, 0xFF6B6B),
-            self._build_text_dailywinners("smart", "smartest", "Smartest Person", SMART_GIF_QUERIES, 0x4D96FF),
+            self._build_text_dailywinners("dumb", "dumbest", "Dumbest Person", (), 0xFF6B6B),
+            self._build_text_dailywinners("smart", "smartest", "Smartest Person", (), 0x4D96FF),
             self._build_text_dailywinners("clown", "clown", "Clown", CLOWN_GIF_QUERIES, 0xF9C74F),
         ]
         for command in commands_to_add:
@@ -54,27 +51,24 @@ class DailyCog(commands.Cog):
         await interaction.response.defer()
         target = member or cast(discord.Member, interaction.user)
         bot = cast(MeyayaBot, interaction.client)
-        async with bot.db_session() as session:
-            service = DailyService(session)
-            score = await service.iq_score(interaction.guild.id, target.id, date.today())
+        score = DailyService.iq_score(interaction.guild.id, target.id, date.today())
 
         await self._send_daily_embed(
             bot,
             interaction,
             "Daily IQ",
             f"{target.mention} scored {score} IQ today.",
-            IQ_GIF_QUERIES,
+            (),
             0x5C7CFA,
-            anime_only=True,
         )
 
     @app_commands.command(name="dumb", description="Choose the dumbest member of the day.")
     async def dumb(self, interaction: discord.Interaction) -> None:
-        await self._daily_winner(interaction, "dumbest", "Dumbest Person", DUMB_GIF_QUERIES, 0xFF6B6B)
+        await self._daily_winner(interaction, "dumbest", "Dumbest Person", (), 0xFF6B6B)
 
     @app_commands.command(name="smart", description="Choose the smartest member of the day.")
     async def smart(self, interaction: discord.Interaction) -> None:
-        await self._daily_winner(interaction, "smartest", "Smartest Person", SMART_GIF_QUERIES, 0x4D96FF)
+        await self._daily_winner(interaction, "smartest", "Smartest Person", (), 0x4D96FF)
 
     @app_commands.command(name="clown", description="Choose the clown of the day.")
     async def clown(self, interaction: discord.Interaction) -> None:
@@ -91,18 +85,15 @@ class DailyCog(commands.Cog):
 
             target = member or cast(discord.Member, ctx.author)
             bot = cast(MeyayaBot, ctx.bot)
-            async with bot.db_session() as session:
-                service = DailyService(session)
-                score = await service.iq_score(ctx.guild.id, target.id, date.today())
+            score = DailyService.iq_score(ctx.guild.id, target.id, date.today())
 
             await self._send_daily_embed(
                 bot,
                 ctx,
                 "Daily IQ",
                 f"{target.mention} scored {score} IQ today.",
-                IQ_GIF_QUERIES,
+                (),
                 0x5C7CFA,
-                anime_only=True,
             )
 
         return commands.Command(callback, name="iq", help="Show a daily IQ score for a member.")
@@ -139,7 +130,6 @@ class DailyCog(commands.Cog):
                 f"Today's {title.lower()} is {winner_mention}.",
                 gif_queries,
                 color,
-                anime_only=True,
             )
 
         return commands.Command(callback, name=name, help=f"Choose the {kind} member of the day.")
@@ -174,7 +164,6 @@ class DailyCog(commands.Cog):
             f"Today's {title.lower()} is {winner_mention}.",
             gif_queries,
             color,
-            anime_only=True,
         )
 
     async def _send_daily_embed(
@@ -185,16 +174,14 @@ class DailyCog(commands.Cog):
         message: str,
         gif_queries: tuple[str, ...],
         color: int,
-        *,
-        anime_only: bool = False,
     ) -> None:
-        gif_service = bot.build_klipy_service()
         gif_url: str | None = None
-        if gif_service is not None:
-            gif_query = choice(gif_queries)
-            # Prefer anime but allow non-anime when necessary for coverage and speed.
-            gif_result = await gif_service.random_gif(gif_query, prefer_anime=True)
-            gif_url = gif_result.url
+        if gif_queries:
+            gif_service = bot.build_klipy_service()
+            if gif_service is not None:
+                gif_query = choice(gif_queries)
+                gif_result = await gif_service.random_gif(gif_query, prefer_anime=True)
+                gif_url = gif_result.url
 
         description = f"**{message}**"
         embed = discord.Embed(title=title, description=description, color=color)

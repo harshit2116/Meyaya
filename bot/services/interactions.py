@@ -8,6 +8,7 @@ from random import choice
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.services.klipy import KlipyService
+from bot.services.meyaya_system import MeyayaSystemService
 from bot.repositories.relationships import RelationshipRepository
 from bot.repositories.users import UserRepository
 
@@ -39,17 +40,25 @@ class InteractionResult:
 class InteractionService:
     """Business logic for relationship-based interaction commands."""
 
-    def __init__(self, session: AsyncSession, klipy: KlipyService | None = None) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        klipy: KlipyService | None = None,
+        meyaya_user_id: int | None = None,
+    ) -> None:
         self.session = session
         self.relationships = RelationshipRepository(session)
         self.users = UserRepository(session)
         self.klipy = klipy
+        self.meyaya_user_id = meyaya_user_id
+        self.meyaya_system = MeyayaSystemService(session)
 
     async def perform(
         self,
         actor_id: int,
         target_id: int,
         definition: InteractionDefinition,
+        guild_id: int | None = None,
     ) -> InteractionResult:
         """Update storage and return a response payload for the interaction."""
 
@@ -76,16 +85,14 @@ class InteractionService:
         if hasattr(target_stats, target_received_field):
             setattr(target_stats, target_received_field, getattr(target_stats, target_received_field) + 1)
         count = await self.relationships.increment(actor_id, target_id, definition.name)
+        if self.meyaya_user_id is not None and target_id == self.meyaya_user_id:
+            await self.meyaya_system.apply_interaction(guild_id, actor_id, definition.name)
         await self.session.commit()
         gif_url = None
         # Prefer a live Klipy anime GIF when available for more variety.
         if self.klipy and definition.gif_query:
             gif_result = await self.klipy.random_anime_gif(definition.gif_query)
             gif_url = gif_result.url
-            if gif_url is None:
-                # try a looser search (non-anime preferred) before falling back to static URLs
-                gif_result = await self.klipy.random_gif(definition.gif_query, prefer_anime=False)
-                gif_url = gif_result.url
 
         if gif_url is None and definition.gif_urls:
             gif_url = choice(definition.gif_urls)
@@ -94,5 +101,5 @@ class InteractionService:
             message=message,
             gif_url=gif_url,
             count=count,
-            title=f"{definition.emoji} {definition.name.title()} complete",
+            title=f"{definition.emoji} {definition.name.title()}!",
         )

@@ -121,3 +121,7 @@ INTERACTION_DEFINITIONS: tuple[InteractionDefinition, ...] = (
         "{actor} had a very expressive facepalm moment with {target}.",
     ), (), "anime facepalm", None, None),
 )
+
+INTERACTION_DEFINITIONS_BY_NAME: dict[str, InteractionDefinition] = {
+    definition.name: definition for definition in INTERACTION_DEFINITIONS
+}

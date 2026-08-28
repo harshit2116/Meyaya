@@ -14,6 +14,23 @@ class ProfileSummaryLike(Protocol):
     total_received: int
     favorite_interaction: str | None
     most_interacted_member_id: int | None
+    meyaya: "MeyayaProfileStateLike"
+    titles: tuple[str, ...]
+
+
+class MeyayaProfileStateLike(Protocol):
+    """Meyaya System data shown on a member profile."""
+
+    mood: str
+    energy: int
+    global_annoyance: int
+    relationship: str
+    familiarity: int
+    affection: int
+    user_annoyance: int
+    nickname: str | None
+    is_parent: bool
+    is_favorite: bool
 
 
 def build_interaction_embed(
@@ -21,20 +38,14 @@ def build_interaction_embed(
     title: str,
     description: str,
     color: int,
-    actor_avatar: str,
-    target_avatar: str,
     gif_url: str | None,
-    count_label: str,
-    count: int,
 ) -> discord.Embed:
-    """Create a polished interaction embed."""
+    """Create a clean, character-focused social interaction embed."""
 
     embed = discord.Embed(title=title, description=description, color=color)
-    embed.add_field(name="Shared Count", value=f"**{count_label}: {count}**", inline=False)
-    embed.set_author(name="Actor", icon_url=actor_avatar)
-    embed.set_thumbnail(url=target_avatar)
     if gif_url:
         embed.set_image(url=gif_url)
+    embed.set_footer(text="Meyaya • Share the moment 🌸")
     return embed
 
 
@@ -47,26 +58,57 @@ def build_profile_embed(target: discord.Member, summary: ProfileSummaryLike) -> 
         else "*No one yet...*"
     )
     favorite = summary.favorite_interaction or "None yet"
+    nickname = f'\n**Nickname** - "{summary.meyaya.nickname}"' if summary.meyaya.nickname else ""
+    mood_emoji = {
+        "normal": "🌸",
+        "happy": "😊",
+        "sleepy": "😴",
+        "annoyed": "😤",
+        "chaotic": "😈",
+        "jealous": "💚",
+    }.get(summary.meyaya.mood, "🌸")
 
     embed = discord.Embed(
+        title=f"🌸 {target.display_name}'s Profile",
         color=0xF48FB1,
-        description=(
-            "## 🌸 Profile\n\n"
-            f"### {target.display_name}\n\n"
-            f"❤️ **Given Interaction** • **{summary.total_given:,}**\n"
-            f"💌 **Received Interaction** • **{summary.total_received:,}**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "🏆 **Favorite**\n"
-            f"> 💋 {favorite}\n\n"
-            "💕 **Favorite Person**\n"
-            f"> {best_friend}\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"✨ *{target.display_name} has shared lots of affection!*"
+        description=f"How Meyaya knows {target.mention} and their shared server story.",
+    )
+    embed.add_field(
+        name="💗 Meyaya's bond",
+        value=(
+            f"**{summary.meyaya.relationship.capitalize()}**{nickname}\n"
+            f"Familiarity - `{summary.meyaya.familiarity}%`\n"
+            f"Affection - `{summary.meyaya.affection}%`\n"
+            f"Tension - `{summary.meyaya.user_annoyance}%`"
         ),
+        inline=False,
+    )
+    embed.add_field(
+        name="🏅 Titles",
+        value="\n".join(summary.titles),
+        inline=False,
+    )
+    embed.add_field(
+        name="✨ Meyaya right now",
+        value=(
+            f"{mood_emoji} Mood - **{summary.meyaya.mood.title()}**\n"
+            f"⚡ Energy - `{summary.meyaya.energy}%`\n"
+            f"💢 Irritation - `{summary.meyaya.global_annoyance}%`"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="📊 Interactions",
+        value=(
+            f"Given - **{summary.total_given:,}** | Received - **{summary.total_received:,}**\n"
+            f"Favorite - **{favorite}**\n"
+            f"Closest interaction partner - {best_friend}"
+        ),
+        inline=False,
     )
     embed.set_thumbnail(url=str(target.display_avatar.url))
     embed.set_footer(
-        text="Meyaya • Spread love 🌸",
+        text="Meyaya - Mood and relationships 🌸",
         icon_url=str(target.display_avatar.url),
     )
     return embed
