@@ -2,9 +2,62 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Protocol
 
 import discord
+
+
+class MeyayaColors:
+    """Shared palette for a consistent, soft Meyaya visual style."""
+
+    PINK = 0xF48FB1
+    BLUSH = 0xFFB3C6
+    LAVENDER = 0xB197FC
+    SKY = 0x74C0FC
+    MINT = 0x63E6BE
+    SUN = 0xFFD43B
+    PEACH = 0xFFA94D
+    CORAL = 0xFF6B6B
+    MUTED = 0x8D99AE
+
+
+TONE_COLORS: dict[str, int] = {
+    "primary": MeyayaColors.PINK,
+    "soft": MeyayaColors.BLUSH,
+    "magic": MeyayaColors.LAVENDER,
+    "info": MeyayaColors.SKY,
+    "success": MeyayaColors.MINT,
+    "warning": MeyayaColors.SUN,
+    "danger": MeyayaColors.CORAL,
+    "muted": MeyayaColors.MUTED,
+}
+
+
+def meyaya_embed(
+    title: str,
+    description: str | None = None,
+    *,
+    tone: str = "primary",
+    color: int | None = None,
+    icon: str | None = None,
+) -> discord.Embed:
+    """Build a compact themed embed without decorative footer clutter."""
+
+    visible_title = f"{icon} {title}" if icon else title
+    return discord.Embed(
+        title=visible_title,
+        description=description,
+        color=color if color is not None else TONE_COLORS.get(tone, MeyayaColors.PINK),
+    )
+
+
+def score_bar(score: int, *, segments: int = 10) -> str:
+    """Render the original filled-block score bar for 0-100 results."""
+
+    bounded = min(100, max(0, score))
+    filled = min(segments, max(0, (bounded * segments + 50) // 100))
+    return "`" + "▰" * filled + "▱" * (segments - filled) + "`"
 
 
 class ProfileSummaryLike(Protocol):
@@ -12,9 +65,11 @@ class ProfileSummaryLike(Protocol):
 
     total_given: int
     total_received: int
+    total_interactions: int
     favorite_interaction: str | None
     most_interacted_member_id: int | None
     meyaya: "MeyayaProfileStateLike"
+    marriage: "MarriageSummaryLike | None"
     titles: tuple[str, ...]
 
 
@@ -33,6 +88,14 @@ class MeyayaProfileStateLike(Protocol):
     is_favorite: bool
 
 
+class MarriageSummaryLike(Protocol):
+    partner_id: int
+    married_at: datetime
+    days_together: int
+    next_anniversary: datetime
+    days_until_anniversary: int
+
+
 def build_interaction_embed(
     *,
     title: str,
@@ -42,23 +105,22 @@ def build_interaction_embed(
 ) -> discord.Embed:
     """Create a clean, character-focused social interaction embed."""
 
-    embed = discord.Embed(title=title, description=description, color=color)
+    embed = meyaya_embed(title, description, color=color)
     if gif_url:
         embed.set_image(url=gif_url)
-    embed.set_footer(text="Meyaya • Share the moment 🌸")
     return embed
 
 
 def build_profile_embed(target: discord.Member, summary: ProfileSummaryLike) -> discord.Embed:
-    """Create the profile embed shared by slash and text commands."""
+    """Create a unified profile across Discord, Meyaya, social, and marriage data."""
 
     best_friend = (
         f"<@{summary.most_interacted_member_id}>"
         if summary.most_interacted_member_id
-        else "*No one yet...*"
+        else "No one yet"
     )
     favorite = summary.favorite_interaction or "None yet"
-    nickname = f'\n**Nickname** - "{summary.meyaya.nickname}"' if summary.meyaya.nickname else ""
+    nickname = f'\nNickname - **"{summary.meyaya.nickname}"**' if summary.meyaya.nickname else ""
     mood_emoji = {
         "normal": "🌸",
         "happy": "😊",
@@ -68,50 +130,65 @@ def build_profile_embed(target: discord.Member, summary: ProfileSummaryLike) -> 
         "jealous": "💚",
     }.get(summary.meyaya.mood, "🌸")
 
-    embed = discord.Embed(
-        title=f"🌸 {target.display_name}'s Profile",
-        color=0xF48FB1,
-        description=f"How Meyaya knows {target.mention} and their shared server story.",
+    embed = meyaya_embed(
+        f"{target.display_name}'s Profile",
+        f"{target.mention}\n" + "  •  ".join(summary.titles),
+        icon="🌸",
     )
     embed.add_field(
-        name="💗 Meyaya's bond",
+        name="Meyaya's bond",
         value=(
-            f"**{summary.meyaya.relationship.capitalize()}**{nickname}\n"
-            f"Familiarity - `{summary.meyaya.familiarity}%`\n"
-            f"Affection - `{summary.meyaya.affection}%`\n"
-            f"Tension - `{summary.meyaya.user_annoyance}%`"
+            f"**{summary.meyaya.relationship.capitalize()}**{nickname}\n\n"
+            f"Familiarity  {_profile_bar(summary.meyaya.familiarity)} `{summary.meyaya.familiarity}%`\n"
+            f"Affection    {_profile_bar(summary.meyaya.affection)} `{summary.meyaya.affection}%`\n"
+            f"Tension      {_profile_bar(summary.meyaya.user_annoyance)} `{summary.meyaya.user_annoyance}%`"
         ),
         inline=False,
     )
     embed.add_field(
-        name="🏅 Titles",
-        value="\n".join(summary.titles),
-        inline=False,
-    )
-    embed.add_field(
-        name="✨ Meyaya right now",
+        name="Meyaya right now",
         value=(
-            f"{mood_emoji} Mood - **{summary.meyaya.mood.title()}**\n"
-            f"⚡ Energy - `{summary.meyaya.energy}%`\n"
-            f"💢 Irritation - `{summary.meyaya.global_annoyance}%`"
+            f"{mood_emoji} **{summary.meyaya.mood.title()}**\n"
+            f"Energy `{summary.meyaya.energy}%`  •  Irritation `{summary.meyaya.global_annoyance}%`"
         ),
-        inline=False,
+        inline=True,
     )
     embed.add_field(
-        name="📊 Interactions",
+        name="Social activity",
         value=(
-            f"Given - **{summary.total_given:,}** | Received - **{summary.total_received:,}**\n"
-            f"Favorite - **{favorite}**\n"
-            f"Closest interaction partner - {best_friend}"
+            f"**{summary.total_interactions:,}** total interactions\n"
+            f"Given **{summary.total_given:,}**  •  Received **{summary.total_received:,}**\n"
+            f"Favorite: **{favorite.title()}**\nClosest: {best_friend}"
+        ),
+        inline=True,
+    )
+    if summary.marriage is None:
+        marriage_value = "Single in the Meyaya universe"
+    else:
+        marriage_value = (
+            f"Married to <@{summary.marriage.partner_id}>\n"
+            f"Together **{summary.marriage.days_together:,} days**\n"
+            f"Since <t:{int(summary.marriage.married_at.timestamp())}:D>\n"
+            f"Anniversary <t:{int(summary.marriage.next_anniversary.timestamp())}:R>"
+        )
+    embed.add_field(name="Marriage", value=marriage_value, inline=False)
+    joined = (
+        f"<t:{int(target.joined_at.timestamp())}:D>" if target.joined_at is not None else "Unknown"
+    )
+    embed.add_field(
+        name="Discord",
+        value=(
+            f"Joined server {joined}\n"
+            f"Account created <t:{int(target.created_at.timestamp())}:D>"
         ),
         inline=False,
     )
     embed.set_thumbnail(url=str(target.display_avatar.url))
-    embed.set_footer(
-        text="Meyaya - Mood and relationships 🌸",
-        icon_url=str(target.display_avatar.url),
-    )
     return embed
+
+
+def _profile_bar(value: int) -> str:
+    return score_bar(value, segments=5)
 
 
 def build_ship_embed(
@@ -119,15 +196,9 @@ def build_ship_embed(
     user_b: "discord.Member | discord.User",
     percentage: int,
     label: str,
-    gif_url: str,
-    attachment_filename: str,
+    attachment_filename: str | None,
 ) -> "discord.Embed":
-    """Builds the big embed for /ship. Expects the composite side-by-side
-    avatar image to already be attached to the message as `attachment_filename`.
-    """
-    filled = "❤️" * (percentage // 10)
-    empty = "🤍" * (10 - percentage // 10)
-    bar = filled + empty
+    """Build a compact ship result with one fresh score and no external GIF."""
 
     if percentage >= 70:
         color = 0xFF4D6D
@@ -136,18 +207,16 @@ def build_ship_embed(
     else:
         color = 0x6C757D
 
-    embed = discord.Embed(
-        title="💘 Ship Result",
+    embed = meyaya_embed(
+        f"{user_a.display_name} × {user_b.display_name}",
         description=(
-            f"**{user_a.display_name}** × **{user_b.display_name}**\n\n"
-            f"{bar}\n"
-            f"**{percentage}% love**\n"
-            f"{label}"
+            f"## {percentage}% compatibility\n"
+            f"{score_bar(percentage)}\n\n"
+            f"**Meyaya says:** {label}"
         ),
         color=color,
+        icon="💞",
     )
-    embed.set_image(url=f"attachment://{attachment_filename}")
-    if gif_url:
-        embed.set_thumbnail(url=gif_url)
-    embed.set_footer(text="A tiny love calculation from Meyaya")
+    if attachment_filename:
+        embed.set_image(url=f"attachment://{attachment_filename}")
     return embed

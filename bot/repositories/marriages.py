@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Select, or_, select
+from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.models.marriage import Marriage
@@ -21,6 +21,39 @@ class MarriageRepository(Repository):
 
         statement: Select[tuple[Marriage]] = select(Marriage).where(
             or_(Marriage.user_a_id == user_id, Marriage.user_b_id == user_id)
+        )
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def get_active_for_users(self, user_ids: set[int]) -> list[Marriage]:
+        """Load every marriage involving any requested member in one query."""
+
+        if not user_ids:
+            return []
+        statement: Select[tuple[Marriage]] = select(Marriage).where(
+            or_(Marriage.user_a_id.in_(user_ids), Marriage.user_b_id.in_(user_ids))
+        )
+        return list((await self.session.scalars(statement)).all())
+
+    async def get_exact_for_divorce(
+        self,
+        marriage_id: int,
+        user_id: int,
+        partner_id: int,
+    ) -> Marriage | None:
+        """Lock the exact marriage shown by a divorce confirmation."""
+
+        user_a_id, user_b_id = normalize_pair(user_id, partner_id)
+        statement: Select[tuple[Marriage]] = (
+            select(Marriage)
+            .where(
+                and_(
+                    Marriage.id == marriage_id,
+                    Marriage.user_a_id == user_a_id,
+                    Marriage.user_b_id == user_b_id,
+                )
+            )
+            .with_for_update()
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()

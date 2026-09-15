@@ -14,9 +14,7 @@ class Marriage(Base):
     """An active marriage between two users."""
 
     __tablename__ = "marriages"
-    __table_args__ = (
-        UniqueConstraint("user_a_id", "user_b_id", name="uq_marriage_pair"),
-    )
+    __table_args__ = (UniqueConstraint("user_a_id", "user_b_id", name="uq_marriage_pair"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_a_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)

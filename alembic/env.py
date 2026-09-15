@@ -9,10 +9,15 @@ from sqlalchemy import engine_from_config, pool
 
 from bot.config.settings import get_settings
 from bot.database.base import Base
+from bot.database.urls import postgres_url
 
 # Import all models so Alembic can detect them
-from bot.models import daily, marriage, relationship, user  # noqa: F401
+from bot.models import court, daily, guild_settings, marriage, relationship, user  # noqa: F401
 from bot.models import memory, meyaya_state, server_lore  # noqa: F401
+from bot.models import usage  # noqa: F401
+from bot.models import request_log  # noqa: F401
+from bot.models import moderation  # noqa: F401
+from bot.models import character_catalog  # noqa: F401
 
 config = context.config
 
@@ -25,10 +30,8 @@ target_metadata = Base.metadata
 def get_url() -> str:
     """Return a synchronous database URL for Alembic."""
 
-    return get_settings().database_url.replace(
-        "postgresql+asyncpg",
-        "postgresql+psycopg",
-    )
+    url, _ = postgres_url(get_settings().database_url, asynchronous=False)
+    return url.render_as_string(hide_password=False)
 
 
 def run_migrations_offline() -> None:

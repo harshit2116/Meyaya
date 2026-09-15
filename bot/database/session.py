@@ -4,14 +4,23 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from bot.database.urls import postgres_url
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 def build_async_engine(database_url: str) -> AsyncEngine:
     """Create an async SQLAlchemy engine."""
 
-    return create_async_engine(database_url, pool_pre_ping=True)
+    url, connect_args = postgres_url(database_url, asynchronous=True)
+    return create_async_engine(
+        url, pool_pre_ping=True, pool_size=5, max_overflow=5, connect_args=connect_args
+    )
 
 
 def build_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

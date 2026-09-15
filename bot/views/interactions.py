@@ -26,7 +26,9 @@ class InteractionResponseView(discord.ui.View):
         self.actor_id = actor_id
         self.target_id = target_id
         if definition.button_label:
-            button = discord.ui.Button(label=definition.button_label, style=discord.ButtonStyle.primary)
+            button = discord.ui.Button(
+                label=definition.button_label, style=discord.ButtonStyle.primary
+            )
 
             async def back_callback(interaction: discord.Interaction) -> None:
                 await self._send_back(interaction)

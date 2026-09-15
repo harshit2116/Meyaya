@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import re
+from typing import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,8 +14,24 @@ from bot.models.meyaya_state import MeyayaGlobalState, MeyayaUserState
 from bot.repositories.meyaya_state import MeyayaStateRepository
 
 DEFAULT_ENERGY = 70
-CHAT_FAMILIARITY_COOLDOWN = timedelta(minutes=15)
+CHAT_FAMILIARITY_COOLDOWN = timedelta(minutes=2)
+CHAT_FAMILIARITY_GAIN = 2
 MOOD_LIFETIME_HOURS = 4
+
+STRONG_HOSTILITY_PATTERNS = (
+    re.compile(r"\b(?:fuck\s+(?:you|off)|shut\s+up|kill\s+yourself|kys)\b"),
+    re.compile(r"\b(?:i\s+hate\s+you|bad\s+bot)\b"),
+    re.compile(r"\byou(?:'re|\s+are)\s+(?:useless|worthless|pathetic|stupid|an\s+idiot)\b"),
+)
+RUDE_LANGUAGE_PATTERN = re.compile(
+    r"\b(?:annoying|criminal|dumb|idiot|irritating|loser|moron|pathetic|stupid|"
+    r"torture|trash|useless|worst)\b"
+)
+WARM_LANGUAGE_PATTERN = re.compile(
+    r"\b(?:good\s+bot|love\s+you|thank\s+you|thanks|you(?:'re|\s+are)\s+"
+    r"(?:amazing|cute|lovely|sweet))\b"
+)
+APOLOGY_PATTERN = re.compile(r"\b(?:i(?:'m|\s+am)\s+sorry|my\s+bad|sorry\s+meyaya)\b")
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +42,18 @@ class InteractionEffect:
     energy: int = 0
     global_annoyance: int = 0
     mood: str = "normal"
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationEffect:
+    """A bounded relationship change inferred from one direct chat message."""
+
+    affection: int = 0
+    user_annoyance: int = 0
+    energy: int = 0
+    global_annoyance: int = 0
+    mood: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,28 +97,139 @@ INTERACTION_EFFECTS: dict[str, InteractionEffect] = {
 class MeyayaSystemService:
     """Apply state transitions and turn current state into Gemini context."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
         self.session = session
         self.states = MeyayaStateRepository(session)
         self.identity: PrivateIdentity = get_private_identity()
+        self._now = now or (lambda: datetime.now(UTC))
 
-    async def record_conversation(self, guild_id: int | None, user_id: int) -> None:
-        """Increase familiarity at a bounded rate when a member talks to Meyaya."""
+    async def record_conversation(
+        self,
+        guild_id: int | None,
+        user_id: int,
+        content: str = "",
+        relationship_signal: str | None = None,
+    ) -> None:
+        """Apply familiarity and bounded tone effects from a direct conversation."""
 
         scope_id = self._scope_id(guild_id)
-        now = datetime.now(UTC)
+        now = self._now()
         global_state = await self.states.get_or_create_global(scope_id)
         user_state = await self.states.get_or_create_user(scope_id, user_id)
         self._materialize_decay(global_state, user_state, now)
 
         last_seen = self._aware(user_state.last_interaction_at)
         if last_seen is None or now - last_seen >= CHAT_FAMILIARITY_COOLDOWN:
-            user_state.familiarity = self._clamp(user_state.familiarity + 1)
+            user_state.familiarity = self._clamp(user_state.familiarity + CHAT_FAMILIARITY_GAIN)
             global_state.energy = self._clamp(global_state.energy + 1)
             global_state.energy_updated_at = now
+            # This timestamp throttles counted familiarity gains. Updating it on
+            # every message creates a sliding window that never completes while
+            # someone is actively talking to Meyaya.
+            user_state.last_interaction_at = now
+
+        effect = self.conversation_effect(content, relationship_signal)
+        user_state.affection = self._clamp(user_state.affection + effect.affection)
+        user_state.annoyance = self._clamp(user_state.annoyance + effect.user_annoyance)
+        global_state.energy = self._clamp(global_state.energy + effect.energy)
+        global_state.annoyance = self._clamp(global_state.annoyance + effect.global_annoyance)
+        if effect.user_annoyance:
+            user_state.annoyance_updated_at = now
+        if effect.global_annoyance:
+            global_state.annoyance_updated_at = now
+        if effect.mood is not None:
+            global_state.mood = effect.mood
+            global_state.mood_reason = (
+                f"Discord user ID {user_id} {effect.reason or 'affected Meyaya in chat'}."
+            )
+            global_state.mood_changed_at = now
+        global_state.updated_at = now
         self._assign_nickname_if_ready(user_state)
-        user_state.last_interaction_at = now
         await self.session.flush()
+
+    @staticmethod
+    def conversation_effect(
+        content: str,
+        relationship_signal: str | None = None,
+    ) -> ConversationEffect:
+        """Classify obvious direct warmth or hostility without another AI request."""
+
+        signal_effects = {
+            "neutral": ConversationEffect(),
+            "kind": ConversationEffect(
+                affection=2,
+                user_annoyance=-4,
+                energy=1,
+                global_annoyance=-2,
+                mood="happy",
+                reason="was kind to her",
+            ),
+            "annoying": ConversationEffect(
+                affection=-1,
+                user_annoyance=5,
+                energy=-1,
+                global_annoyance=3,
+                mood="annoyed",
+                reason="was persistently teasing or irritating toward her",
+            ),
+            "rude": ConversationEffect(
+                affection=-3,
+                user_annoyance=10,
+                energy=-2,
+                global_annoyance=6,
+                mood="annoyed",
+                reason="was directly rude or hostile toward her",
+            ),
+        }
+        normalized_signal = (
+            relationship_signal.strip().casefold() if isinstance(relationship_signal, str) else None
+        )
+        if normalized_signal in signal_effects:
+            return signal_effects[normalized_signal]
+
+        normalized = " ".join(content.casefold().split())
+        if not normalized:
+            return ConversationEffect()
+
+        strong_hits = sum(
+            pattern.search(normalized) is not None for pattern in STRONG_HOSTILITY_PATTERNS
+        )
+        rude_hits = len(RUDE_LANGUAGE_PATTERN.findall(normalized))
+        if strong_hits or rude_hits:
+            annoyance = min(14, strong_hits * 10 + rude_hits * 3)
+            return ConversationEffect(
+                affection=-min(4, strong_hits * 3 + rude_hits),
+                user_annoyance=annoyance,
+                energy=-min(3, max(1, strong_hits + rude_hits)),
+                global_annoyance=max(2, (annoyance + 1) // 2),
+                mood="annoyed",
+                reason="was rude or repeatedly irritating toward her",
+            )
+
+        if APOLOGY_PATTERN.search(normalized):
+            return ConversationEffect(
+                affection=2,
+                user_annoyance=-6,
+                energy=1,
+                global_annoyance=-3,
+                mood="happy",
+                reason="apologized to her",
+            )
+        if WARM_LANGUAGE_PATTERN.search(normalized):
+            return ConversationEffect(
+                affection=2,
+                user_annoyance=-3,
+                energy=1,
+                global_annoyance=-1,
+                mood="happy",
+                reason="was kind to her",
+            )
+        return ConversationEffect()
 
     async def apply_interaction(
         self,
@@ -100,7 +241,7 @@ class MeyayaSystemService:
 
         effect = INTERACTION_EFFECTS.get(interaction_name, InteractionEffect())
         scope_id = self._scope_id(guild_id)
-        now = datetime.now(UTC)
+        now = self._now()
         global_state = await self.states.get_or_create_global(scope_id)
         user_state = await self.states.get_or_create_user(scope_id, user_id)
         self._materialize_decay(global_state, user_state, now)
@@ -112,9 +253,7 @@ class MeyayaSystemService:
         user_state.last_interaction_at = now
 
         global_state.energy = self._clamp(global_state.energy + effect.energy)
-        global_state.annoyance = self._clamp(
-            global_state.annoyance + effect.global_annoyance
-        )
+        global_state.annoyance = self._clamp(global_state.annoyance + effect.global_annoyance)
         global_state.mood = effect.mood
         global_state.mood_reason = (
             f"Discord user ID {user_id} used {interaction_name} on Meyaya recently."
@@ -135,7 +274,7 @@ class MeyayaSystemService:
         """Describe effective global and relationship state for one text speaker."""
 
         scope_id = self._scope_id(guild_id)
-        now = datetime.now(UTC)
+        now = self._now()
         global_state = await self.states.get_global(scope_id)
         user_state = await self.states.get_user(scope_id, user_id)
         global_values = self._effective_global(global_state, now)
@@ -155,13 +294,26 @@ class MeyayaSystemService:
         """Return decayed state suitable for a public member profile."""
 
         scope_id = self._scope_id(guild_id)
-        now = datetime.now(UTC)
-        mood, energy, global_annoyance, _ = self._effective_global(
-            await self.states.get_global(scope_id), now
-        )
+        now = self._now()
+        global_state = await self.states.get_global(scope_id)
+        user_state = await self.states.get_user(scope_id, user_id)
+        return self.profile_state_from_records(user_id, global_state, user_state, now=now)
+
+    def profile_state_from_records(
+        self,
+        user_id: int,
+        global_state: MeyayaGlobalState | None,
+        user_state: MeyayaUserState | None,
+        *,
+        now: datetime | None = None,
+    ) -> MeyayaProfileState:
+        """Build public profile state from records loaded by a larger aggregate query."""
+
+        current = now or self._now()
+        mood, energy, global_annoyance, _ = self._effective_global(global_state, current)
         familiarity, affection, user_annoyance, nickname = self._relationship_values(
             user_id,
-            self._effective_user(await self.states.get_user(scope_id, user_id), now),
+            self._effective_user(user_state, current),
         )
         return MeyayaProfileState(
             mood=mood,
@@ -185,7 +337,7 @@ class MeyayaSystemService:
     ) -> list[str]:
         """Describe global state and known relationships for members currently in VC."""
 
-        now = datetime.now(UTC)
+        now = self._now()
         global_values = self._effective_global(await self.states.get_global(guild_id), now)
         mood, energy, annoyance, reason = global_values
         lines = [
@@ -211,12 +363,14 @@ class MeyayaSystemService:
             )
             nickname_text = f', nickname "{nickname}"' if nickname else ""
             relationship_lines.append(
-                f'- {display_name} (Discord ID {user_id}): {relationship}; familiarity '
+                f"- {display_name} (Discord ID {user_id}): {relationship}; familiarity "
                 f"{familiarity}/100, affection {affection}/100, annoyance "
                 f"{user_annoyance}/100{nickname_text}."
             )
         if relationship_lines:
-            lines.append("Relationships with members currently in voice:\n" + "\n".join(relationship_lines))
+            lines.append(
+                "Relationships with members currently in voice:\n" + "\n".join(relationship_lines)
+            )
         return lines
 
     async def command_for_intent(
@@ -233,7 +387,7 @@ class MeyayaSystemService:
 
         state = await self.states.get_user(self._scope_id(guild_id), user_id)
         familiarity, affection, annoyance, _ = self._relationship_values(
-            user_id, self._effective_user(state, datetime.now(UTC))
+            user_id, self._effective_user(state, self._now())
         )
 
         if annoyance >= 65:
@@ -413,9 +567,7 @@ class MeyayaSystemService:
         return max(target, value - amount)
 
     @classmethod
-    def _decay_amount(
-        cls, value: datetime | None, now: datetime, amount_per_hour: int
-    ) -> int:
+    def _decay_amount(cls, value: datetime | None, now: datetime, amount_per_hour: int) -> int:
         return int(cls._age_hours(value, now) * amount_per_hour)
 
     @classmethod

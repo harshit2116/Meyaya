@@ -17,7 +17,7 @@ import discord
 from sqlalchemy.exc import SQLAlchemyError
 
 from bot.app import MeyayaBot
-from bot.data.gemini_persona import build_voice_system_instruction
+from bot.prompts.composer import build_voice_system_instruction
 from bot.repositories.server_lore import ServerLoreRepository
 from bot.services.audio import (
     PcmStreamAudioSource,
@@ -118,9 +118,10 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
 class VoiceChatSession:
     """One live voice chat session per guild."""
 
-    def __init__(self, bot: MeyayaBot, guild_id: int) -> None:
+    def __init__(self, bot: MeyayaBot, guild_id: int, *, voice_name: str | None = None) -> None:
         self.bot = bot
         self.guild_id = guild_id
+        self.voice_name = voice_name or bot.settings.gemini_voice
         self.voice_client: discord.VoiceClient | None = None
         self.diagnostics = VoiceDiagnostics()
         self.play_source = PcmStreamAudioSource(self._note_playback_frame)
@@ -141,6 +142,17 @@ class VoiceChatSession:
             return self.voice_client.channel.id
         return None
 
+    @property
+    def is_active(self) -> bool:
+        """Return whether Discord and Gemini are both ready for this session."""
+
+        return bool(
+            not self._closed
+            and self._gemini is not None
+            and self.voice_client is not None
+            and self.voice_client.is_connected()
+        )
+
     async def connect_and_start(self, channel: discord.VoiceChannel | discord.StageChannel) -> None:
         if voice_recv is None:
             raise RuntimeError(
@@ -158,9 +170,11 @@ class VoiceChatSession:
         assert self.voice_client is not None
         state_lines = await self._load_meyaya_state_lines(channel)
         self._gemini = GeminiLiveSession(
+            guild_id=channel.guild.id,
+            channel_id=channel.id,
             api_key=self.bot.settings.gemini_api_key,
             model=self.bot.settings.gemini_live_model,
-            voice_name=self.bot.settings.gemini_voice,
+            voice_name=self.voice_name,
             system_instruction=build_voice_system_instruction(
                 extra_instruction=self.bot.settings.gemini_live_system_instruction,
                 state_lines=state_lines,
@@ -188,7 +202,7 @@ class VoiceChatSession:
             self.guild_id,
             channel.id,
             self.bot.settings.gemini_live_model,
-            self.bot.settings.gemini_voice,
+            self.voice_name,
         )
         self._log_dave_state()
 
@@ -395,18 +409,12 @@ class VoiceChatSession:
     ) -> list[str]:
         """Load current mood and relationships for members present when VC starts."""
 
-        members = [
-            (member.id, member.display_name)
-            for member in channel.members
-            if not member.bot
-        ]
+        members = [(member.id, member.display_name) for member in channel.members if not member.bot]
         try:
             async with self.bot.db_session() as session:
                 service = MeyayaSystemService(session)
                 lines = await service.voice_prompt_lines(self.guild_id, members)
-                lore = await ServerLoreRepository(session).list_current(
-                    self.guild_id, limit=12
-                )
+                lore = await ServerLoreRepository(session).list_current(self.guild_id, limit=12)
                 if lore:
                     lines.append(
                         "Shared server lore and inside jokes. Reference these only when naturally "

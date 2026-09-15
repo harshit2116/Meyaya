@@ -9,6 +9,7 @@ from sqlalchemy import Select, select
 from bot.models.server_lore import ServerLore
 from bot.repositories.base import Repository
 
+
 class ServerLoreRepository(Repository):
     """Store recurring lore separately from personal permanent memories."""
 

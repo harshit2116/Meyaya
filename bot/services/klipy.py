@@ -22,6 +22,8 @@ ANIME_QUERY_PREFIX = "anime"
 KLIPY_BASE_URL = "https://api.klipy.com/api/v1"
 KLIPY_TIMEOUT = aiohttp.ClientTimeout(total=10)
 SECURE_RANDOM = SystemRandom()
+SEARCH_CACHE_TTL_SECONDS = 600
+MAX_SEARCH_CACHE_ENTRIES = 64
 
 ACTION_RELEVANCE_TERMS: dict[str, tuple[str, ...]] = {
     "hug": ("hug", "embrace"),
@@ -65,17 +67,22 @@ class GifResult:
 class KlipyService:
     """Resolve GIFs from Klipy and return a fresh random result each time."""
 
-    def __init__(self, api_key: str, rating: str, http_session: aiohttp.ClientSession, cache: Redis) -> None:
+    def __init__(
+        self, api_key: str, rating: str, http_session: aiohttp.ClientSession, cache: Redis
+    ) -> None:
         self.api_key = api_key
         self.rating = rating
         self.http_session = http_session
         self.cache = cache
+        self._search_cache: dict[str, tuple[float, tuple[str, ...]]] = {}
+        self._last_url_by_query: dict[str, str] = {}
 
     async def random_anime_gif(self, query: str) -> GifResult:
         """Return an action-relevant anime GIF or no GIF at all."""
 
         if not self.api_key:
             return GifResult(url=None)
+
         normalized_query = self._normalize_anime_query(query)
         return await self._search_gifs(normalized_query, strict_action=True)
 
@@ -84,6 +91,11 @@ class KlipyService:
 
         if not self.api_key:
             return GifResult(url=None)
+
+        cache_key = f"{query.casefold()}|{int(strict_action)}"
+        cached_urls = self._get_cached_search(cache_key)
+        if cached_urls:
+            return GifResult(url=self._choose_cached_url(cache_key, cached_urls))
 
         endpoint = f"{KLIPY_BASE_URL}/{self.api_key}/gifs/search"
         # Search engines rank page one most strongly. Going deeper randomly can
@@ -124,6 +136,7 @@ class KlipyService:
         if not pairs:
             logger.warning("KLIPY returned no relevant action GIF query=%s", query)
             return GifResult(url=None)
+        self._put_cached_search(cache_key, tuple(url for _, url in pairs[:8]))
 
         # Try to avoid recently-used URLs tracked in Redis to increase diversity.
         chosen_item: dict[str, object] | None = None
@@ -131,7 +144,9 @@ class KlipyService:
             if self.cache is not None and pairs:
                 KEY = "klipy:recent_urls"
                 recent = await self.cache.zrange(KEY, 0, -1)
-                recent_set = {r.decode() if isinstance(r, (bytes, bytearray)) else str(r) for r in recent}
+                recent_set = {
+                    r.decode() if isinstance(r, (bytes, bytearray)) else str(r) for r in recent
+                }
                 candidates = [p for p, u in pairs[:8] if u not in recent_set]
                 if candidates:
                     chosen_item = SECURE_RANDOM.choice(candidates)
@@ -149,6 +164,8 @@ class KlipyService:
                 chosen_item = SECURE_RANDOM.choice(items)
 
         chosen_url = self._extract_url(chosen_item)
+        if isinstance(chosen_url, str) and chosen_url:
+            self._last_url_by_query[cache_key] = chosen_url
         logger.debug("KLIPY chosen_url=%s for query=%s", chosen_url, query)
 
         # Record the chosen URL to recent set to reduce near-term repeats.
@@ -165,6 +182,41 @@ class KlipyService:
             logger.exception("Failed to update Redis recent set for Klipy")
 
         return GifResult(url=chosen_url)
+
+    def _get_cached_search(self, key: str) -> tuple[str, ...] | None:
+        entry = self._search_cache.get(key)
+        if entry is None:
+            return None
+        expires_at, urls = entry
+        if expires_at <= time.monotonic():
+            self._search_cache.pop(key, None)
+            self._last_url_by_query.pop(key, None)
+            return None
+        return urls
+
+    def _put_cached_search(self, key: str, urls: tuple[str, ...]) -> None:
+        if not urls:
+            return
+        now = time.monotonic()
+        if len(self._search_cache) >= MAX_SEARCH_CACHE_ENTRIES and key not in self._search_cache:
+            expired = [
+                cache_key for cache_key, (expiry, _) in self._search_cache.items() if expiry <= now
+            ]
+            for cache_key in expired:
+                self._search_cache.pop(cache_key, None)
+                self._last_url_by_query.pop(cache_key, None)
+            if len(self._search_cache) >= MAX_SEARCH_CACHE_ENTRIES:
+                oldest = next(iter(self._search_cache))
+                self._search_cache.pop(oldest, None)
+                self._last_url_by_query.pop(oldest, None)
+        self._search_cache[key] = (now + SEARCH_CACHE_TTL_SECONDS, urls)
+
+    def _choose_cached_url(self, key: str, urls: tuple[str, ...]) -> str:
+        previous = self._last_url_by_query.get(key)
+        candidates = [url for url in urls if url != previous] or list(urls)
+        chosen = SECURE_RANDOM.choice(candidates)
+        self._last_url_by_query[key] = chosen
+        return chosen
 
     async def random_gif(self, query: str, prefer_anime: bool = False) -> GifResult:
         """Compatibility wrapper: prefer anime queries optionally, without enforcing.
@@ -269,7 +321,8 @@ class KlipyService:
             (
                 name
                 for name, terms in ACTION_RELEVANCE_TERMS.items()
-                if name in query_tokens or any(term.replace("-", " ") in normalized_query for term in terms)
+                if name in query_tokens
+                or any(term.replace("-", " ") in normalized_query for term in terms)
             ),
             None,
         )

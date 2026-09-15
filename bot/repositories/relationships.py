@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Select, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.models.relationship import RelationshipInteraction, normalize_pair
@@ -21,23 +21,23 @@ class RelationshipRepository(Repository):
         """Increment and return the shared counter for a pair and interaction type."""
 
         user_a_id, user_b_id = normalize_pair(user_one_id, user_two_id)
-        statement: Select[tuple[RelationshipInteraction]] = select(RelationshipInteraction).where(
-            RelationshipInteraction.user_a_id == user_a_id,
-            RelationshipInteraction.user_b_id == user_b_id,
-            RelationshipInteraction.interaction_type == interaction_type,
-        )
-        result = await self.session.execute(statement)
-        record = result.scalar_one_or_none()
-        if record is None:
-            record = RelationshipInteraction(
+        now = datetime.now(tz=timezone.utc)
+        statement = (
+            insert(RelationshipInteraction)
+            .values(
                 user_a_id=user_a_id,
                 user_b_id=user_b_id,
                 interaction_type=interaction_type,
-                interaction_count=0,
-                last_interaction_at=datetime.now(tz=timezone.utc),
+                interaction_count=1,
+                last_interaction_at=now,
             )
-            self.session.add(record)
-        record.interaction_count += 1
-        record.last_interaction_at = datetime.now(tz=timezone.utc)
-        await self.session.flush()
-        return record.interaction_count
+            .on_conflict_do_update(
+                constraint="uq_relationship_type",
+                set_={
+                    "interaction_count": RelationshipInteraction.interaction_count + 1,
+                    "last_interaction_at": now,
+                },
+            )
+            .returning(RelationshipInteraction.interaction_count)
+        )
+        return (await self.session.execute(statement)).scalar_one()

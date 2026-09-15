@@ -9,10 +9,12 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.data.interactions import INTERACTION_DEFINITIONS
+from bot.data.help_catalog import COMMANDS
 from bot.app import MeyayaBot
 from bot.services.interactions import InteractionDefinition, InteractionResult
-from bot.utils.embeds import build_interaction_embed
+from bot.utils.embeds import build_interaction_embed, meyaya_embed
 from bot.views.interactions import InteractionResponseView
+from bot.views.help import HelpView, build_help_embed
 
 
 class InteractionsCog(commands.Cog):
@@ -156,7 +158,7 @@ class InteractionsCog(commands.Cog):
                 await ctx.send(f"I could not find a GIF for `{query}`.")
                 return
 
-            embed = discord.Embed(title=f"GIF: {query}", color=0x8ECAE6)
+            embed = meyaya_embed(f"GIF - {query}", tone="info", icon="🎞️")
             embed.set_image(url=result.url)
             await ctx.send(embed=embed)
 
@@ -180,7 +182,7 @@ class InteractionsCog(commands.Cog):
                 await interaction.followup.send(f"I could not find a GIF for `{query}`.")
                 return
 
-            embed = discord.Embed(title=f"GIF: {query}", color=0x8ECAE6)
+            embed = meyaya_embed(f"GIF - {query}", tone="info", icon="🎞️")
             embed.set_image(url=result.url)
             await interaction.followup.send(embed=embed)
 
@@ -191,8 +193,49 @@ class InteractionsCog(commands.Cog):
         )
 
     def _build_app_help_command(self) -> app_commands.Command:
-        async def callback(interaction: discord.Interaction) -> None:
-            await interaction.response.send_message(embed=self._build_help_embed())
+        async def command_autocomplete(
+            _: discord.Interaction,
+            current: str,
+        ) -> list[app_commands.Choice[str]]:
+            query = current.casefold().strip()
+            matches = [
+                command
+                for command in COMMANDS
+                if not query
+                or command.name.casefold().startswith(query)
+                or query in command.description.casefold()
+            ]
+            return [
+                app_commands.Choice(
+                    name=f"/{command.name} - {command.description}"[:100],
+                    value=command.name,
+                )
+                for command in matches[:25]
+            ]
+
+        @app_commands.describe(command="Optional command name to inspect")
+        @app_commands.autocomplete(command=command_autocomplete)
+        async def callback(
+            interaction: discord.Interaction,
+            command: str | None = None,
+        ) -> None:
+            bot_mention = interaction.client.user.mention if interaction.client.user else "@Meyaya"
+            bot = cast(MeyayaBot, interaction.client)
+            command_prefix = bot.prefix_for_guild(interaction.guild_id)
+            view = HelpView(
+                owner_id=interaction.user.id,
+                bot_mention=bot_mention,
+                command_prefix=command_prefix,
+            )
+            await interaction.response.send_message(
+                embed=build_help_embed(
+                    bot_mention=bot_mention,
+                    command_prefix=command_prefix,
+                    command_name=command,
+                ),
+                view=view,
+            )
+            view.message = await interaction.original_response()
 
         return app_commands.Command(
             name="help",
@@ -201,47 +244,33 @@ class InteractionsCog(commands.Cog):
         )
 
     def _build_text_help_command(self) -> commands.Command:
-        async def callback(ctx: commands.Context[commands.Bot]) -> None:
-            await ctx.send(embed=self._build_help_embed())
+        async def callback(
+            ctx: commands.Context[commands.Bot],
+            command: str | None = None,
+        ) -> None:
+            bot_mention = ctx.bot.user.mention if ctx.bot.user else "@Meyaya"
+            bot = cast(MeyayaBot, ctx.bot)
+            guild_id = ctx.guild.id if ctx.guild is not None else None
+            command_prefix = bot.prefix_for_guild(guild_id)
+            view = HelpView(
+                owner_id=ctx.author.id,
+                bot_mention=bot_mention,
+                command_prefix=command_prefix,
+            )
+            view.message = await ctx.send(
+                embed=build_help_embed(
+                    bot_mention=bot_mention,
+                    command_prefix=command_prefix,
+                    command_name=command,
+                ),
+                view=view,
+            )
 
         return commands.Command(
             callback,
             name="help",
             help="List all Meyaya commands.",
         )
-
-    def _build_help_embed(self) -> discord.Embed:
-        embed = discord.Embed(title="Meyaya Commands", color=0x8ECAE6)
-        command_names = [definition.name for definition in INTERACTION_DEFINITIONS]
-        command_names.extend(
-            [
-                "gif",
-                "iq",
-                "dumb",
-                "smart",
-                "clown",
-                "profile",
-                "ship",
-                "marry",
-                "divorce",
-                "join",
-                "leave",
-                "voice",
-                "voicecheck",
-                "voicediag",
-                "monitor_add",
-                "monitor_remove",
-                "monitor_list",
-                "help",
-            ]
-        )
-        invocation = (
-            "Use every command as `/command`, `uwu command`, `Uwu command`, "
-            "or `@Meyaya command`."
-        )
-        commands_text = ", ".join(f"`{name}`" for name in command_names)
-        embed.description = f"{invocation}\n\n{commands_text}"
-        return embed
 
     def _build_interaction_render(
         self,

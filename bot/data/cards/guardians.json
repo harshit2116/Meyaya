@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "guardians": [
+    {
+      "id": "guardian_0",
+      "title": "Velvet Owl",
+      "type": "Dream spirit",
+      "blessing": "Reveals a fresh perspective",
+      "weakness": "Only gives advice in riddles"
+    },
+    {
+      "id": "guardian_1",
+      "title": "Comet Fox",
+      "type": "Star companion",
+      "blessing": "Finds a clever shortcut",
+      "weakness": "Distracted by shiny things"
+    },
+    {
+      "id": "guardian_2",
+      "title": "Moss Dragon",
+      "type": "Forest guardian",
+      "blessing": "Restores your patience",
+      "weakness": "Falls asleep in warm sunlight"
+    },
+    {
+      "id": "guardian_3",
+      "title": "Pearl Moth",
+      "type": "Moon guide",
+      "blessing": "Lights the next small step",
+      "weakness": "Refuses to work near loud music"
+    }
+  ]
+}

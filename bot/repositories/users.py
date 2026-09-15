@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.models.user import User, UserStatistics
@@ -42,3 +43,55 @@ class UserRepository(Repository):
         self.session.add(stats)
         await self.session.flush()
         return stats
+
+    async def record_interaction(
+        self,
+        actor_id: int,
+        target_id: int,
+        interaction_name: str,
+    ) -> None:
+        """Atomically create users/stat rows and increment both sides."""
+
+        user_ids = sorted({actor_id, target_id})
+        await self.session.execute(
+            insert(User)
+            .values([{"user_id": user_id} for user_id in user_ids])
+            .on_conflict_do_nothing(index_elements=[User.user_id])
+        )
+        await self.session.execute(
+            insert(UserStatistics)
+            .values([{"user_id": user_id} for user_id in user_ids])
+            .on_conflict_do_nothing(index_elements=[UserStatistics.user_id])
+        )
+
+        actor_values: dict[str, object] = {
+            "total_given": UserStatistics.total_given + 1,
+            "total_interactions": UserStatistics.total_interactions + 1,
+        }
+        target_values: dict[str, object] = {
+            "total_received": UserStatistics.total_received + 1,
+            "total_interactions": UserStatistics.total_interactions + 1,
+        }
+        given_field = {
+            "hug": "hugs_given",
+            "kiss": "kisses_given",
+            "pat": "pats_given",
+        }.get(interaction_name)
+        received_field = {
+            "hug": "hugs_received",
+            "kiss": "kisses_received",
+            "pat": "pats_received",
+        }.get(interaction_name)
+        if given_field is not None:
+            actor_values[given_field] = getattr(UserStatistics, given_field) + 1
+        if received_field is not None:
+            target_values[received_field] = getattr(UserStatistics, received_field) + 1
+
+        await self.session.execute(
+            update(UserStatistics).where(UserStatistics.user_id == actor_id).values(**actor_values)
+        )
+        await self.session.execute(
+            update(UserStatistics)
+            .where(UserStatistics.user_id == target_id)
+            .values(**target_values)
+        )

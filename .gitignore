@@ -1,15 +1,52 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+!*.env.example
+/bot/private/
+/full_read_me.md
+/FULL_READ_ME.md
+/tests/
+
+# Local credentials and deployment-specific overrides
+/secrets/
+/certs/
+*.pem
+*.p12
+*.pfx
+*.key
+
+# Python environments and generated packages
+.venv*/
+venv/
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+
+# Tests and code analysis caches
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-.venv/
-.venv-win/
-.venv-win-broken/
-.env
-bot/private/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Runtime data and backups
+/logs/
+/backups/
+*.log
+*.rdb
+*.aof
+*.dump
+*.sqlite3
+
+# Editor and OS files
+.idea/
 .DS_Store
-dist/
-build/
-*.egg-info/
-full_read_me.md
+Thumbs.db
+*.swp
+*.swo
+.vscode/

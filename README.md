@@ -1,148 +1,144 @@
 # Meyaya
 
-Meyaya is a focused Discord social interaction bot built with `discord.py`, PostgreSQL, SQLAlchemy async, and Pillow.
+Meyaya is a Discord character bot built with Python. She supports social reactions, daily fun,
+profiles, marriage, multiplayer games, court cases, Gemini chat and memory, English-only monitoring,
+and live voice conversations.
 
-## Scope
+## Requirements
 
-This project intentionally stays centered on:
+- Python 3.12
+- PostgreSQL
+- Redis
+- A Discord bot token
+- A Gemini API key for AI chat and voice
+- A Klipy API key for reaction GIFs
 
-- social interaction commands
-- shared relationship counters
-- lightweight user profiles
-- daily server fun commands
+## Quick Start
 
-## Development
+For persistent Redis and container deployment, see [the deployment guide](docs/deployment.md).
+For server usage, daily chat limits, and the owner web dashboard, see [owner operations](docs/owner-dashboard.md).
+See [moderation controls](docs/moderation.md) and [Docker deployment](docs/deployment.md) for the new rules and hosting setup.
 
-1. Create and activate a Python 3.12 environment.
-2. Install dependencies from `pyproject.toml`.
-3. Copy `.env.example` to `.env` and fill in the values.
-4. Apply database migrations with `alembic upgrade head`.
-5. Run the bot with `python -m bot.main`.
+```powershell
+git clone <repository-url>
+cd Meyaya
+py -3.12 -m venv .venv-win
+.\.venv-win\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+Copy-Item .env.example .env
+```
 
-The bot accepts both slash commands and written commands using the `uwu ` prefix, for example `uwu hug @user`, `uwu ship @user @user`, `uwu gif anime hug`, and `uwu help`.
+Fill in `.env`, then prepare and start the bot:
 
-Required environment values:
+```powershell
+alembic upgrade head
+python -m bot.main
+```
 
-- DISCORD_TOKEN
-- DATABASE_URL
-- REDIS_URL
-- KLIPY_API_KEY for GIF-backed interaction responses
+## Command Styles
 
-Optional voice/live environment values:
+Every command is available in these forms:
 
-- GEMINI_API_KEY for Gemini chat and Live voice sessions
-- GEMINI_LIVE_MODEL default `gemini-3.1-flash-live-preview`
-- GEMINI_VOICE default `Leda` (examples: `Leda`, `Kore`, `Aoede`)
-- GEMINI_LIVE_SYSTEM_INSTRUCTION adds optional VC behavior on top of Meyaya's shared persona
+- Slash: `/hug @member`
+- Prefix: `uwu hug @member` or `Uwu hug @member`
+- Mention: `@Meyaya hug @member`
 
-Commands can be invoked as `/command`, `uwu command` (case-insensitive), or `@Meyaya command`.
+Mention Meyaya without a command to talk to her through Gemini. Use `/help` for the complete,
+interactive command list.
 
-## Main Commands
+`uwu` is the default written prefix for every server. Members with Manage Server can change it
+with `/prefix value:u` or `uwu prefix u`, and reset it with `/prefix value:reset`.
+Owner operations are available in the web dashboard.
 
-- `/ship` and `uwu ship @user @user` show a cute ship embed with both profile pictures, an anime love GIF, and a stable love percentage.
-- `/iq`, `/dumb`, `/smart`, and `/clown` show daily fun embeds with themed GIFs.
-- `/hug`, `/kiss`, `/pat`, and other interaction commands update relationship counters and can include back buttons.
-- Mention the bot in chat to use Gemini-powered chat with short-term Redis context and permanent Postgres memories.
+## Main Features
 
-## The Meyaya System
+- Social reactions with GIFs, counters, and response buttons
+- Stable daily IQ, smartest, dumbest, and clown results
+- Profiles combining Discord, social, mood, relationship, and marriage data
+- Ship, fortune, rate, bestie score, most likely, and 8-ball commands
+- Consent-based marriage, vows, anniversaries, and confirmed divorce
+- Anonymous multiplayer games judged by Gemini
+- Entertainment-only court cases with registered witnesses, fair follow-ups, and explained verdicts
+- Google-grounded fact checks for one message or a selected argument range
+- Reply-aware Gemini chat with personal memory and server lore
+- Jungkook RP and Alya RP replies with separate webhook names and avatars
+- Mood, familiarity, affection, annoyance, nicknames, and natural actions
+- Optional three-strike English-only monitoring with 10-minute timeouts
+- Per-server command prefixes and a manager-only administration dashboard
+- Gemini Live voice chat with DAVE receive support and diagnostics
+- One compact pastel interface across commands, games, profiles, and errors
 
-Meyaya has a personality-state layer that is separate from permanent memory:
+## Configuration
 
-- Per-server state tracks her current mood, energy, irritation, and the recent reason for her mood.
-- Per-member state tracks familiarity, affection, annoyance, and a persistent nickname that Meyaya
-  develops after getting to know someone.
-- Talking to Meyaya gradually increases familiarity with a cooldown to prevent spam farming.
-- Social commands directed at Meyaya change her mood and her opinion of the member. Affectionate
-  interactions such as hugs improve affection, while slaps and bonks increase annoyance.
-- Mood and annoyance decay from timestamps without a background worker, gradually returning her
-  toward a normal baseline.
-- Effective state is injected into both Gemini text and Gemini Live voice prompts. Gemini is told
-  to express it subtly rather than exposing scores or internal instructions.
-- During a direct Gemini conversation, Meyaya may request a harmless self-action intent. The
-  code validates it, applies a per-member cooldown, and chooses `cheer`, `pat`, `hug`, `wave`, or
-  `highfive` from relationship strength. Gemini cannot invoke marriage, moderation, admin, or
-  voice-control commands through this path.
-- Explicit natural-language requests can route to the existing social interaction commands with
-  the speaking member as actor. The target must be mentioned in the current message, only one
-  allowlisted command can run, and marriage always uses the normal consent proposal. Divorce,
-  moderation, administration, mass targeting, and voice control are excluded.
-- Natural-language daily requests also route through the existing stable daily commands. Meyaya can
-  show the speaker's or a mentioned member's daily IQ and identify today's dumbest or smartest
-  eligible server member without inventing the result in Gemini text.
-- Profiles show Meyaya's current mood, her bond with the member, their nickname, and up to three
-  earned titles based on relationship state and interaction history.
+Copy `.env.example` to `.env`. Never commit `.env` or files inside `bot/private/`.
 
-Permanent facts and server memories remain owned by the separate Memory System.
+Important optional settings:
 
-## Server lore
+- `GUILD_ID` speeds up slash-command sync for one development server.
+- `COURT_CHANNEL_ID` is an optional legacy fallback. Server managers can use `/setcourt` and
+  `/removecourt`; the saved per-server setting takes priority.
+- `GEMINI_VOICE` selects the live voice. The default is `Leda`.
+- `LLM_PROVIDER=gemini` selects the text model provider (the default).
+- `GEMINI_FAST_MODEL` handles moderation and lightweight fun text.
+- `GEMINI_MODEL` handles normal chat and roleplay.
+- `GEMINI_REASONING_MODEL` judges Court and multiplayer games.
+- `GEMINI_GROUNDED_MODEL` handles source-backed fact checks.
+- `JUNGKOOK_ROLEPLAY_AVATAR_URL` and `ALYA_ROLEPLAY_AVATAR_URL` set public image URLs for
+  roleplay messages. Meyaya's avatar is the fallback.
+- `/autoresponder mode:enable` enables occasional automatic replies per server; use `disable` to stop.
+  Written commands work too: `uwu autoresponder enable`. Manage Server is required.
+  It defaults to disabled and saves across restarts. It considers new messages in channels Meyaya
+  can read and write, independently of English-only monitoring. Quiet servers get more opportunities
+  (up to once per 5 minutes), moderate servers once per 15 minutes, and busy servers once per 45 minutes.
+  There is a five-minute observation period after startup; no messages means no automatic replies.
 
-Meyaya keeps public server lore separate from personal facts. Gemini can mark a recurring inside
-joke or notable shared incident with a hidden lore directive. Matching lore is reinforced instead
-of duplicated, prioritized by how established and recent it is, and supplied to both text and live
-voice conversations. Private, sensitive, cruel, or one-off material is explicitly excluded.
+Private persona, voice rules, roleplay prompts, and identity configuration belong in `bot/private/`,
+which Git ignores. Roleplay also requires `Manage Webhooks` in the destination channel.
 
-## Rare proactive behavior
+## Development Checks
 
-Meyaya can occasionally join conversations in channels approved with `monitor_add`. Proactive
-replies require recent activity from multiple members, use a low random chance, and have separate
-guild and channel cooldowns persisted in Redis. Gemini can still choose `NO_REPLY` when joining
-would feel forced. Commands, non-English messages, startup bursts, DMs, and unmonitored channels
-are excluded. The behavior can be tuned with `PROACTIVE_ENABLED`, `PROACTIVE_CHANCE`,
-`PROACTIVE_GUILD_COOLDOWN_MINUTES`, and `PROACTIVE_CHANNEL_COOLDOWN_MINUTES`.
-It is disabled by default and must be explicitly enabled in `.env`.
+Games now enforce explicit phases and keep submissions locked during judging retries.
+Model metrics and game transitions are saved to rotating `logs/telemetry.jsonl` files.
+See [game engines and diagnostics](docs/game-engines-and-telemetry.md) for lifecycle and log fields.
 
-Direct Gemini conversation history is isolated per member and per channel. Ambient messages from
-monitored channels are stored in a separate observation namespace and are never fed into direct
-mention conversations. Successful natural-language commands show only the command result instead
-of an additional Gemini acknowledgement.
+Meyaya's personality now lives in the private, versioned `bot/private/personality.v1.json`.
+Memory, tool, identity and voice rules are separate. Each feature selects its own prompt profile;
+game judging, court, language moderation and fact-checking have independent instructions.
+See [prompt ownership](bot/prompts/README.md) for which file controls each behavior.
 
-## Live Voice Chat (Gemini Live)
+Text features use `LLMProvider` in `bot/services/llm.py`: `generate()` handles chat and
+Meyaya directives, `generate_json()` returns a JSON object for domain validation,
+`summarize()` returns a summary, and `grounded_generate()` returns text with sources.
+`generate_text()` supplies unmodified model text. Unavailable text results return `None`;
+unsupported or failed grounding raises `GroundingError`.
 
-This bot includes VC commands:
+`ModelRouter` selects fast, balanced, reasoning, or grounded models from the active feature.
+If a specialized non-grounded model is unavailable, it retries once through the balanced model.
+Memory V2 stores a verified subject, relation, value, confidence, source, and lifecycle status.
+Contradictory facts are withheld from prompts; the old memory-resolution command is no longer exposed.
 
-- `/join` joins your current voice channel and starts a persistent Gemini Live audio session
-- `/leave` disconnects and shuts down the live session cleanly
-- `/voice` shows or updates runtime voice selection for new sessions
-- `/voicecheck` asks the active Gemini Live session to speak a fixed phrase, isolating
-  output/playback from microphone receive.
-- `/voicediag` displays live DAVE, receive, Gemini, and playback counters for the
-  active guild session.
+To add another provider, implement `generate_text()` in an `LLMProvider` subclass and
+register it in `bot/services/llm_factory.py`. Translate neutral `role`/`content` history
+inside that adapter. Implement `grounded_generate()` if the provider supports search.
+OpenAI is not yet implemented. Live voice remains a separate Gemini streaming integration.
 
-Implementation notes:
-
-- Discord receive/playback uses `discord.py` + `discord-ext-voice-recv`
-- Incoming Discord PCM is converted to Gemini Live input format (16-bit PCM, 16kHz mono)
-- Gemini native audio output (24kHz PCM) is converted to Discord playback PCM (48kHz stereo)
-- Uses automatic/hybrid VAD and interruption-aware playback clearing for barge-in behavior
-- Emits explicit DAVE/PCM/Gemini pipeline diagnostics so a failed layer can be identified
-  without treating a successful VC connection as proof of inbound audio.
-
-Operational requirements:
-
-- Ensure your bot has Voice permissions (connect, speak)
-- Ensure voice dependencies are installed (`PyNaCl`, `davey`, and the DAVE-capable
-  `discord-ext-voice-recv` revision declared in `pyproject.toml`). Discord requires
-  DAVE end-to-end encryption for voice calls, so the older PyPI receiver release
-  cannot decode incoming users' audio and will fail with `OpusError: corrupted stream`.
-- Ensure ffmpeg/libopus are available in your runtime environment if your platform requires them
-
-After pulling dependency changes, reinstall the project in the virtual environment
-that starts the bot with `python -m pip install --upgrade --force-reinstall -e .`.
-Confirm the result with `python -m discord --version`; it should report discord.py
-2.7.1 or newer and the `davey` package.
+```powershell
+python -m pytest -q
+python -m ruff check .
+python -m black --check bot tests
+alembic check
+```
 
 ## Project Layout
 
-The source package lives in `bot/` and keeps runtime responsibilities separated:
+- `bot/cogs/` - Discord commands and event listeners
+- `bot/services/` - reusable feature logic
+- `bot/repositories/` - database queries
+- `bot/models/` - database table definitions
+- `bot/views/` - Discord buttons, forms, and menus
+- `bot/data/` - command definitions and prompt builders
+- `alembic/` - database migrations
 
-- `bot/main.py` starts the application.
-- `bot/app.py` builds the Discord bot and owns process lifecycle resources.
-- `bot/cogs/` contains Discord slash and text command adapters.
-- `bot/services/` contains business logic that can be tested without Discord objects.
-- `bot/repositories/` contains database access.
-- `bot/models/` contains SQLAlchemy table definitions.
-- `bot/utils/` contains reusable Discord presentation helpers.
-- `bot/views/` contains reusable Discord UI views.
-- `bot/data/` contains command definitions and other static runtime data.
-- `alembic/` contains database migrations.
-- `tests/` contains automated tests.
+The application starts in `bot/main.py`, creates shared resources in `bot/app.py`, and loads every
+command cog from there.

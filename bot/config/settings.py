@@ -7,6 +7,8 @@ from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from bot.data.voices import canonical_voice_name
+
 
 class Settings(BaseSettings):
     """Strongly typed runtime settings for the bot."""
@@ -16,14 +18,27 @@ class Settings(BaseSettings):
     discord_token: str = Field(alias="DISCORD_TOKEN")
     database_url: str = Field(alias="DATABASE_URL")
     redis_url: str = Field(alias="REDIS_URL")
+    redis_required: bool = Field(default=False, alias="REDIS_REQUIRED")
+    redis_tls_verify: bool = Field(default=True, alias="REDIS_TLS_VERIFY")
+    quota_exempt_guild_id: int = Field(default=1479860234183905443, alias="QUOTA_EXEMPT_GUILD_ID")
+    dashboard_enabled: bool = Field(default=False, alias="DASHBOARD_ENABLED")
+    dashboard_host: str = Field(default="127.0.0.1", alias="DASHBOARD_HOST")
+    dashboard_port: int = Field(default=8080, ge=1, le=65535, alias="DASHBOARD_PORT")
+    dashboard_token: str = Field(default="", alias="DASHBOARD_TOKEN")
     klipy_api_key: str = Field(default="", alias="KLIPY_API_KEY")
     klipy_rating: str = Field(default="g", alias="KLIPY_RATING")
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
-    gemini_model: str = Field(default="gemini-2.0-flash", alias="GEMINI_MODEL")
+    llm_provider: str = Field(default="gemini", alias="LLM_PROVIDER")
+    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+    gemini_fast_model: str = Field(default="gemini-2.5-flash-lite", alias="GEMINI_FAST_MODEL")
+    gemini_reasoning_model: str = Field(default="gemini-2.5-pro", alias="GEMINI_REASONING_MODEL")
+    gemini_grounded_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_GROUNDED_MODEL")
     gemini_live_model: str = Field(
         default="gemini-3.1-flash-live-preview", alias="GEMINI_LIVE_MODEL"
     )
     gemini_voice: str = Field(default="Leda", alias="GEMINI_VOICE")
+    jungkook_roleplay_avatar_url: str = Field(default="", alias="JUNGKOOK_ROLEPLAY_AVATAR_URL")
+    alya_roleplay_avatar_url: str = Field(default="", alias="ALYA_ROLEPLAY_AVATAR_URL")
     gemini_live_system_instruction: str = Field(
         default=(
             "You are Meyaya in a Discord voice chat. Speak naturally and keep replies concise. "
@@ -33,21 +48,11 @@ class Settings(BaseSettings):
         alias="GEMINI_LIVE_SYSTEM_INSTRUCTION",
     )
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
-    command_prefix: str = Field(default="", alias="COMMAND_PREFIX")
     guild_id: int | None = Field(default=None, alias="GUILD_ID")
+    court_channel_id: int | None = Field(default=None, alias="COURT_CHANNEL_ID")
     monitor_channel_ids: list[int] = Field(default_factory=list, alias="MONITOR_CHANNEL_IDS")
-    proactive_enabled: bool = Field(default=False, alias="PROACTIVE_ENABLED")
-    proactive_chance: float = Field(
-        default=0.01, ge=0.0, le=1.0, alias="PROACTIVE_CHANCE"
-    )
-    proactive_guild_cooldown_minutes: int = Field(
-        default=180, ge=15, alias="PROACTIVE_GUILD_COOLDOWN_MINUTES"
-    )
-    proactive_channel_cooldown_minutes: int = Field(
-        default=120, ge=15, alias="PROACTIVE_CHANNEL_COOLDOWN_MINUTES"
-    )
 
-    @field_validator("guild_id", mode="before")
+    @field_validator("guild_id", "court_channel_id", mode="before")
     @classmethod
     def parse_blank_guild_id(cls, value: object) -> int | None:
         """Treat an empty GUILD_ID as unset."""
@@ -70,6 +75,16 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [int(part.strip()) for part in value.split(",") if part.strip()]
         raise ValueError("MONITOR_CHANNEL_IDS must be a list or comma-separated string")
+
+    @field_validator("gemini_voice")
+    @classmethod
+    def validate_gemini_voice(cls, value: str) -> str:
+        """Reject unsupported voice names before opening a Live session."""
+
+        canonical = canonical_voice_name(value)
+        if canonical is None:
+            raise ValueError("GEMINI_VOICE must be a supported Gemini prebuilt voice")
+        return canonical
 
 
 @lru_cache(maxsize=1)

@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import queue
+import time
+from bot.logging.telemetry import event
 from typing import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
@@ -37,9 +39,13 @@ class GeminiLiveSession:
         on_interrupted: InterruptCallback,
         on_input_audio_sent: InputSentCallback,
         on_reconnected: ReconnectCallback,
+        guild_id: int | None = None,
+        channel_id: int | None = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
+        self.guild_id = guild_id
+        self.channel_id = channel_id
         self.voice_name = voice_name
         self.system_instruction = system_instruction
         self.on_output_audio = on_output_audio
@@ -85,6 +91,11 @@ class GeminiLiveSession:
             },
         }
 
+    def _metric(self, name: str, **fields) -> None:
+        event(name, feature="voice", provider="gemini", model=self.model,
+              guild_id=self.guild_id, channel_id=self.channel_id,
+              **fields)
+
     async def start(self) -> None:
         if self._running:
             return
@@ -118,7 +129,15 @@ class GeminiLiveSession:
             self.voice_name,
         )
         conn_cm = self._client.aio.live.connect(model=self.model, config=self._config())
-        session = await conn_cm.__aenter__()
+        started = time.perf_counter()
+        try:
+            session = await conn_cm.__aenter__()
+        except Exception as exc:
+            self._metric("voice_connect", status="error", fallback_reason=type(exc).__name__,
+                         latency_ms=round((time.perf_counter() - started) * 1000, 2))
+            raise
+        self._metric("voice_connect", status="success", fallback_reason=None,
+                     latency_ms=round((time.perf_counter() - started) * 1000, 2))
         self._conn_cm = conn_cm
         self._session = session
         self._connected.set()
@@ -292,6 +311,7 @@ class GeminiLiveSession:
         raise asyncio.CancelledError
 
     async def _reconnect(self, failed_session, reason: str) -> None:
+        self._metric("voice_reconnect", fallback_reason=reason)
         async with self._reconnect_lock:
             if not self._running:
                 return
@@ -330,8 +350,9 @@ class GeminiLiveSession:
                     if not self._running or session is not self._session:
                         break
                     await self._process_event(event)
-                if self._running and session is self._session:
-                    await self._reconnect(session, "server closed the receive stream")
+                # The Google SDK ends each ``receive()`` iterator when one model
+                # turn completes. The underlying Live socket remains open, so
+                # loop back and receive the next turn on the same session.
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -341,6 +362,14 @@ class GeminiLiveSession:
 
     async def _process_event(self, event) -> None:
         try:
+            usage = getattr(event, "usage_metadata", None)
+            if usage is not None:
+                self._metric(
+                    "voice_usage",
+                    input_tokens=getattr(usage, "prompt_token_count", None),
+                    output_tokens=getattr(usage, "response_token_count", None),
+                    total_tokens=getattr(usage, "total_token_count", None),
+                )
             server = getattr(event, "server_content", None)
             if server is None:
                 return

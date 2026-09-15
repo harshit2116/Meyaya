@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "classes": [
+    {
+      "id": "class_0",
+      "title": "Moon Archivist",
+      "role": "Support",
+      "affinity": "Lunar",
+      "passive": "Recall a forgotten clue",
+      "drawback": "Overthinks the obvious",
+      "name": "Lune",
+      "ultimate": "Archive of Falling Moons",
+      "portrait_index": 0
+    },
+    {
+      "id": "class_1",
+      "title": "Star Duelist",
+      "role": "Striker",
+      "affinity": "Starlight",
+      "passive": "Turn one near miss into a second chance",
+      "drawback": "Cannot resist a dramatic entrance",
+      "name": "Astra",
+      "ultimate": "Duel Under Seven Stars",
+      "portrait_index": 3
+    },
+    {
+      "id": "class_2",
+      "title": "Cloud Warden",
+      "role": "Defender",
+      "affinity": "Wind",
+      "passive": "Shield a friend from one setback",
+      "drawback": "Stops to rescue every tiny creature",
+      "name": "Zephyr",
+      "ultimate": "Citadel of Wandering Clouds",
+      "portrait_index": 6
+    },
+    {
+      "id": "class_3",
+      "title": "Ember Cook",
+      "role": "Healer",
+      "affinity": "Fire",
+      "passive": "Restore morale with impossible snacks",
+      "drawback": "Needs a snack break too",
+      "name": "Cinder",
+      "ultimate": "Feast of the Little Phoenix",
+      "portrait_index": 9
+    },
+    {
+      "id": "class_4",
+      "title": "Dawnblade Sovereign",
+      "role": "Saber",
+      "affinity": "Solar",
+      "name": "Aster",
+      "ultimate": "Crown of First Light",
+      "passive": "Convert a perfect parry into a radiant counter",
+      "drawback": "Pride delays asking for help",
+      "portrait_index": 12
+    },
+    {
+      "id": "class_5",
+      "title": "Scarlet Spear Saint",
+      "role": "Lancer",
+      "affinity": "Fire",
+      "name": "Reika",
+      "ultimate": "Crimson Horizon",
+      "passive": "Pierce one shield after protecting an ally",
+      "drawback": "Overcommits to a challenge",
+      "portrait_index": 15
+    },
+    {
+      "id": "class_6",
+      "title": "Moonshot Wanderer",
+      "role": "Archer",
+      "affinity": "Lunar",
+      "name": "Tsuki",
+      "ultimate": "Arrow Beyond Midnight",
+      "passive": "A patient shot reveals the hidden path",
+      "drawback": "Loses focus at close range",
+      "portrait_index": 18
+    },
+    {
+      "id": "class_7",
+      "title": "Stormbound Courier",
+      "role": "Rider",
+      "affinity": "Wind",
+      "name": "Hayate",
+      "ultimate": "Thousand-Mile Thunder",
+      "passive": "Move the whole party out of danger once",
+      "drawback": "Cannot refuse a race",
+      "portrait_index": 21
+    },
+    {
+      "id": "class_8",
+      "title": "Velvet Hexweaver",
+      "role": "Caster",
+      "affinity": "Void",
+      "name": "Mirei",
+      "ultimate": "Garden of Silent Stars",
+      "passive": "Store a spell to rescue a friend later",
+      "drawback": "Plans collapse without preparation",
+      "portrait_index": 24
+    },
+    {
+      "id": "class_9",
+      "title": "Glass Lotus Phantom",
+      "role": "Assassin",
+      "affinity": "Mist",
+      "name": "Ren",
+      "ultimate": "Petals Without Footsteps",
+      "passive": "Vanish after interrupting an enemy attack",
+      "drawback": "Fragile when caught off guard",
+      "portrait_index": 27
+    },
+    {
+      "id": "class_10",
+      "title": "Ironheart Revenant",
+      "role": "Berserker",
+      "affinity": "Steel",
+      "name": "Kuro",
+      "ultimate": "Heart That Defies Ruin",
+      "passive": "Grow stronger while defending a friend",
+      "drawback": "Needs time to regain control",
+      "portrait_index": 30
+    },
+    {
+      "id": "class_11",
+      "title": "Ivory Oathkeeper",
+      "role": "Ruler",
+      "affinity": "Light",
+      "name": "Sena",
+      "ultimate": "Sanctuary of Unbroken Vows",
+      "passive": "Turn a hostile field into neutral ground",
+      "drawback": "Bound by every promise made",
+      "portrait_index": 33
+    },
+    {
+      "id": "class_12",
+      "title": "Eclipse Duelist",
+      "role": "Avenger",
+      "affinity": "Shadow",
+      "name": "Akira",
+      "ultimate": "Last Light Requiem",
+      "passive": "Counter the foe who broke an ally's guard",
+      "drawback": "Cannot easily let grudges go",
+      "portrait_index": 36
+    },
+    {
+      "id": "class_13",
+      "title": "Sapphire Tide Oracle",
+      "role": "Caster",
+      "affinity": "Water",
+      "name": "Mizuki",
+      "ultimate": "Ocean Written in the Sky",
+      "passive": "Reveal the safest route through a crisis",
+      "drawback": "Too many futures cause hesitation",
+      "portrait_index": 39
+    },
+    {
+      "id": "class_14",
+      "title": "Astral Wolf Knight",
+      "role": "Saber",
+      "affinity": "Starlight",
+      "name": "Yoru",
+      "ultimate": "Howl of the Ninth Star",
+      "passive": "Coordinate a follow-up strike with an ally",
+      "drawback": "Distrusts unfamiliar teammates",
+      "portrait_index": 42
+    },
+    {
+      "id": "class_15",
+      "title": "Phoenix Banner Captain",
+      "role": "Rider",
+      "affinity": "Fire",
+      "name": "Kaede",
+      "ultimate": "Banner of Returning Dawn",
+      "passive": "Restore party morale after a setback",
+      "drawback": "Burns energy faster than expected",
+      "portrait_index": 45
+    }
+  ],
+  "stat_range": [
+    20,
+    40
+  ],
+  "rarity_weights": [
+    60,
+    30,
+    10
+  ]
+}

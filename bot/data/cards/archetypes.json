@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "archetypes": [
+    {
+      "id": "path_0",
+      "title": "The Wanderer",
+      "path": "Discovery",
+      "strength": "Curiosity",
+      "outcome": "A new corner of the server becomes familiar",
+      "meaning": "You grow by moving toward what feels unfamiliar instead of waiting for perfect certainty.",
+      "guidance": "Follow one genuine curiosity today and let the destination reveal itself slowly."
+    },
+    {
+      "id": "path_1",
+      "title": "The Crownless King",
+      "path": "Leadership",
+      "strength": "Generosity",
+      "outcome": "An unlikely team asks for your guidance",
+      "meaning": "Your influence comes from making people feel capable, heard and welcome beside you.",
+      "guidance": "Lead by giving someone else room to shine before claiming the center."
+    },
+    {
+      "id": "path_2",
+      "title": "The Last Witness",
+      "path": "Reflection",
+      "strength": "Attention",
+      "outcome": "You notice the detail everyone missed",
+      "meaning": "Your quiet observation catches patterns that louder voices often pass without seeing.",
+      "guidance": "Pause before answering. The smallest detail may completely change your next choice."
+    },
+    {
+      "id": "path_3",
+      "title": "The Trickster",
+      "path": "Reinvention",
+      "strength": "Ingenuity",
+      "outcome": "Your silly idea unexpectedly saves the day",
+      "meaning": "You break stale patterns through humor, improvisation and a refusal to accept boring answers.",
+      "guidance": "Try the playful solution, but make sure the people beside you are enjoying the joke too."
+    }
+  ]
+}

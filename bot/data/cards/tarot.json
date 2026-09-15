@@ -1,0 +1,159 @@
+{
+  "version": 1,
+  "cards": [
+    {
+      "id": "major_00",
+      "name": "The Fool",
+      "artwork": "tarot/00.jpg",
+      "upright": "Try a small new beginning",
+      "reversed": "Pause before the leap"
+    },
+    {
+      "id": "major_01",
+      "name": "The Magician",
+      "artwork": "tarot/01.jpg",
+      "upright": "Use the tools you already have",
+      "reversed": "Finish one idea before starting five"
+    },
+    {
+      "id": "major_02",
+      "name": "The High Priestess",
+      "artwork": "tarot/02.jpg",
+      "upright": "Listen before you answer",
+      "reversed": "Ask instead of guessing"
+    },
+    {
+      "id": "major_03",
+      "name": "The Empress",
+      "artwork": "tarot/03.jpg",
+      "upright": "Make something welcoming",
+      "reversed": "Leave room for your own rest"
+    },
+    {
+      "id": "major_04",
+      "name": "The Emperor",
+      "artwork": "tarot/04.jpg",
+      "upright": "Give your plan some structure",
+      "reversed": "Let someone else choose too"
+    },
+    {
+      "id": "major_05",
+      "name": "The Hierophant",
+      "artwork": "tarot/05.jpg",
+      "upright": "Learn from a familiar ritual",
+      "reversed": "Question a stale habit"
+    },
+    {
+      "id": "major_06",
+      "name": "The Lovers",
+      "artwork": "tarot/06.jpg",
+      "upright": "Choose the connection worth tending",
+      "reversed": "Say what you actually mean"
+    },
+    {
+      "id": "major_07",
+      "name": "The Chariot",
+      "artwork": "tarot/07.jpg",
+      "upright": "Pick a direction and commit",
+      "reversed": "Slow down to regain control"
+    },
+    {
+      "id": "major_08",
+      "name": "Strength",
+      "artwork": "tarot/08.jpg",
+      "upright": "Patience is your strongest move",
+      "reversed": "Gentleness includes yourself"
+    },
+    {
+      "id": "major_09",
+      "name": "The Hermit",
+      "artwork": "tarot/09.jpg",
+      "upright": "Take a quiet moment to reflect",
+      "reversed": "Return when you feel ready"
+    },
+    {
+      "id": "major_10",
+      "name": "Wheel of Fortune",
+      "artwork": "tarot/10.jpg",
+      "upright": "Make room for a pleasant change",
+      "reversed": "A detour is not a defeat"
+    },
+    {
+      "id": "major_11",
+      "name": "Justice",
+      "artwork": "tarot/11.jpg",
+      "upright": "Hear both sides fairly",
+      "reversed": "Check your first impression"
+    },
+    {
+      "id": "major_12",
+      "name": "The Hanged Man",
+      "artwork": "tarot/12.jpg",
+      "upright": "Try another perspective",
+      "reversed": "Stop forcing the same solution"
+    },
+    {
+      "id": "major_13",
+      "name": "Death",
+      "artwork": "tarot/13.jpg",
+      "upright": "Retire a habit and begin again",
+      "reversed": "Let the old draft go"
+    },
+    {
+      "id": "major_14",
+      "name": "Temperance",
+      "artwork": "tarot/14.jpg",
+      "upright": "Find a pace you can sustain",
+      "reversed": "Balance effort with a break"
+    },
+    {
+      "id": "major_15",
+      "name": "The Devil",
+      "artwork": "tarot/15.jpg",
+      "upright": "Notice what keeps distracting you",
+      "reversed": "Step away from one more scroll"
+    },
+    {
+      "id": "major_16",
+      "name": "The Tower",
+      "artwork": "tarot/16.jpg",
+      "upright": "Rebuild the wobbly plan",
+      "reversed": "A small reset beats a giant mess"
+    },
+    {
+      "id": "major_17",
+      "name": "The Star",
+      "artwork": "tarot/17.jpg",
+      "upright": "Follow a hopeful little idea",
+      "reversed": "Progress can be quiet"
+    },
+    {
+      "id": "major_18",
+      "name": "The Moon",
+      "artwork": "tarot/18.jpg",
+      "upright": "Leave space for uncertainty",
+      "reversed": "Do not mistake guesses for facts"
+    },
+    {
+      "id": "major_19",
+      "name": "The Sun",
+      "artwork": "tarot/19.jpg",
+      "upright": "Share a small victory",
+      "reversed": "Enjoy it without performing"
+    },
+    {
+      "id": "major_20",
+      "name": "Judgement",
+      "artwork": "tarot/20.jpg",
+      "upright": "Give yourself a fresh attempt",
+      "reversed": "Learn without replaying every mistake"
+    },
+    {
+      "id": "major_21",
+      "name": "The World",
+      "artwork": "tarot/21.jpg",
+      "upright": "Celebrate a finished chapter",
+      "reversed": "Completion need not be perfection"
+    }
+  ]
+}

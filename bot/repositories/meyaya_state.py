@@ -15,7 +15,9 @@ class MeyayaStateRepository(Repository):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
-    async def get_global(self, guild_id: int, *, for_update: bool = False) -> MeyayaGlobalState | None:
+    async def get_global(
+        self, guild_id: int, *, for_update: bool = False
+    ) -> MeyayaGlobalState | None:
         statement = select(MeyayaGlobalState).where(MeyayaGlobalState.guild_id == guild_id)
         if for_update:
             statement = statement.with_for_update()
@@ -34,9 +36,7 @@ class MeyayaStateRepository(Repository):
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
-    async def get_users(
-        self, guild_id: int, user_ids: list[int]
-    ) -> dict[int, MeyayaUserState]:
+    async def get_users(self, guild_id: int, user_ids: list[int]) -> dict[int, MeyayaUserState]:
         """Load multiple member states in one query, keyed by Discord user ID."""
 
         if not user_ids:

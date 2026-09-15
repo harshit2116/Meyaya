@@ -1,0 +1,1106 @@
+{
+  "version": 1,
+  "provider": "anilist",
+  "characters": [
+    {
+      "anilist_id": 17,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Dream Weaver",
+      "traits": [
+        "Creative",
+        "Enigmatic"
+      ],
+      "passive": "Makes an unlikely possibility feel inevitable."
+    },
+    {
+      "anilist_id": 13,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 85,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Royal Strategist",
+      "traits": [
+        "Perceptive",
+        "Commanding"
+      ],
+      "passive": "Reveals the safest path after everyone argues."
+    },
+    {
+      "anilist_id": 14,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Chaos Trickster",
+      "traits": [
+        "Bold",
+        "Mischievous"
+      ],
+      "passive": "Converts one terrible plan into suspiciously good luck."
+    },
+    {
+      "anilist_id": 64769,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Void Guardian",
+      "traits": [
+        "Calm",
+        "Unshakable"
+      ],
+      "passive": "Cancels one disaster with impeccable timing."
+    },
+    {
+      "anilist_id": 40,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 62,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 723,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 305,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Royal Strategist",
+      "traits": [
+        "Perceptive",
+        "Commanding"
+      ],
+      "passive": "Reveals the safest path after everyone argues."
+    },
+    {
+      "anilist_id": 61,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 246,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Storm Ranger",
+      "traits": [
+        "Agile",
+        "Fearless"
+      ],
+      "passive": "Gains momentum whenever the situation gets louder."
+    },
+    {
+      "anilist_id": 913,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 678,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Flame Berserker",
+      "traits": [
+        "Fierce",
+        "Loyal"
+      ],
+      "passive": "Becomes stronger while protecting an ally."
+    },
+    {
+      "anilist_id": 2093,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 914,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Chaos Trickster",
+      "traits": [
+        "Bold",
+        "Mischievous"
+      ],
+      "passive": "Converts one terrible plan into suspiciously good luck."
+    },
+    {
+      "anilist_id": 124382,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 6,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Storm Ranger",
+      "traits": [
+        "Agile",
+        "Fearless"
+      ],
+      "passive": "Gains momentum whenever the situation gets louder."
+    },
+    {
+      "anilist_id": 7,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Dream Weaver",
+      "traits": [
+        "Creative",
+        "Enigmatic"
+      ],
+      "passive": "Makes an unlikely possibility feel inevitable."
+    },
+    {
+      "anilist_id": 1086,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Storm Ranger",
+      "traits": [
+        "Agile",
+        "Fearless"
+      ],
+      "passive": "Gains momentum whenever the situation gets louder."
+    },
+    {
+      "anilist_id": 907,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Dream Weaver",
+      "traits": [
+        "Creative",
+        "Enigmatic"
+      ],
+      "passive": "Makes an unlikely possibility feel inevitable."
+    },
+    {
+      "anilist_id": 11,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 12,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 68,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Flame Berserker",
+      "traits": [
+        "Fierce",
+        "Loyal"
+      ],
+      "passive": "Becomes stronger while protecting an ally."
+    },
+    {
+      "anilist_id": 70,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 63,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 80,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 71,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 835,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Royal Strategist",
+      "traits": [
+        "Perceptive",
+        "Commanding"
+      ],
+      "passive": "Reveals the safest path after everyone argues."
+    },
+    {
+      "anilist_id": 75,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Royal Strategist",
+      "traits": [
+        "Perceptive",
+        "Commanding"
+      ],
+      "passive": "Reveals the safest path after everyone argues."
+    },
+    {
+      "anilist_id": 45627,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Dream Weaver",
+      "traits": [
+        "Creative",
+        "Enigmatic"
+      ],
+      "passive": "Makes an unlikely possibility feel inevitable."
+    },
+    {
+      "anilist_id": 40882,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 40881,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 46494,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Chaos Trickster",
+      "traits": [
+        "Bold",
+        "Mischievous"
+      ],
+      "passive": "Converts one terrible plan into suspiciously good luck."
+    },
+    {
+      "anilist_id": 46496,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Storm Ranger",
+      "traits": [
+        "Agile",
+        "Fearless"
+      ],
+      "passive": "Gains momentum whenever the situation gets louder."
+    },
+    {
+      "anilist_id": 127691,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 127212,
+      "rarity_stars": 2,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 126635,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Royal Strategist",
+      "traits": [
+        "Perceptive",
+        "Commanding"
+      ],
+      "passive": "Reveals the safest path after everyone argues."
+    },
+    {
+      "anilist_id": 133700,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 133701,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 126071,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 127518,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Flame Berserker",
+      "traits": [
+        "Fierce",
+        "Loyal"
+      ],
+      "passive": "Becomes stronger while protecting an ally."
+    },
+    {
+      "anilist_id": 129131,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 129130,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 23602,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 129133,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 89028,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Flame Berserker",
+      "traits": [
+        "Fierce",
+        "Loyal"
+      ],
+      "passive": "Becomes stronger while protecting an ally."
+    },
+    {
+      "anilist_id": 88892,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 89220,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 89224,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Chaos Trickster",
+      "traits": [
+        "Bold",
+        "Mischievous"
+      ],
+      "passive": "Converts one terrible plan into suspiciously good luck."
+    },
+    {
+      "anilist_id": 89221,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 73935,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Royal Strategist",
+      "traits": [
+        "Perceptive",
+        "Commanding"
+      ],
+      "passive": "Reveals the safest path after everyone argues."
+    },
+    {
+      "anilist_id": 73979,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Void Guardian",
+      "traits": [
+        "Calm",
+        "Unshakable"
+      ],
+      "passive": "Cancels one disaster with impeccable timing."
+    },
+    {
+      "anilist_id": 81929,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Void Guardian",
+      "traits": [
+        "Calm",
+        "Unshakable"
+      ],
+      "passive": "Cancels one disaster with impeccable timing."
+    },
+    {
+      "anilist_id": 89277,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Dream Weaver",
+      "traits": [
+        "Creative",
+        "Enigmatic"
+      ],
+      "passive": "Makes an unlikely possibility feel inevitable."
+    },
+    {
+      "anilist_id": 81931,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 176754,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Chaos Trickster",
+      "traits": [
+        "Bold",
+        "Mischievous"
+      ],
+      "passive": "Converts one terrible plan into suspiciously good luck."
+    },
+    {
+      "anilist_id": 183965,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Royal Strategist",
+      "traits": [
+        "Perceptive",
+        "Commanding"
+      ],
+      "passive": "Reveals the safest path after everyone argues."
+    },
+    {
+      "anilist_id": 184313,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 184311,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 88575,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Royal Strategist",
+      "traits": [
+        "Perceptive",
+        "Commanding"
+      ],
+      "passive": "Reveals the safest path after everyone argues."
+    },
+    {
+      "anilist_id": 88572,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 88573,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 88576,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Storm Ranger",
+      "traits": [
+        "Agile",
+        "Fearless"
+      ],
+      "passive": "Gains momentum whenever the situation gets louder."
+    },
+    {
+      "anilist_id": 137080,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 130102,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 137079,
+      "rarity_stars": 2,
+      "summon_weight": 100,
+      "class": "Void Guardian",
+      "traits": [
+        "Calm",
+        "Unshakable"
+      ],
+      "passive": "Cancels one disaster with impeccable timing."
+    },
+    {
+      "anilist_id": 137081,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 133676,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Storm Ranger",
+      "traits": [
+        "Agile",
+        "Fearless"
+      ],
+      "passive": "Gains momentum whenever the situation gets louder."
+    },
+    {
+      "anilist_id": 127222,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 120649,
+      "rarity_stars": 3,
+      "summon_weight": 100,
+      "class": "Void Guardian",
+      "traits": [
+        "Calm",
+        "Unshakable"
+      ],
+      "passive": "Cancels one disaster with impeccable timing."
+    },
+    {
+      "anilist_id": 121101,
+      "rarity_stars": 2,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 121103,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 124381,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 90169,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Void Guardian",
+      "traits": [
+        "Calm",
+        "Unshakable"
+      ],
+      "passive": "Cancels one disaster with impeccable timing."
+    },
+    {
+      "anilist_id": 497,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Dream Weaver",
+      "traits": [
+        "Creative",
+        "Enigmatic"
+      ],
+      "passive": "Makes an unlikely possibility feel inevitable."
+    },
+    {
+      "anilist_id": 498,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Flame Berserker",
+      "traits": [
+        "Fierce",
+        "Loyal"
+      ],
+      "passive": "Becomes stronger while protecting an ally."
+    },
+    {
+      "anilist_id": 10010,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 34470,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 35252,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 35253,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 417,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Dream Weaver",
+      "traits": [
+        "Creative",
+        "Enigmatic"
+      ],
+      "passive": "Makes an unlikely possibility feel inevitable."
+    },
+    {
+      "anilist_id": 1111,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 559,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Void Guardian",
+      "traits": [
+        "Calm",
+        "Unshakable"
+      ],
+      "passive": "Cancels one disaster with impeccable timing."
+    },
+    {
+      "anilist_id": 558,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Flame Berserker",
+      "traits": [
+        "Fierce",
+        "Loyal"
+      ],
+      "passive": "Becomes stronger while protecting an ally."
+    },
+    {
+      "anilist_id": 1,
+      "rarity_stars": 6,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 2,
+      "rarity_stars": 2,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 4003,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 4004,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Chaos Trickster",
+      "traits": [
+        "Bold",
+        "Mischievous"
+      ],
+      "passive": "Converts one terrible plan into suspiciously good luck."
+    },
+    {
+      "anilist_id": 6356,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Storm Ranger",
+      "traits": [
+        "Agile",
+        "Fearless"
+      ],
+      "passive": "Gains momentum whenever the situation gets louder."
+    },
+    {
+      "anilist_id": 30,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Astral Knight",
+      "traits": [
+        "Resolute",
+        "Luminous"
+      ],
+      "passive": "Turns impossible odds into a dramatic final stand."
+    },
+    {
+      "anilist_id": 27,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Dream Weaver",
+      "traits": [
+        "Creative",
+        "Enigmatic"
+      ],
+      "passive": "Makes an unlikely possibility feel inevitable."
+    },
+    {
+      "anilist_id": 28,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Flame Berserker",
+      "traits": [
+        "Fierce",
+        "Loyal"
+      ],
+      "passive": "Becomes stronger while protecting an ally."
+    },
+    {
+      "anilist_id": 31,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Arcane Vanguard",
+      "traits": [
+        "Clever",
+        "Mystic"
+      ],
+      "passive": "Finds the hidden rule and bends it once per adventure."
+    },
+    {
+      "anilist_id": 672,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Shadow Duelist",
+      "traits": [
+        "Swift",
+        "Unpredictable"
+      ],
+      "passive": "Strikes first when chaos enters the scene."
+    },
+    {
+      "anilist_id": 674,
+      "rarity_stars": 4,
+      "summon_weight": 100,
+      "class": "Chaos Trickster",
+      "traits": [
+        "Bold",
+        "Mischievous"
+      ],
+      "passive": "Converts one terrible plan into suspiciously good luck."
+    },
+    {
+      "anilist_id": 673,
+      "rarity_stars": 2,
+      "summon_weight": 100,
+      "class": "Spirit Healer",
+      "traits": [
+        "Warm",
+        "Steadfast"
+      ],
+      "passive": "Restores the party's courage at the worst possible moment."
+    },
+    {
+      "anilist_id": 89616,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Storm Ranger",
+      "traits": [
+        "Agile",
+        "Fearless"
+      ],
+      "passive": "Gains momentum whenever the situation gets louder."
+    },
+    {
+      "anilist_id": 89334,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Chaos Trickster",
+      "traits": [
+        "Bold",
+        "Mischievous"
+      ],
+      "passive": "Converts one terrible plan into suspiciously good luck."
+    },
+    {
+      "anilist_id": 36828,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Flame Berserker",
+      "traits": [
+        "Fierce",
+        "Loyal"
+      ],
+      "passive": "Becomes stronger while protecting an ally."
+    },
+    {
+      "anilist_id": 36765,
+      "rarity_stars": 5,
+      "summon_weight": 100,
+      "class": "Royal Strategist",
+      "traits": [
+        "Perceptive",
+        "Commanding"
+      ],
+      "passive": "Reveals the safest path after everyone argues."
+    }
+  ]
+}

@@ -5,77 +5,90 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from dataclasses import dataclass
 
 import aiohttp
+
+from bot.logging.telemetry import observe, record_response, request_failure
+
+from bot.services.llm import (
+    ChatMessage,
+    LLMProvider,
+    GroundedCitation,
+    GroundedReply,
+    GroundingError,
+    GroundingRateLimitError,
+    MemoryAction,
+    MemoryDirective,
+    NaturalCommand,
+    LLMReply as GeminiReply,
+)
 
 logger = logging.getLogger(__name__)
 
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+GEMINI_INTERACTIONS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
 REQUEST_TIMEOUT_SECONDS = 20
 MAX_OUTPUT_TOKENS = 400
 MAX_REPLY_WORDS = 220  # safety net only, keeps us well under Discord's 2000 char limit
 RETRYABLE_STATUS_CODES = {502, 503, 504}
 MAX_REQUEST_ATTEMPTS = 2
 
-REMEMBER_PATTERN = re.compile(r"<remember>(.*?)</remember>", re.IGNORECASE | re.DOTALL)
-LORE_PATTERN = re.compile(r"<lore>(.*?)</lore>", re.IGNORECASE | re.DOTALL)
-ACTION_PATTERN = re.compile(r"<action>(.*?)</action>", re.IGNORECASE | re.DOTALL)
-COMMAND_PATTERN = re.compile(r"<command>(.*?)</command>", re.IGNORECASE | re.DOTALL)
 
-
-@dataclass(frozen=True, slots=True)
-class NaturalCommand:
-    """One validated-shaped command request parsed from Gemini output."""
-
-    name: str
-    target_id: int | None
-
-
-@dataclass(frozen=True)
-class GeminiReply:
-    text: str
-    memories: list[str]
-    lore: list[str]
-    actions: list[str]
-    commands: list[NaturalCommand]
-
-
-class GeminiService:
+class GeminiService(LLMProvider):
     """Thin wrapper around the Gemini REST API."""
 
-    def __init__(self, api_key: str, model: str, http_session: aiohttp.ClientSession) -> None:
+    provider_name = "gemini"
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        http_session: aiohttp.ClientSession,
+        *,
+        thinking_budget: int | None = 0,
+    ) -> None:
         self.api_key = api_key
         self.model = model
         self.http_session = http_session
+        self.thinking_budget = thinking_budget
         self.default_timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
 
-    async def generate(
+    @observe("generate_text")
+    async def generate_text(
         self,
         system_instruction: str,
         user_message: str,
-        history: list[dict] | None = None,
+        history: list[ChatMessage] | None = None,
         *,
         max_output_tokens: int | None = None,
         timeout_seconds: int | None = None,
-    ) -> GeminiReply | None:
+    ) -> str | None:
         """Ask Gemini for a reply, optionally continuing a prior conversation."""
 
         if not self.api_key:
+            request_failure("missing_api_key")
             logger.warning("Gemini API key is not configured; skipping generation.")
             return None
 
         url = GEMINI_ENDPOINT.format(model=self.model)
-        contents = list(history or [])
+        contents = [
+            {
+                "role": "model" if item["role"] == "assistant" else "user",
+                "parts": [{"text": item["content"]}],
+            }
+            for item in history or []
+        ]
         contents.append({"role": "user", "parts": [{"text": user_message}]})
 
+        generation_config: dict[str, object] = {
+            "maxOutputTokens": max_output_tokens or MAX_OUTPUT_TOKENS,
+        }
+        if self.thinking_budget is not None:
+            generation_config["thinkingConfig"] = {"thinkingBudget": self.thinking_budget}
         payload = {
             "system_instruction": {"parts": [{"text": system_instruction}]},
             "contents": contents,
-            "generationConfig": {
-                "maxOutputTokens": max_output_tokens or MAX_OUTPUT_TOKENS,
-                "thinkingConfig": {"thinkingBudget": 0},
-            },
+            "generationConfig": generation_config,
         }
         headers = {"Content-Type": "application/json"}
         params = {"key": self.api_key}
@@ -101,15 +114,11 @@ class GeminiService:
                         response.status,
                         list(payload.keys()),
                     )
+                    if response.status >= 400:
+                        request_failure(f"http_{response.status}", attempt=attempt)
                     if response.status == 429:
                         logger.warning("Gemini rate limit hit.")
-                        return GeminiReply(
-                            text="*yawns* ...I'm all out of energy for now, ask me again in a bit! 😴",
-                            memories=[],
-                            lore=[],
-                            actions=[],
-                            commands=[],
-                        )
+                        return None
                     if response.status in RETRYABLE_STATUS_CODES and attempt < MAX_REQUEST_ATTEMPTS:
                         logger.warning(
                             "Gemini temporarily unavailable status=%s; retrying attempt=%s",
@@ -121,27 +130,28 @@ class GeminiService:
                     if response.status != 200:
                         body = await response.text()
                         logger.error(
-                            "Gemini request failed status=%s body=%s",
+                            "Gemini request failed status=%s",
                             response.status,
-                            body[:1000],
                         )
                         return None
                     response_data = await response.json()
                     if not isinstance(response_data, dict):
                         logger.error("Gemini returned a non-object JSON response")
                         return None
+                    record_response(response_data)
                     data = response_data
                     break
             except (aiohttp.ClientError, TimeoutError) as exc:
+                request_failure(type(exc).__name__, attempt=attempt)
                 if attempt < MAX_REQUEST_ATTEMPTS:
                     logger.warning(
                         "Gemini request errored; retrying attempt=%s error=%s",
                         attempt + 1,
-                        exc,
+                        type(exc).__name__,
                     )
                     await asyncio.sleep(0.5 * attempt)
                     continue
-                logger.error("Gemini request failed after retry: %s", exc)
+                logger.error("Gemini request failed after retry: %s", type(exc).__name__)
                 return None
 
         if data is None:
@@ -154,22 +164,300 @@ class GeminiService:
         if not raw_text:
             return None
 
-        visible_text, memories, lore, actions, commands = self._split_directives(raw_text)
-        logger.debug(
-            "Gemini extracted_text_len=%d snippet=%s",
-            len(visible_text),
-            (visible_text[:300] + "...") if len(visible_text) > 300 else visible_text,
+        return raw_text
+
+    @observe("grounded_generate")
+    async def grounded_generate(
+        self,
+        system_instruction: str,
+        user_message: str,
+        *,
+        max_output_tokens: int = 1800,
+        timeout_seconds: int = 45,
+    ) -> GroundedReply:
+        """Generate source-annotated text, with a compatible endpoint fallback."""
+
+        if not self.api_key:
+            request_failure("missing_api_key")
+            raise GroundingError("Gemini API key is not configured")
+
+        interactions_payload = {
+            "model": self.model.removeprefix("models/"),
+            "system_instruction": system_instruction,
+            "input": user_message,
+            "tools": [{"type": "google_search"}],
+            "store": False,
+            "generation_config": {"max_output_tokens": max_output_tokens},
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key,
+        }
+        timeout = aiohttp.ClientTimeout(total=timeout_seconds)
+        rate_limit_retry: int | None = None
+        was_rate_limited = False
+
+        data, status, retry_after = await self._post_grounded_request(
+            GEMINI_INTERACTIONS_ENDPOINT,
+            interactions_payload,
+            headers,
+            timeout,
+            endpoint_name="Interactions",
         )
-        visible_text = self._limit_words(visible_text, MAX_REPLY_WORDS)
-        if not visible_text:
+        if status == 200 and data is not None:
+            result = self._extract_grounded_reply(data)
+            if result is not None:
+                return result
+            logger.warning("Gemini Interactions grounding returned no usable model text.")
+        if status == 429:
+            was_rate_limited = True
+            rate_limit_retry = retry_after
+
+        request_failure("grounding_endpoint_fallback", endpoint="Interactions")
+
+        # The Interactions API is newer and its availability can differ by model,
+        # project, or quota. GenerateContent supports the same Google Search tool.
+        generation_config: dict[str, object] = {
+            "maxOutputTokens": max_output_tokens,
+        }
+        if self.thinking_budget is not None:
+            generation_config["thinkingConfig"] = {"thinkingBudget": self.thinking_budget}
+        generate_payload = {
+            "system_instruction": {"parts": [{"text": system_instruction}]},
+            "contents": [{"role": "user", "parts": [{"text": user_message}]}],
+            "tools": [{"google_search": {}}],
+            "generationConfig": generation_config,
+        }
+        generate_url = GEMINI_ENDPOINT.format(model=self.model.removeprefix("models/"))
+        data, status, retry_after = await self._post_grounded_request(
+            generate_url,
+            generate_payload,
+            headers,
+            timeout,
+            endpoint_name="GenerateContent",
+        )
+        if status == 200 and data is not None:
+            result = self._extract_generate_content_grounded_reply(data)
+            if result is not None:
+                return result
+            logger.warning("Gemini GenerateContent grounding returned no usable model text.")
+        if status == 429:
+            was_rate_limited = True
+            rate_limit_retry = retry_after or rate_limit_retry
+
+        if was_rate_limited:
+            raise GroundingRateLimitError(rate_limit_retry)
+        raise GroundingError("Both grounded Gemini endpoints failed")
+
+    async def _post_grounded_request(
+        self,
+        url: str,
+        payload: dict,
+        headers: dict[str, str],
+        timeout: aiohttp.ClientTimeout,
+        *,
+        endpoint_name: str,
+    ) -> tuple[dict | None, int | None, int | None]:
+        """Post one grounded request and retain safe quota diagnostics."""
+
+        for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
+            try:
+                async with self.http_session.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=timeout,
+                ) as response:
+                    retry_after = self._retry_after_seconds(response.headers.get("Retry-After"))
+                    if response.status >= 400:
+                        request_failure(f"http_{response.status}", attempt=attempt)
+                    if response.status == 429:
+                        body = await response.text()
+                        logger.warning(
+                            "Gemini %s grounding rate limit hit retry_after=%s detail=%s",
+                            endpoint_name,
+                            retry_after,
+                            "provider_error",
+                        )
+                        return None, response.status, retry_after
+                    if response.status in RETRYABLE_STATUS_CODES and attempt < MAX_REQUEST_ATTEMPTS:
+                        await asyncio.sleep(0.5 * attempt)
+                        continue
+                    if response.status != 200:
+                        body = await response.text()
+                        logger.error(
+                            "Gemini %s grounded request failed status=%s detail=%s",
+                            endpoint_name,
+                            response.status,
+                            "provider_error",
+                        )
+                        return None, response.status, retry_after
+                    data = await response.json()
+                    if not isinstance(data, dict):
+                        return None, response.status, retry_after
+                    record_response(data)
+                    return data, response.status, retry_after
+            except (aiohttp.ClientError, TimeoutError) as exc:
+                request_failure(type(exc).__name__, attempt=attempt)
+                if attempt < MAX_REQUEST_ATTEMPTS:
+                    logger.warning(
+                        "Gemini %s grounded request errored; retrying attempt=%s error=%s",
+                        endpoint_name,
+                        attempt + 1,
+                        exc,
+                    )
+                    await asyncio.sleep(0.5 * attempt)
+                    continue
+                logger.error(
+                    "Gemini %s grounded request failed after retry: %s",
+                    endpoint_name,
+                    type(exc).__name__,
+                )
+                return None, None, None
+        return None, None, None
+
+    @staticmethod
+    def _retry_after_seconds(raw_value: str | None) -> int | None:
+        if raw_value is None:
             return None
-        return GeminiReply(
-            text=visible_text,
-            memories=memories,
-            lore=lore,
-            actions=actions,
-            commands=commands,
-        )
+        try:
+            return max(1, int(float(raw_value)))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _safe_google_error(raw_body: str) -> str:
+        """Keep logs actionable without dumping an entire remote response."""
+
+        compact = " ".join(raw_body.split())
+        return compact[:500] or "no response body"
+
+    @staticmethod
+    def _extract_grounded_reply(payload: dict) -> GroundedReply | None:
+        """Read current and legacy Interactions API text annotation shapes."""
+
+        output_blocks: list[dict] = []
+        steps = payload.get("steps")
+        if isinstance(steps, list):
+            for step in steps:
+                if not isinstance(step, dict) or step.get("type") != "model_output":
+                    continue
+                content = step.get("content")
+                if isinstance(content, list):
+                    output_blocks = [block for block in content if isinstance(block, dict)]
+
+        if not output_blocks:
+            outputs = payload.get("outputs")
+            if isinstance(outputs, list):
+                output_blocks = [block for block in outputs if isinstance(block, dict)]
+
+        text_parts: list[str] = []
+        citations: list[GroundedCitation] = []
+        offset = 0
+        for block in output_blocks:
+            if block.get("type") != "text" or not isinstance(block.get("text"), str):
+                continue
+            text = block["text"]
+            annotations = block.get("annotations")
+            if isinstance(annotations, list):
+                for annotation in annotations:
+                    if not isinstance(annotation, dict):
+                        continue
+                    if annotation.get("type") != "url_citation":
+                        continue
+                    url = annotation.get("url")
+                    if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+                        continue
+                    title = annotation.get("title")
+                    start = annotation.get("start_index", 0)
+                    end = annotation.get("end_index", len(text))
+                    if not isinstance(start, int) or not isinstance(end, int):
+                        continue
+                    citations.append(
+                        GroundedCitation(
+                            title=str(title or "Source")[:120],
+                            url=url,
+                            start_index=offset + max(0, start),
+                            end_index=offset + min(len(text), max(start, end)),
+                        )
+                    )
+            text_parts.append(text)
+            offset += len(text)
+
+        combined = "".join(text_parts).strip()
+        if not combined:
+            return None
+        return GroundedReply(text=combined, citations=tuple(citations))
+
+    @classmethod
+    def _extract_generate_content_grounded_reply(cls, payload: dict) -> GroundedReply | None:
+        """Read text and Google Search citations from GenerateContent."""
+
+        text = cls._extract_text(payload)
+        candidates = payload.get("candidates")
+        if not text or not isinstance(candidates, list) or not candidates:
+            return None
+        candidate = candidates[0]
+        if not isinstance(candidate, dict):
+            return None
+        metadata = candidate.get("groundingMetadata") or candidate.get("grounding_metadata")
+        if not isinstance(metadata, dict):
+            return GroundedReply(text=text, citations=())
+
+        chunks = metadata.get("groundingChunks") or metadata.get("grounding_chunks") or []
+        supports = metadata.get("groundingSupports") or metadata.get("grounding_supports") or []
+        citations: list[GroundedCitation] = []
+        if isinstance(chunks, list) and isinstance(supports, list):
+            for support in supports:
+                if not isinstance(support, dict):
+                    continue
+                segment = support.get("segment")
+                if not isinstance(segment, dict):
+                    segment = {}
+                start = segment.get("startIndex", segment.get("start_index", 0))
+                end = segment.get("endIndex", segment.get("end_index", len(text)))
+                indices = support.get(
+                    "groundingChunkIndices", support.get("grounding_chunk_indices", [])
+                )
+                if not isinstance(start, int) or not isinstance(end, int):
+                    continue
+                if not isinstance(indices, list):
+                    continue
+                for index in indices:
+                    if not isinstance(index, int) or not 0 <= index < len(chunks):
+                        continue
+                    chunk = chunks[index]
+                    if not isinstance(chunk, dict):
+                        continue
+                    web = chunk.get("web")
+                    if not isinstance(web, dict):
+                        continue
+                    url = web.get("uri")
+                    if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+                        continue
+                    citations.append(
+                        GroundedCitation(
+                            title=str(web.get("title") or "Source")[:120],
+                            url=url,
+                            start_index=max(0, min(len(text), start)),
+                            end_index=max(0, min(len(text), max(start, end))),
+                        )
+                    )
+
+        if not citations and isinstance(chunks, list):
+            for chunk in chunks:
+                web = chunk.get("web") if isinstance(chunk, dict) else None
+                url = web.get("uri") if isinstance(web, dict) else None
+                if isinstance(url, str) and url.startswith(("https://", "http://")):
+                    citations.append(
+                        GroundedCitation(
+                            title=str(web.get("title") or "Source")[:120],
+                            url=url,
+                            start_index=len(text),
+                            end_index=len(text),
+                        )
+                    )
+        return GroundedReply(text=text, citations=tuple(citations))
 
     @staticmethod
     def _extract_text(payload: dict) -> str | None:
@@ -180,39 +468,5 @@ class GeminiService:
             text = "".join(part.get("text", "") for part in visible_parts).strip()
             return text or None
         except (KeyError, IndexError, TypeError):
-            logger.error("Unexpected Gemini response shape: %s", payload)
+            logger.error("Unexpected Gemini response shape")
             return None
-
-    @staticmethod
-    def _split_directives(
-        text: str,
-    ) -> tuple[str, list[str], list[str], list[str], list[NaturalCommand]]:
-        memories = [match.strip() for match in REMEMBER_PATTERN.findall(text) if match.strip()]
-        lore = [match.strip() for match in LORE_PATTERN.findall(text) if match.strip()]
-        actions = [match.strip().casefold() for match in ACTION_PATTERN.findall(text) if match.strip()]
-        commands = []
-        for raw_command in COMMAND_PATTERN.findall(text):
-            name, separator, raw_target_id = raw_command.strip().partition(":")
-            if separator and name.strip() and raw_target_id.strip().isdigit():
-                commands.append(
-                    NaturalCommand(
-                        name=name.strip().casefold(),
-                        target_id=int(raw_target_id.strip()),
-                    )
-                )
-            elif not separator and name.strip():
-                commands.append(
-                    NaturalCommand(name=name.strip().casefold(), target_id=None)
-                )
-        visible_text = REMEMBER_PATTERN.sub("", text)
-        visible_text = LORE_PATTERN.sub("", visible_text)
-        visible_text = ACTION_PATTERN.sub("", visible_text).strip()
-        visible_text = COMMAND_PATTERN.sub("", visible_text).strip()
-        return visible_text, memories[:1], lore[:1], actions[:1], commands[:1]
-
-    @staticmethod
-    def _limit_words(text: str, max_words: int) -> str:
-        words = text.split()
-        if len(words) <= max_words:
-            return text
-        return " ".join(words[:max_words]).rstrip(".,!?") + "..."

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.repositories.daily import DailyRepository
 
+
 class DailyService:
     """Resolve daily IQ and winner-style fun results."""
 
@@ -48,8 +49,8 @@ class DailyService:
             raise ValueError(f"Unknown daily winner kind: {kind}")
         # Python's built-in hash is randomized between processes. Persist a
         # stable compact value so restarts never alter stored metadata.
-        record.iq_seed = int.from_bytes(
-            blake2b(seed.encode("utf-8"), digest_size=4).digest(), "big"
-        ) % 1_000_000
+        record.iq_seed = (
+            int.from_bytes(blake2b(seed.encode("utf-8"), digest_size=4).digest(), "big") % 1_000_000
+        )
         await self.session.commit()
         return winner

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
+
+from bot.services.llm import ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,13 @@ class ChatMemoryService:
 
     def __init__(self, redis: Redis) -> None:
         self.redis = redis
+        self._last_warning = float("-inf")
+
+    def _warn_unavailable(self) -> None:
+        now = time.monotonic()
+        if now - self._last_warning >= 60:
+            logger.warning("Redis unavailable; short-term chat history is temporarily unavailable")
+            self._last_warning = now
 
     @staticmethod
     def _key(channel_id: int, user_id: int) -> str:
@@ -28,25 +38,45 @@ class ChatMemoryService:
         # atomic and avoids a read/modify/write race between overlapping turns.
         return f"chat_history:v5:{channel_id}:{user_id}"
 
-    async def get_history(self, channel_id: int, user_id: int) -> list[dict]:
-        """Return Gemini-formatted conversation turns, oldest first. Empty on any Redis failure."""
+    async def get_history(self, channel_id: int, user_id: int) -> list[ChatMessage]:
+        """Return neutral turns, including older Gemini-shaped Redis entries."""
 
         try:
             raw_items = await self.redis.lrange(
                 self._key(channel_id, user_id), 0, MAX_TURNS * 2 - 1
             )
-        except RedisError as exc:
-            logger.warning("Redis unavailable, skipping chat history: %s", exc)
+        except RedisError:
+            self._warn_unavailable()
             return []
 
-        history: list[dict] = []
+        history: list[ChatMessage] = []
         for raw in raw_items:
             try:
                 item = json.loads(raw)
             except (json.JSONDecodeError, TypeError):
                 continue
-            if isinstance(item, dict):
-                history.append(item)
+            if not isinstance(item, dict):
+                continue
+            role = item.get("role")
+            if role not in {"user", "assistant", "model"}:
+                continue
+            content = item.get("content")
+            if not isinstance(content, str):
+                parts = item.get("parts")
+                if not isinstance(parts, list):
+                    continue
+                content = "".join(
+                    part["text"]
+                    for part in parts
+                    if isinstance(part, dict) and isinstance(part.get("text"), str)
+                )
+            if content:
+                history.append(
+                    {
+                        "role": "user" if role == "user" else "assistant",
+                        "content": content,
+                    }
+                )
         return history
 
     async def append_turn(
@@ -62,8 +92,8 @@ class ChatMemoryService:
 
         history_text = f"[{speaker_label}] {user_text}" if speaker_label else user_text
         entries = (
-            {"role": "user", "parts": [{"text": history_text}]},
-            {"role": "model", "parts": [{"text": model_text}]},
+            {"role": "user", "content": history_text},
+            {"role": "assistant", "content": model_text},
         )
         key = self._key(channel_id, user_id)
 
@@ -73,5 +103,5 @@ class ChatMemoryService:
                 pipe.ltrim(key, -(MAX_TURNS * 2), -1)
                 pipe.expire(key, HISTORY_TTL_SECONDS)
                 await pipe.execute()
-        except RedisError as exc:
-            logger.warning("Redis unavailable, could not save chat history: %s", exc)
+        except RedisError:
+            self._warn_unavailable()

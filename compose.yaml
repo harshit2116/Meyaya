@@ -1,0 +1,64 @@
+name: meyaya
+services:
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["deployment"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: meyaya
+      POSTGRES_DB: meyaya
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meyaya -d meyaya"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  migrate:
+    build: .
+    profiles: ["deployment"]
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DEPLOY_DATABASE_URL:-}
+      REDIS_URL: redis://redis:6379/0
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+  bot:
+    build: .
+    profiles: ["deployment"]
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DEPLOY_DATABASE_URL:-}
+      REDIS_URL: redis://redis:6379/0
+      REDIS_REQUIRED: "true"
+    volumes:
+      - ./bot/private:/app/bot/private:ro
+      - bot_logs:/app/logs
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+volumes:
+  redis_data:
+  postgres_data:
+  bot_logs:

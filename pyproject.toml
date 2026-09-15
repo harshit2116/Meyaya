@@ -14,7 +14,6 @@ dependencies = [
     # is only needed (and only published) for Python 3.13 and newer.
     "audioop-lts>=0.2.2; python_version >= '3.13'",
     "alembic>=1.13",
-    "black>=24.4",
     # Discord voice now requires DAVE end-to-end encryption.  discord.py 2.7
     # provides the DAVE session; the receiver fork decrypts inbound frames with it.
     "discord.py[voice]>=2.7.1",
@@ -32,10 +31,13 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "structlog>=24.1",
     "asyncpg>=0.29",
+    # Alembic uses a synchronous engine after translating the async application URL.
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "black>=24.4",
     "mypy>=1.11",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
@@ -44,6 +46,12 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["bot*"]
+exclude = ["bot.private", "bot.private.*"]
+
+[tool.setuptools.package-data]
+"bot.web" = ["*.html", "*.css", "*.js"]
+"bot.data" = ["*.json", "cards/*.json"]
+"bot" = ["assets/celestial/**/*.png", "assets/celestial/**/*.jpg", "assets/celestial/**/*.txt", "assets/celestial/*.md"]
 
 [tool.ruff]
 line-length = 100

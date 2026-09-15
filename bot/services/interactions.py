@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+import logging
 from random import choice
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,8 @@ from bot.services.klipy import KlipyService
 from bot.services.meyaya_system import MeyayaSystemService
 from bot.repositories.relationships import RelationshipRepository
 from bot.repositories.users import UserRepository
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,36 +67,27 @@ class InteractionService:
         """Update storage and return a response payload for the interaction."""
 
         if actor_id == target_id:
-            message = choice((
-                f"{definition.emoji} You {definition.name} yourself. That is... a choice.",
-                f"{definition.emoji} Self-care {definition.name} moment.",
-            ))
+            message = choice(
+                (
+                    f"{definition.emoji} You {definition.name} yourself. That is... a choice.",
+                    f"{definition.emoji} Self-care {definition.name} moment.",
+                )
+            )
         else:
             message = choice(definition.responses)
-        await self.users.ensure_user(actor_id)
-        await self.users.ensure_user(target_id)
-        actor_stats = await self.users.get_or_create_statistics(actor_id)
-        target_stats = await self.users.get_or_create_statistics(target_id)
-        actor_stats.total_given += 1
-        actor_stats.total_interactions += 1
-        target_stats.total_received += 1
-        target_stats.total_interactions += 1
-        counter_name = f"{definition.name}s"
-        actor_given_field = f"{counter_name}_given"
-        target_received_field = f"{counter_name}_received"
-        if hasattr(actor_stats, actor_given_field):
-            setattr(actor_stats, actor_given_field, getattr(actor_stats, actor_given_field) + 1)
-        if hasattr(target_stats, target_received_field):
-            setattr(target_stats, target_received_field, getattr(target_stats, target_received_field) + 1)
-        count = await self.relationships.increment(actor_id, target_id, definition.name)
-        if self.meyaya_user_id is not None and target_id == self.meyaya_user_id:
-            await self.meyaya_system.apply_interaction(guild_id, actor_id, definition.name)
-        await self.session.commit()
-        gif_url = None
-        # Prefer a live Klipy anime GIF when available for more variety.
-        if self.klipy and definition.gif_query:
-            gif_result = await self.klipy.random_anime_gif(definition.gif_query)
-            gif_url = gif_result.url
+        gif_task = asyncio.create_task(self._find_gif(definition))
+        try:
+            await self.users.record_interaction(actor_id, target_id, definition.name)
+            count = await self.relationships.increment(actor_id, target_id, definition.name)
+            if self.meyaya_user_id is not None and target_id == self.meyaya_user_id:
+                await self.meyaya_system.apply_interaction(guild_id, actor_id, definition.name)
+            await self.session.commit()
+        except BaseException:
+            gif_task.cancel()
+            await asyncio.gather(gif_task, return_exceptions=True)
+            raise
+
+        gif_url = await gif_task
 
         if gif_url is None and definition.gif_urls:
             gif_url = choice(definition.gif_urls)
@@ -103,3 +98,14 @@ class InteractionService:
             count=count,
             title=f"{definition.emoji} {definition.name.title()}!",
         )
+
+    async def _find_gif(self, definition: InteractionDefinition) -> str | None:
+        """Fetch optional media while database writes run in parallel."""
+
+        if self.klipy is None or not definition.gif_query:
+            return None
+        try:
+            return (await self.klipy.random_anime_gif(definition.gif_query)).url
+        except Exception:
+            logger.warning("Interaction GIF lookup failed name=%s", definition.name, exc_info=True)
+            return None

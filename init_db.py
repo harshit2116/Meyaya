@@ -6,13 +6,19 @@ from bot.database.session import build_async_engine
 
 # Import models so SQLAlchemy registers them
 from bot.models import (  # noqa: F401
+    court,
     daily,
+    guild_settings,
     marriage,
     memory,
     meyaya_state,
     relationship,
     server_lore,
     user,
+    usage,
+    request_log,
+    moderation,
+    character_catalog,
 )
 
 

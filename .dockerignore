@@ -1,0 +1,13 @@
+# Allow only public runtime source and migrations into the build context.
+*
+!Dockerfile
+!pyproject.toml
+!README.md
+!alembic.ini
+!alembic/
+!alembic/**
+!bot/
+!bot/**
+bot/private/
+**/__pycache__/
+**/*.pyc

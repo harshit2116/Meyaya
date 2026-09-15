@@ -29,4 +29,6 @@ class RelationshipInteraction(Base):
     user_b_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     interaction_type: Mapped[str] = mapped_column(String(32), nullable=False)
     interaction_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_interaction_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_interaction_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
