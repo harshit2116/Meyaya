@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from bot.app import MeyayaBot
 from bot.services.usage import ChatLimitReached
+from bot.services.chat_blacklist import acknowledge_silently
 from sqlalchemy.exc import SQLAlchemyError
 from bot.data.roleplay_personas import ROLEPLAY_PERSONAS, build_roleplay_instruction
 from bot.utils.embeds import meyaya_embed
@@ -34,12 +35,13 @@ class RoleplayCog(commands.Cog):
     @commands.hybrid_command(
         name="roleplay",
         aliases=["rp"],
-        description="Get a response from an approved roleplay character.",
+        description="Talk to Jungkook or Alya for one message.",
     )
     @app_commands.describe(
         character="Character who should answer",
         message="What you want to say to the character",
     )
+    @commands.guild_only()
     @commands.cooldown(1, 5.0, commands.BucketType.user)
     @discord_context("roleplay")
     async def roleplay(
@@ -52,6 +54,11 @@ class RoleplayCog(commands.Cog):
         """Generate one response and deliver it using the selected RP identity."""
 
         message = message.strip()
+        if await self.bot.chat_blacklist.inspect(
+            ctx.guild.id if ctx.guild else None, ctx.author.id, message
+        ):
+            await acknowledge_silently(ctx)
+            return
         if not message or len(message) > MAX_ROLEPLAY_MESSAGE_LENGTH:
             await ctx.send(
                 embed=meyaya_embed(
@@ -99,6 +106,9 @@ class RoleplayCog(commands.Cog):
                 )
             if generated is None or not generated.text.strip():
                 await self._send_error(ctx, f"{persona.display_name} could not answer right now.")
+                return
+
+            if self.bot.chat_blacklist.is_blocked(ctx.guild.id, ctx.author.id):
                 return
 
             await self._send_as_persona(

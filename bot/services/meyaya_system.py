@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from hashlib import blake2s
 import re
 from typing import Callable
 
@@ -32,6 +33,22 @@ WARM_LANGUAGE_PATTERN = re.compile(
     r"(?:amazing|cute|lovely|sweet))\b"
 )
 APOLOGY_PATTERN = re.compile(r"\b(?:i(?:'m|\s+am)\s+sorry|my\s+bad|sorry\s+meyaya)\b")
+
+NICKNAME_THEMES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("cat", "kitty", "neko"), ("Purradox", "Nine-Lives", "Whiskerplot")),
+    (("cookie", "biscuit", "crumb"), ("Crumbspiracy", "Snack Heist", "Cookie Eclipse")),
+    (("moon", "luna", "lunar"), ("Moonphase", "Lunar Plot", "Moonbeam")),
+    (("star", "nova", "astro"), ("Starlore", "Supernova", "Cosmic Static")),
+    (("ghost", "spirit", "phantom"), ("Boolevard", "Phantom Frequency", "Soft Haunt")),
+    (("dark", "shadow", "night"), ("After Dark", "Eclipse Mode", "Midnight Cut")),
+    (("angel", "heaven", "halo"), ("Halo Glitch", "Cloud Nine", "Heaven's Menace")),
+    (("demon", "devil", "hell"), ("Hex Appeal", "Inferno Lite", "Devilish Detail")),
+    (("king", "queen", "royal"), ("Crown Glitch", "Royal Side Quest", "Throne Energy")),
+    (("sleep", "dream", "yawn"), ("Dream Buffer", "Nap Prophecy", "Sleepy Plot")),
+    (("haru",), ("Haruniverse", "Spring Loaded", "Haru After Hours")),
+    (("ruru",), ("Rurenaissance", "Ruru Roulette", "Ruruphoria")),
+    (("ayaya",), ("Ayayaverse", "Ayayaclysm", "Ayaya Plotline")),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,6 +131,7 @@ class MeyayaSystemService:
         user_id: int,
         content: str = "",
         relationship_signal: str | None = None,
+        display_name: str | None = None,
     ) -> None:
         """Apply familiarity and bounded tone effects from a direct conversation."""
 
@@ -149,7 +167,7 @@ class MeyayaSystemService:
             )
             global_state.mood_changed_at = now
         global_state.updated_at = now
-        self._assign_nickname_if_ready(user_state)
+        self._assign_nickname_if_ready(user_state, display_name)
         await self.session.flush()
 
     @staticmethod
@@ -236,6 +254,7 @@ class MeyayaSystemService:
         guild_id: int | None,
         user_id: int,
         interaction_name: str,
+        display_name: str | None = None,
     ) -> None:
         """Apply an interaction directed at Meyaya to global and user state."""
 
@@ -249,7 +268,7 @@ class MeyayaSystemService:
         user_state.familiarity = self._clamp(user_state.familiarity + effect.familiarity)
         user_state.affection = self._clamp(user_state.affection + effect.affection)
         user_state.annoyance = self._clamp(user_state.annoyance + effect.user_annoyance)
-        self._assign_nickname_if_ready(user_state)
+        self._assign_nickname_if_ready(user_state, display_name)
         user_state.last_interaction_at = now
 
         global_state.energy = self._clamp(global_state.energy + effect.energy)
@@ -532,25 +551,133 @@ class MeyayaSystemService:
             return "chaotic"
         return "normal"
 
-    @staticmethod
-    def _assign_nickname_if_ready(state: MeyayaUserState) -> None:
-        """Give a familiar member one stable nickname and remember it."""
+    @classmethod
+    def _assign_nickname_if_ready(
+        cls,
+        state: MeyayaUserState,
+        display_name: str | None = None,
+        *,
+        force: bool = False,
+        previous: str | None = None,
+    ) -> None:
+        """Give a familiar member one stable nickname rooted in their Discord identity."""
 
         if state.nickname is not None:
             return
-        if state.familiarity < 20 and state.affection < 12:
+        if getattr(state, "nickname_mode", "auto") in {"off", "keep"}:
             return
+        if not force and state.familiarity < 20 and state.affection < 12:
+            return
+        identity = cls._nickname_identity(display_name)
+        if identity is None:
+            # Wait for an interaction path that knows the verified Discord name.
+            return
+        stem, compact = identity
 
         if state.annoyance >= 35:
-            choices = ("Troublemaker", "Little Menace", "Chaos Gremlin", "Problem Child")
+            choices = (
+                f"The {stem} Incident",
+                f"{stem} Unsupervised",
+                f"{stem}.exe",
+                f"{cls._fuse(stem, 'calypse')}",
+                f"{stem} Side Quest",
+                f"Public Nuisance {stem}",
+            )
         elif state.affection >= 25:
-            choices = ("Sunshine", "Sweetpea", "Lovebug", "Angel Bean")
+            choices = (
+                cls._fuse(stem, "mallow"),
+                cls._fuse(stem, "beam"),
+                f"Honey {stem}",
+                f"{stem} Stardust",
+                f"{stem} a la Mode",
+                f"Pocket {stem}",
+            )
         elif state.familiarity >= 50:
-            choices = ("Bestie", "Star", "Buddy", "Mochi")
+            choices = (
+                cls._fuse(stem, "verse"),
+                f"The {stem} Effect",
+                f"{stem} After Hours",
+                f"{stem} Deluxe",
+                f"{stem} Lore Drop",
+                f"Director's Cut {stem}",
+            )
         else:
-            choices = ("Bean", "Spark", "Mochi", "Bubbles")
+            choices = (
+                f"Plot Twist {stem}",
+                cls._fuse(stem, "coded"),
+                f"{stem} in 4K",
+                f"{stem} Side B",
+                cls._fuse(stem, "ology"),
+                f"The {stem} Edition",
+            )
 
-        state.nickname = choices[state.user_id % len(choices)]
+        themed = cls._themed_nicknames(stem, compact)
+        if themed:
+            # Theme matches deserve most of the draw without making every
+            # recognizable name resolve to exactly one nickname.
+            choices = themed + themed + choices
+
+        digest = blake2s(
+            f"nickname:v3:{state.user_id}:{compact}".encode("utf-8"),
+            digest_size=2,
+        ).digest()
+        revision = getattr(state, "nickname_revision", 0) or 0
+        index = (int.from_bytes(digest, "big") + revision) % len(choices)
+        for offset in range(len(choices)):
+            candidate = choices[(index + offset) % len(choices)]
+            if candidate != previous:
+                state.nickname = candidate
+                break
+
+    @classmethod
+    def _themed_nicknames(cls, stem: str, compact: str) -> tuple[str, ...]:
+        matches = []
+        for keywords, ideas in NICKNAME_THEMES:
+            if any(keyword in compact for keyword in keywords):
+                matches.extend(
+                    idea if stem.casefold() in idea.casefold() else f"{stem} {idea}"
+                    for idea in ideas
+                )
+        return tuple(dict.fromkeys(matches))
+
+    @staticmethod
+    def _fuse(stem: str, ending: str) -> str:
+        """Join a name and playful ending without an obvious doubled seam."""
+
+        overlap = 0
+        left = stem.casefold()
+        right = ending.casefold()
+        for size in range(1, min(3, len(left), len(right)) + 1):
+            if left[-size:] == right[:size]:
+                overlap = size
+        return stem + ending[overlap:]
+
+    @staticmethod
+    def _nickname_identity(display_name: str | None) -> tuple[str, str] | None:
+        """Extract a readable name stem and a searchable compact identity."""
+
+        if not display_name or not display_name.strip():
+            return None
+        separated = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", display_name)
+        words = re.findall(r"[^\W\d_]+", separated, flags=re.UNICODE)
+        words = [word for word in words if len(word) >= 2]
+        if not words:
+            return None
+        wrappers = {"x", "xx", "xxx", "the", "its", "im"}
+        candidate = next((word for word in words if word.casefold() not in wrappers), words[0])
+        candidate = re.sub(r"(.)\1{2,}$", r"\1\1", candidate, flags=re.IGNORECASE)
+        if len(candidate) > 12:
+            candidate = candidate[:10]
+        stem = candidate[0].upper() + candidate[1:].lower()
+        compact = "".join(words).casefold()
+        return stem, compact
+
+    @classmethod
+    def _nickname_stem(cls, display_name: str | None) -> str | None:
+        """Compatibility helper for callers that only need the visible stem."""
+
+        identity = cls._nickname_identity(display_name)
+        return identity[0] if identity else None
 
     @staticmethod
     def _scope_id(guild_id: int | None) -> int:

@@ -83,6 +83,7 @@ class InteractionsCog(commands.Cog):
                     chosen_target.id,
                     definition,
                     guild_id=interaction.guild.id,
+                    actor_name=interaction.user.display_name,
                 )
                 await interaction.followup.send(
                     embed=build_interaction_embed(
@@ -129,6 +130,7 @@ class InteractionsCog(commands.Cog):
                     chosen_target.id,
                     definition,
                     guild_id=ctx.guild.id,
+                    actor_name=ctx.author.display_name,
                 )
                 embed, view = self._build_interaction_render(
                     bot, definition, ctx.author, chosen_target, result
@@ -188,7 +190,7 @@ class InteractionsCog(commands.Cog):
 
         return app_commands.Command(
             name="gif",
-            description="Fetch an anime GIF from Klipy.",
+            description="Find an anime GIF for any mood or action.",
             callback=callback,
         )
 
@@ -239,7 +241,7 @@ class InteractionsCog(commands.Cog):
 
         return app_commands.Command(
             name="help",
-            description="List Meyaya's commands and invocation styles.",
+            description="Browse Meyaya's commands and learn how to use them.",
             callback=callback,
         )
 

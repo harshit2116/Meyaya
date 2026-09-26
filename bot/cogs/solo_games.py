@@ -266,7 +266,7 @@ class SoloView(discord.ui.View):
                         "The Cozy Diplomat - you could negotiate peace over a shared cookie.",
                         "The Plot Twist - nobody knows your next move, including you.",
                     )[winner]
-                    
+
             if result:
                 self.closed = True
                 self.clear_items()
@@ -323,18 +323,16 @@ class SoloGamesCog(commands.Cog):
             view.stop()
         self.active.clear()
 
-    @commands.hybrid_command(
-        description="Escape a short adventure using four branching choices. No AI."
-    )
+    @commands.hybrid_command(description="Find a way out through a short branching adventure.")
     async def escape(self, ctx):
         await self.start(ctx, "escape")
 
-    @commands.hybrid_command(description="Inspect clues and accuse one of three suspects. No AI.")
+    @commands.hybrid_command(description="Study the clues and name the culprit.")
     async def detective(self, ctx):
         await self.start(ctx, "detective")
 
     @commands.hybrid_command(
-        description="Answer six funny questions for a playful personality result. No AI."
+        description="Answer six chaotic questions and discover your personality type."
     )
     async def personalitytest(self, ctx):
         await self.start(ctx, "personalitytest")

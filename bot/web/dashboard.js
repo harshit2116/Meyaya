@@ -1,69 +1,304 @@
 "use strict";
-let token = "", servers = [];
-let selectedServer = null, requestCursor = null, requestVersion = 0;
+
+let token = "", servers = [], selectedServer = null, requestCursor = null;
+let requestVersion = 0, memoryOffset = null, nicknameOffset = null;
 const $ = id => document.getElementById(id);
 const notice = message => { $("notice").textContent = message; };
+
 async function api(path, options = {}) {
+  const session = token;
   const response = await fetch(path, {...options, headers: {"Authorization": `Bearer ${token}`, "Content-Type": "application/json"}});
+  if (token !== session) throw new Error("Dashboard locked. Sign in again.");
   if (!response.ok) {
     if (response.status === 401) lock();
-    throw new Error(response.status === 401 ? "Access denied. Check your dashboard token." : `Request failed (${response.status}). Check your settings or retry shortly.`);
+    const detail = await response.text();
+    throw new Error(response.status === 401 ? "Session expired. Sign in again with uwu owner or your access token." : detail || `Request failed (${response.status}).`);
   }
-  return response.json();
+  const data = await response.json();
+  if (token !== session) throw new Error("Dashboard locked. Sign in again.");
+  return data;
 }
-function lock() {closeRequests(); token = ""; servers = []; $("servers").replaceChildren(); $("workspace").hidden = true; $("login").hidden = false; $("connection").textContent = "Locked";}
-function element(tag, text, className) {const el = document.createElement(tag); if (text !== undefined) el.textContent = text; if (className) el.className = className; return el;}
-function metric(label, value) {const el = element("div"); el.append(element("span", label), element("b", String(value))); return el;}
-function render() {
+
+function element(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function metric(label, value) {
+  const node = element("div");
+  node.append(element("span", label), element("b", String(value)));
+  return node;
+}
+
+function lock() {
+  $("safety-state").textContent = "";
+  $("blacklist-items")?.replaceChildren();
+  closeRequests(); token = ""; servers = [];
+  $("servers").replaceChildren(); $("memory-items").replaceChildren(); $("nickname-items").replaceChildren();
+  $("operations-summary").replaceChildren(); $("operations-features").replaceChildren(); $("operations-models").replaceChildren(); $("operations-recent").replaceChildren();
+  $("workspace").hidden = true; $("navigation").hidden = true; $("login").hidden = false;
+  $("connection").textContent = "Locked";
+}
+
+function switchView(name, autoLoad = true) {
+  for (const view of document.querySelectorAll(".view")) view.hidden = view.id !== `view-${name}`;
+  for (const button of document.querySelectorAll(".nav")) button.classList.toggle("active", button.dataset.view === name);
+  const copy = {
+    overview: ["A little bird's-eye view.", "Your servers, activity, and operational controls."],
+    operations: ["The engine room.", "Track model reliability, latency, token usage, and feature traffic."],
+    memories: ["The memory vault.", "Search every permanent fact Meyaya currently stores."],
+    nicknames: ["Her nickname book.", "See who Meyaya knows well enough to name."],
+    blacklist: ["Chat access.", "Review automatic restrictions and restore access when needed."],
+  }[name];
+  $("page-title").textContent = copy[0]; $("page-subtitle").textContent = copy[1];
+  if (autoLoad && name === "memories" && !$("memory-items").children.length) loadMemories(false);
+  if (autoLoad && name === "nicknames" && !$("nickname-items").children.length) loadNicknames(false);
+  if (autoLoad && name === "operations" && !$("operations-summary").children.length) loadOperations();
+  if (autoLoad && name === "blacklist") loadBlacklist();
+}
+
+function populateGuildFilters() {
+  for (const id of ["memory-guild", "nickname-guild", "operations-guild"]) {
+    const select = $(id), selected = select.value;
+    select.replaceChildren(new Option("All servers", ""));
+    for (const server of servers) select.append(new Option(server.name, server.id));
+    if ([...select.options].some(option => option.value === selected)) select.value = selected;
+  }
+}
+
+function renderServers() {
   const query = $("search").value.toLowerCase();
-  const visible = servers.filter(s => `${s.name} ${s.id}`.toLowerCase().includes(query));
+  const visible = servers.filter(server => `${server.name} ${server.id}`.toLowerCase().includes(query));
   $("servers").replaceChildren(); $("empty").hidden = visible.length > 0;
-  for (const s of visible) {
+  for (const server of visible) {
     const card = element("form", undefined, "card");
-    card.append(element("h3", s.name), element("div", s.id, "id"), element("span", s.exempt ? "✦ Main server · Unlimited" : `${s.today_chats} / ${s.limit} AI messages today`, "badge"));
-    const progress = element("progress"); progress.max = Math.max(1, s.limit); progress.value = s.exempt ? 0 : s.today_chats; progress.setAttribute("aria-label", "Daily allowance used"); card.append(progress);
-    const metrics = element("div", undefined, "metrics"); metrics.append(metric("Members", s.members ?? "Unknown"), metric("Commands today", s.today_commands), metric("AI messages / 7 days", s.week_chats), metric("Commands / 7 days", s.week_commands)); card.append(metrics);
-    card.append(element("p", `${s.available ? "Available" : "Unavailable"} · ${s.readable_channels} readable channels · ${s.monitored_channels} monitored · Timeout permission: ${s.can_timeout ? "yes" : "no"}`, "details"));
-    card.append(element("p", `${s.active_games} active games · Voice ${s.voice_active ? "connected" : "disconnected"}`, "details"));
-    const prefixLabel = element("label", "Command prefix"), prefix = element("input"); prefix.value = s.prefix; prefix.maxLength = 10; prefix.required = true; prefixLabel.append(prefix);
-    const limitLabel = element("label", "Daily AI allowance (0 disables chat)"), limit = element("input"); limit.type = "number"; limit.min = "0"; limit.max = "10000"; limit.step = "1"; limit.required = true; limit.value = s.limit; limit.disabled = s.exempt; limitLabel.append(limit);
-    const toggle = element("label", undefined, "toggle"), auto = element("input"); auto.type = "checkbox"; auto.checked = s.autoresponder; toggle.append(auto, element("span", "Automatic replies enabled"));
+    card.append(element("h3", server.name), element("div", server.id, "id"), element("span", server.exempt ? "✦ Main server - Unlimited" : `${server.today_chats} / ${server.limit} Meyaya replies today`, "badge"));
+    const progress = element("progress"); progress.max = Math.max(1, server.limit); progress.value = server.exempt ? 0 : server.today_chats; progress.setAttribute("aria-label", "Daily allowance used"); card.append(progress);
+    const metrics = element("div", undefined, "metrics");
+    metrics.append(metric("Members", server.members ?? "Unknown"), metric("Commands today", server.today_commands), metric("Meyaya replies / 7 days", server.week_chats), metric("Commands / 7 days", server.week_commands), metric("Response success", `${server.model_success_rate}%`), metric("Failed responses", server.model_failures), metric("Average latency", server.model_average_latency_ms === null ? "No data" : `${server.model_average_latency_ms} ms`), metric("Tokens this process", server.model_tokens.toLocaleString())); card.append(metrics);
+    card.append(element("p", `${server.available ? "Available" : "Unavailable"} - ${server.readable_channels} readable - ${server.monitored_channels} monitored - Timeout: ${server.can_timeout ? "yes" : "no"}`, "details"));
+    card.append(element("p", `${server.active_games} active games - Voice ${server.voice_active ? "connected" : "disconnected"}`, "details"));
+    const prefixLabel = element("label", "Command prefix"), prefix = element("input"); prefix.value = server.prefix; prefix.maxLength = 10; prefix.required = true; prefixLabel.append(prefix);
+    const limitLabel = element("label", "Daily Meyaya reply allowance (0 disables chat)"), limit = element("input"); limit.type = "number"; limit.min = "0"; limit.max = "10000"; limit.required = true; limit.value = server.limit; limit.disabled = server.exempt; limitLabel.append(limit);
+    const toggle = element("label", undefined, "toggle"), auto = element("input"); auto.type = "checkbox"; auto.checked = server.autoresponder; toggle.append(auto, element("span", "Automatic replies enabled"));
     const save = element("button", "Save changes", "save"); card.append(prefixLabel, limitLabel, toggle, save);
-    const review = element("button", "View requests →", "quiet save"); review.type = "button";
-    review.addEventListener("click", () => {closeRequests(); selectedServer = s; $("request-title").textContent = `Requests · ${s.name}`; $("request-panel").hidden = false; $("request-panel").scrollIntoView({behavior:"smooth"}); loadRequests(false);}); card.append(review);
-    card.addEventListener("submit", async event => {event.preventDefault(); save.disabled = true; try {await api(`/api/servers/${s.id}`, {method:"PATCH", body:JSON.stringify({prefix:prefix.value, autoresponder:auto.checked, limit:Number(limit.value)})}); notice(`Saved settings for ${s.name}.`); await refresh();} catch(error) {notice(error.message);} finally {save.disabled = false;}});
+    const review = element("button", "View request log", "quiet save"); review.type = "button";
+    review.addEventListener("click", () => { closeRequests(); selectedServer = server; $("request-title").textContent = `Requests - ${server.name}`; $("request-panel").hidden = false; $("request-panel").scrollIntoView({behavior: "smooth"}); loadRequests(false); }); card.append(review);
+    const shortcuts = element("div", undefined, "card-actions");
+    const memories = element("button", "Memories", "quiet"); memories.type = "button";
+    memories.addEventListener("click", () => { $("memory-guild").value = server.id; switchView("memories", false); loadMemories(false); });
+    const nicknames = element("button", "Nicknames", "quiet"); nicknames.type = "button";
+    nicknames.addEventListener("click", () => { $("nickname-guild").value = server.id; switchView("nicknames", false); loadNicknames(false); });
+    shortcuts.append(memories, nicknames); card.append(shortcuts);
+    card.addEventListener("submit", async event => { event.preventDefault(); save.disabled = true; try { await api(`/api/servers/${server.id}`, {method: "PATCH", body: JSON.stringify({prefix: prefix.value, autoresponder: auto.checked, limit: Number(limit.value)})}); notice(`Saved settings for ${server.name}.`); await refresh(); } catch (error) { notice(error.message); } finally { save.disabled = false; } });
     $("servers").append(card);
   }
 }
-async function refresh() {const data = await api("/api/servers"); servers = data.servers; $("connection").textContent = data.ready ? "● Connected" : "Connecting to Discord"; $("total").textContent = servers.length; $("chats").textContent = servers.reduce((n,s)=>n+s.today_chats,0); $("commands").textContent = servers.reduce((n,s)=>n+s.today_commands,0); render();}
-$("login-form").addEventListener("submit", async event => {event.preventDefault(); token = $("token").value; $("token").value = ""; try {await refresh(); $("workspace").hidden = false; $("login").hidden = true; notice("");} catch(error) {notice(error.message);}});
-$("logout").addEventListener("click", () => {lock(); notice("");});
-$("refresh").addEventListener("click", () => refresh().catch(error => notice(error.message)));
-$("search").addEventListener("input", render);
 
-function closeRequests() {requestVersion++; selectedServer = null; requestCursor = null; $("request-panel").hidden = true; $("request-items").replaceChildren(); $("request-state").textContent = ""; $("request-more").hidden = true;}
+async function refresh() {
+  const data = await api("/api/servers"); servers = data.servers;
+  $("connection").textContent = data.ready ? "● Connected" : "Connecting to Discord";
+  $("total").textContent = servers.length; $("chats").textContent = servers.reduce((n, server) => n + server.today_chats, 0); $("commands").textContent = servers.reduce((n, server) => n + server.today_commands, 0);
+  populateGuildFilters(); renderServers();
+}
+
+function closeRequests() {
+  requestVersion++; selectedServer = null; requestCursor = null; $("request-panel").hidden = true;
+  $("request-items").replaceChildren(); $("request-state").textContent = ""; $("request-more").hidden = true;
+}
+
 async function loadRequests(older) {
   if (!selectedServer || !token) return;
   const version = ++requestVersion, guildId = selectedServer.id;
-  $("request-state").textContent = "Loading…"; $("request-more").disabled = true;
+  $("request-state").textContent = "Loading"; $("request-more").disabled = true;
   try {
     const query = older && requestCursor ? `?before=${encodeURIComponent(requestCursor)}` : "";
     const data = await api(`/api/servers/${guildId}/requests${query}`);
-    if (version !== requestVersion || !token || selectedServer?.id !== guildId) return;
+    if (version !== requestVersion || selectedServer?.id !== guildId) return;
     if (!older) $("request-items").replaceChildren();
     for (const item of data.items) {
       const entry = element("article", undefined, "request-entry");
-      entry.append(element("h3", `${item.user_name} · ${item.kind}`));
-      entry.append(element("p", `${new Date(item.created_at).toLocaleString()} · User ${item.user_id} · Channel ${item.channel_id}`, "details"));
-      entry.append(element("pre", item.content, "request-content"));
-      const link = element("a", item.kind === "slash" ? "Open channel in Discord ↗" : "Open message in Discord ↗"); link.href = item.url; link.target = "_blank"; link.rel = "noopener noreferrer"; entry.append(link);
-      $("request-items").append(entry);
+      entry.append(element("h3", `${item.user_name} - ${item.kind}`), element("p", `${new Date(item.created_at).toLocaleString()} - User ${item.user_id} - Channel ${item.channel_id}`, "details"), element("pre", item.content, "request-content"));
+      const link = element("a", item.kind === "slash" ? "Open channel in Discord" : "Open message in Discord"); link.href = item.url; link.target = "_blank"; link.rel = "noopener noreferrer"; entry.append(link); $("request-items").append(entry);
     }
     requestCursor = data.next_cursor; $("request-more").hidden = !requestCursor;
     $("request-state").textContent = $("request-items").children.length ? `${$("request-items").children.length} requests shown` : "No recorded requests in the last seven days.";
-  } catch(error) {if (version === requestVersion) $("request-state").textContent = error.message;}
-  finally {if (version === requestVersion) $("request-more").disabled = false;}
+  } catch (error) { if (version === requestVersion) $("request-state").textContent = error.message; }
+  finally { if (version === requestVersion) $("request-more").disabled = false; }
 }
-$("request-close").addEventListener("click", closeRequests);
-$("request-refresh").addEventListener("click", () => loadRequests(false));
-$("request-more").addEventListener("click", () => loadRequests(true));
+
+function buildQuery(prefix, guild, query, extra = {}) {
+  const params = new URLSearchParams({limit: "50", offset: String(extra.offset || 0)});
+  if (guild) params.set("guild_id", guild);
+  if (query.trim()) params.set("q", query.trim());
+  for (const [key, value] of Object.entries(extra)) if (key !== "offset" && value) params.set(key, value);
+  return `${prefix}?${params}`;
+}
+
+async function loadMemories(older) {
+  const offset = older ? memoryOffset : 0; if (older && offset === null) return;
+  $("memory-state").textContent = "Loading memories"; $("memory-more").disabled = true;
+  try {
+    const data = await api(buildQuery("/api/memories", $("memory-guild").value, $("memory-query").value, {offset, status: $("memory-status").value}));
+    if (!older) $("memory-items").replaceChildren();
+    for (const item of data.items) {
+      const entry = element("article", undefined, "memory-entry");
+      const heading = element("div", undefined, "record-heading"); heading.append(element("h3", `${item.user_name} - ${item.relation}`), element("span", item.status, `status ${item.status}`)); entry.append(heading);
+      entry.append(element("p", `${item.guild_name} - User ${item.user_id} - Memory #${item.id} - ${item.category}:${item.subject}`, "details"));
+      entry.append(element("p", item.value, "record-value"));
+      const meta = element("div", undefined, "record-meta"); meta.append(metric("Confidence", `${item.confidence}%`), metric("Lifecycle", item.lifecycle_reason || "unknown"), metric("Updated", item.updated_at ? new Date(item.updated_at).toLocaleString() : "unknown")); entry.append(meta);
+      if (item.conflict_value) entry.append(element("p", `Conflicting value: ${item.conflict_value}`, "conflict"));
+      if (item.conversation_summary) entry.append(element("details", undefined, "memory-summary"));
+      const details = entry.querySelector("details"); if (details) details.append(element("summary", "Conversation summary"), element("p", item.conversation_summary));
+      if (item.source_url) { const link = element("a", "Open source message"); link.href = item.source_url; link.target = "_blank"; link.rel = "noopener noreferrer"; entry.append(link); }
+      $("memory-items").append(entry);
+    }
+    memoryOffset = data.next_offset; $("memory-more").hidden = memoryOffset === null;
+    $("memory-state").textContent = `${data.total} permanent ${data.total === 1 ? "memory" : "memories"} found`;
+  } catch (error) { $("memory-state").textContent = error.message; }
+  finally { $("memory-more").disabled = false; }
+}
+
+async function loadNicknames(older) {
+  const offset = older ? nicknameOffset : 0; if (older && offset === null) return;
+  $("nickname-state").textContent = "Loading nicknames"; $("nickname-more").disabled = true;
+  try {
+    const data = await api(buildQuery("/api/nicknames", $("nickname-guild").value, $("nickname-query").value, {offset}));
+    if (!older) $("nickname-items").replaceChildren();
+    for (const item of data.items) {
+      const card = element("article", undefined, "nickname-card"); card.append(element("span", item.nickname, "nickname"), element("h3", item.user_name), element("p", `${item.guild_name} - ${item.user_id}`, "details"));
+      const metrics = element("div", undefined, "record-meta"); metrics.append(metric("Familiarity", item.familiarity), metric("Affection", item.affection), metric("Annoyance", item.annoyance)); card.append(metrics); $("nickname-items").append(card);
+    }
+    nicknameOffset = data.next_offset; $("nickname-more").hidden = nicknameOffset === null;
+    $("nickname-state").textContent = `${data.total} ${data.total === 1 ? "nickname" : "nicknames"} found`;
+  } catch (error) { $("nickname-state").textContent = error.message; }
+  finally { $("nickname-more").disabled = false; }
+}
+
+function renderOperationGroup(target, items) {
+  $(target).replaceChildren();
+  if (!items.length) { $(target).append(element("p", "No model requests recorded yet.", "details")); return; }
+  for (const item of items) {
+    const row = element("article", undefined, "operation-row");
+    row.append(element("h4", item.name), element("p", `${item.requests} requests - ${item.successes} successful - ${item.failures} failed`, "details"));
+    const values = element("div", undefined, "operation-values");
+    values.append(element("span", `${item.tokens.toLocaleString()} tokens`), element("span", item.average_latency_ms === null ? "No latency" : `${item.average_latency_ms} ms average`));
+    row.append(values); $(target).append(row);
+  }
+}
+
+async function loadOperations() {
+  api("/api/safety").then(data => {
+    if (!token) return;
+    $("safety-state").textContent = `AI ${data.enabled ? "enabled" : "paused"} · Member cooldown ${data.member_cooldown_seconds}s · Running requests ${data.active_requests}/${data.max_concurrent} · Voice sessions ${data.active_voice_sessions}/${data.max_voice_sessions}`;
+  }).catch(() => { if (token) $("safety-state").textContent = "Safety counters unavailable."; });
+  $("operations-state").textContent = "Loading operational telemetry";
+  try {
+    const guild = $("operations-guild").value;
+    const data = await api(`/api/operations${guild ? `?guild_id=${encodeURIComponent(guild)}` : ""}`);
+    const summary = data.summary;
+    $("operations-summary").replaceChildren();
+    for (const [label, value] of [
+      ["Model requests", summary.requests],
+      ["Success rate", `${summary.success_rate}%`],
+      ["Failures", summary.failures],
+      ["Recovered attempts", summary.recovered_attempts],
+      ["Average latency", summary.average_latency_ms === null ? "No data" : `${summary.average_latency_ms} ms`],
+      ["P95 latency", summary.p95_latency_ms === null ? "No data" : `${summary.p95_latency_ms} ms`],
+      ["Tokens", summary.total_tokens.toLocaleString()],
+      ["Requests last hour", summary.last_hour],
+    ]) {
+      const card = element("article"); card.append(element("span", label), element("strong", String(value))); $("operations-summary").append(card);
+    }
+    renderOperationGroup("operations-features", data.features);
+    renderOperationGroup("operations-models", data.models);
+    $("operations-recent").replaceChildren();
+    if (!data.recent.length) $("operations-recent").append(element("p", "No model outcomes recorded yet.", "details"));
+    for (const item of data.recent) {
+      const row = element("article", undefined, `operation-row outcome-${item.status}`);
+      row.append(element("h4", `${item.feature} - ${item.status}`), element("p", `${new Date(item.timestamp).toLocaleString()} - ${item.model} - ${item.operation}`, "details"));
+      const detail = [item.latency_ms === null ? "No latency" : `${item.latency_ms} ms`, `${item.total_tokens.toLocaleString()} tokens`, item.guild_id ? `Server ${item.guild_id}` : "No server context"];
+      if (item.fallback_reason) detail.push(`Fallback: ${item.fallback_reason}`);
+      row.append(element("p", detail.join(" - "), "operation-detail")); $("operations-recent").append(row);
+    }
+    $("operations-state").textContent = `Process telemetry since ${new Date(data.started_at).toLocaleString()} - no prompts or responses stored`;
+  } catch (error) { $("operations-state").textContent = error.message; }
+}
+
+$("login-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const credential = $("token").value;
+  $("token").value = "";
+  try {
+    const response = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({token: credential})});
+    if (!response.ok) throw new Error("Sign-in failed. Check your token or wait before trying again.");
+    token = (await response.json()).token;
+    await refresh();
+    $("workspace").hidden = false; $("navigation").hidden = false; $("login").hidden = true;
+    notice(""); switchView("overview");
+  } catch (error) { lock(); notice(error.message); }
+});
+
+async function useOwnerLink() {
+  const code = new URLSearchParams(location.hash.slice(1)).get("login");
+  if (!code) return;
+  history.replaceState(null, "", location.pathname);
+  try {
+    const response = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({code})});
+    if (!response.ok) throw new Error("Dashboard link expired or already used. Run uwu owner again.");
+    token = (await response.json()).token;
+    await refresh();
+    $("workspace").hidden = false; $("navigation").hidden = false; $("login").hidden = true;
+    switchView("overview"); notice("");
+  } catch (error) { lock(); notice(error.message); }
+}
+useOwnerLink();
+
+async function loadBlacklist() {
+  try {
+    const data = await api("/api/blacklist");
+    if (!token) return;
+    $("blacklist-items").replaceChildren();
+    for (const item of data.items) {
+      const card = element("article", undefined, "record-card");
+      const server = servers.find(server => server.id === item.guild_id);
+      card.append(element("h3", `Member ${item.user_id} - ${item.active ? "Blocked" : "Restored"}`), element("p", `${server?.name || item.guild_id} - ${item.source} - ${new Date(item.updated_at).toLocaleString()}`), element("p", item.reason));
+      if (item.active) {
+        const button = element("button", "Restore access");
+        button.onclick = async () => {
+          button.disabled = true;
+          try { await api("/api/blacklist", {method: "PATCH", body: JSON.stringify({guild_id: item.guild_id, user_id: item.user_id, active: false})}); await loadBlacklist(); }
+          catch (error) { notice(error.message); button.disabled = false; }
+        };
+        card.append(button);
+      }
+      $("blacklist-items").append(card);
+    }
+    $("blacklist-state").textContent = `${data.items.length} decisions shown`;
+  } catch (error) { notice(error.message); }
+}
+$("blacklist-refresh").addEventListener("click", loadBlacklist);
+$("blacklist-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  try {
+    await api("/api/blacklist", {method: "PATCH", body: JSON.stringify({guild_id: $("blacklist-guild").value, user_id: $("blacklist-user").value, active: true, reason: $("blacklist-reason").value})});
+    await loadBlacklist(); notice("");
+  } catch (error) { notice(error.message); }
+});
+$("logout").addEventListener("click", () => {
+  const session = token;
+  lock(); notice("");
+  if (session) fetch("/api/logout", {method: "POST", headers: {"Authorization": `Bearer ${session}`, "Content-Type": "application/json"}, body: "{}"})
+    .catch(() => notice("Locked locally. Server sign-out could not be confirmed; the session expires within one hour."));
+});
+$("refresh").addEventListener("click", () => refresh().catch(error => notice(error.message)));
+$("search").addEventListener("input", renderServers);
+for (const button of document.querySelectorAll(".nav")) button.addEventListener("click", () => switchView(button.dataset.view));
+$("request-close").addEventListener("click", closeRequests); $("request-refresh").addEventListener("click", () => loadRequests(false)); $("request-more").addEventListener("click", () => loadRequests(true));
+$("memory-refresh").addEventListener("click", () => loadMemories(false)); $("memory-more").addEventListener("click", () => loadMemories(true));
+$("memory-guild").addEventListener("change", () => loadMemories(false)); $("memory-status").addEventListener("change", () => loadMemories(false)); $("memory-query").addEventListener("change", () => loadMemories(false));
+$("nickname-refresh").addEventListener("click", () => loadNicknames(false)); $("nickname-more").addEventListener("click", () => loadNicknames(true));
+$("nickname-guild").addEventListener("change", () => loadNicknames(false)); $("nickname-query").addEventListener("change", () => loadNicknames(false));
+$("operations-refresh").addEventListener("click", loadOperations); $("operations-guild").addEventListener("change", loadOperations);

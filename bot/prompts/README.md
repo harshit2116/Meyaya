@@ -1,6 +1,6 @@
 # Prompt ownership
 
-- `bot/private/personality.v1.json` is the single active Meyaya personality config.
+- `bot/private/personality.v1.json` is the single active, Git-tracked Meyaya personality config.
   `schema_version` describes its structure; increment `revision` when changing its tone.
   Keep traits, humor, speaking style and temperament here, not tool or memory instructions.
 - `bot/private/prompt_rules/v1/` holds private identity context, conversation rules,
@@ -15,9 +15,10 @@ and voice cannot request writes or tools. Proactive replies may read contextual 
 voice adds speech-specific rules. Operational rules take precedence over character tone.
 Python still validates and executes actions, game decisions, and moderation outcomes.
 
-Restart after editing private prompts, which are cached. Git ignores the private configuration;
-copy it separately when deploying. The previous `gemini_persona.txt` and
-`gemini_voice_rules.txt` remain available for reference but are no longer loaded. The module
+Restart after editing prompts, which are cached. The active personality and the sanitized
+`gemini_persona.txt` reference are tracked; neither contains member identities or feature rules.
+All other private configuration remains ignored and must be copied separately when needed.
+The previous `gemini_persona.txt` and `gemini_voice_rules.txt` are no longer loaded. The module
 `bot/data/gemini_persona.py` only re-exports the new builders for compatibility.
 
 Roleplay characters keep their separate private prompts and do not inherit Meyaya's chat tools.

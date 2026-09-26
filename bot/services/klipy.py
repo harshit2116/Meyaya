@@ -68,7 +68,11 @@ class KlipyService:
     """Resolve GIFs from Klipy and return a fresh random result each time."""
 
     def __init__(
-        self, api_key: str, rating: str, http_session: aiohttp.ClientSession, cache: Redis
+        self,
+        api_key: str,
+        rating: str,
+        http_session: aiohttp.ClientSession,
+        cache: Redis | None,
     ) -> None:
         self.api_key = api_key
         self.rating = rating

@@ -35,14 +35,17 @@ class SocialGamesCog(commands.Cog):
         self._last_theme: dict[tuple[int, str], str] = {}
 
     @commands.hybrid_command(name="showdown", description="Start an anonymous comparison showdown.")
+    @commands.guild_only()
     async def showdown(self, ctx: commands.Context) -> None:
         await self._create_game(ctx, "showdown")
 
     @commands.hybrid_command(name="excuse", description="Start an anonymous excuse battle.")
+    @commands.guild_only()
     async def excuse(self, ctx: commands.Context) -> None:
         await self._create_game(ctx, "excuse")
 
     @commands.hybrid_command(name="survive", description="Start an anonymous survival challenge.")
+    @commands.guild_only()
     async def survive(self, ctx: commands.Context) -> None:
         await self._create_game(ctx, "survive")
 

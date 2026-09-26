@@ -45,12 +45,13 @@ class FactCheckCog(commands.Cog):
 
     @commands.hybrid_command(
         name="argumenttimeline",
-        description="Summarize an argument chronologically with links to the evidence.",
+        description="Build a clear timeline from a Discord argument.",
     )
     @app_commands.describe(
         start="Starting message link; written commands can reply instead",
         ending="Optional final message link; defaults to the command time",
     )
+    @commands.guild_only()
     @commands.has_guild_permissions(manage_messages=True)
     @app_commands.default_permissions(manage_messages=True)
     async def argumenttimeline(
@@ -92,6 +93,7 @@ class FactCheckCog(commands.Cog):
         description="Fact-check only one Discord message.",
     )
     @app_commands.describe(message="Message link; written commands can reply instead")
+    @commands.guild_only()
     async def checkclaim(
         self,
         ctx: commands.Context,

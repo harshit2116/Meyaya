@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import asyncio
+from bot.utils.image_work import image_work, BoundedImageGate
 from io import BytesIO
 from collections import OrderedDict
 import discord
@@ -13,7 +14,7 @@ class CelestialCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.cache = OrderedDict()
-        self.render_slots = asyncio.Semaphore(2)
+        self.render_slots = BoundedImageGate()
 
     async def show(self, ctx, kind, member=None, question=""):
         member = member or ctx.author
@@ -31,9 +32,9 @@ class CelestialCog(commands.Cog):
                     )
                 except (discord.HTTPException, TimeoutError):
                     avatar = b""
-                png = await asyncio.to_thread(render_card, result, member.display_name, avatar)
+                png = await image_work(render_card, result, member.display_name, avatar)
                 self.cache[key] = png
-                while len(self.cache) > 64:
+                while len(self.cache) > 8 or sum(map(len, self.cache.values())) > 4 * 1024 * 1024:
                     self.cache.popitem(last=False)
             else:
                 self.cache.move_to_end(key)
@@ -51,9 +52,7 @@ class CelestialCog(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @commands.hybrid_command(
-        description="Your daily image fortune, lucky signs and optional question oracle."
-    )
+    @commands.hybrid_command(description="Reveal today's fortune and ask an optional question.")
     @commands.cooldown(1, 5, commands.BucketType.member)
     async def fortune(self, ctx, member: discord.Member | None = None, *, question: str = ""):
         await self.show(ctx, "fortune", member, question)
@@ -66,9 +65,9 @@ def make_command(name):
     callback.__name__ = name
     callback.__qualname__ = f"CelestialCommands.{name}"
     callback = commands.cooldown(1, 5, commands.BucketType.member)(callback)
-    return commands.hybrid_command(
-        name=name, description=f"Draw your daily {name} image card. No AI."
-    )(callback)
+    return commands.hybrid_command(name=name, description=f"Reveal your daily {name} card.")(
+        callback
+    )
 
 
 CelestialCommands = type(

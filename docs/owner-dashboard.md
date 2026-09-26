@@ -13,10 +13,27 @@ rather than bypassing the cap. Main-server usage is still counted for the dashbo
 
 ## Web dashboard
 
+The dashboard is loopback-only by default. Remote hosting requires an HTTPS `DASHBOARD_PUBLIC_URL`
+and an explicit `DASHBOARD_TRUSTED_PROXIES` list (proxy IPs or narrow CIDRs). The reverse proxy must
+preserve Host, overwrite `X-Forwarded-Proto: https`, and restrict backend access to itself.
+Do not trust arbitrary forwarded headers or expose the backend port publicly. Remote HTTP,
+unknown hosts/proxies, and cross-origin requests are rejected. HTTPS certificates and firewall
+rules must be configured on the host; the bot does not provision them.
+
+Both manual-token and one-use-link login issue a random one-hour session, stored only in browser
+memory. The permanent owner token is not returned. Lock dashboard revokes the current session;
+restarting the bot revokes all sessions. Login attempts are limited to 20 per minute per peer
+(requests through one proxy share that limit). Every API response, including errors, disables
+caching and includes browser security headers. Rotate the environment token and restart if compromised.
+
+Quick access: use the hidden, prefix-only `uwu owner` command. Meyaya DMs the owner a one-use login link valid for 60 seconds. No `/owner` command is registered. For remote hosting, configure `DASHBOARD_PUBLIC_URL` with the dashboard's HTTPS origin; otherwise the link uses localhost. The existing manual token login remains available.
+
+The **Chat blacklist** panel reviews server-local restrictions and restores access. See [Chat access](chat-access.md) for rules and manager commands.
+
 ### Per-server request review
 
 Request logging is enabled by default for all servers, independently of whether the web listener
-is enabled. Each server card has a **View requests** button. Owner-token authentication protects
+is enabled. Each server card has a **View requests** button. Expiring owner-session authentication protects
 both the viewer and API. Browse 50 requests at a time, refresh, or load older requests. Records
 contain the supplied text, author name and ID, channel ID, capture time, and a Discord message link.
 Slash commands record explicit option values and link to the channel, because there is no original

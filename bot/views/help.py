@@ -27,6 +27,10 @@ def build_help_embed(
     """Render the overview, one category, or one exact command."""
 
     if command_name is not None:
+        if command_name.casefold() in {"voice chat", "voices", "vc"}:
+            return build_help_embed(
+                bot_mention=bot_mention, command_prefix=command_prefix, category="Voice Chat"
+            )
         command = COMMANDS_BY_NAME.get(command_name.casefold())
         if command is None:
             return meyaya_embed(
@@ -75,6 +79,7 @@ def build_help_embed(
         "Meyaya's Command Garden",
         description=(
             "Pick a category below or use `/help command:<name>`.\n\n"
+            "Voice controls are under **Voice Chat**.\n"
             f"You can call me with `/`, `{command_prefix}`, or {bot_mention}."
         ),
         color=HELP_COLOR,

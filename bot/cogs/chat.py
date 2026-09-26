@@ -92,6 +92,7 @@ class ChatCog(commands.Cog):
         self._last_self_action: dict[tuple[int, int], float] = {}
         self._started_at = time.monotonic()
         self._guild_activity: dict[int, deque[float]] = {}
+        self._next_activity_cleanup = 0.0
         self._last_proactive_attempt: dict[int, float] = {}
         self._last_proactive_guild: dict[int, float] = {}
         self._last_proactive_channel: dict[int, float] = {}
@@ -104,15 +105,29 @@ class ChatCog(commands.Cog):
             return
         if self.bot.user is None:
             return
+        if self.bot.chat_blacklist.is_blocked(
+            message.guild.id if message.guild else None, message.author.id
+        ):
+            return
+        if message.guild is None:
+            command_context = await self.bot.get_context(message)
+            if not command_context.valid:
+                await message.reply("Meyaya chat is only available inside a server.")
+            return
         moderation = self.bot.get_cog("ModerationCog")
         if moderation and await moderation.should_block(message):
+            return
+        if not self.bot.chat_allowed(message.guild.id, message.channel.id):
+            await self._redirect_chat(message)
             return
         if message.guild is not None:
             now = time.monotonic()
             # Store timestamps only; never collect other channels' message content.
-            for guild_id, recent in list(self._guild_activity.items()):
-                if not recent or now - recent[-1] > PROACTIVE_ACTIVITY_WINDOW_SECONDS:
-                    self._guild_activity.pop(guild_id, None)
+            if now >= self._next_activity_cleanup:
+                self._next_activity_cleanup = now + 60
+                for guild_id, recent in list(self._guild_activity.items()):
+                    if not recent or now - recent[-1] > PROACTIVE_ACTIVITY_WINDOW_SECONDS:
+                        self._guild_activity.pop(guild_id, None)
             activity = self._guild_activity.setdefault(message.guild.id, deque(maxlen=100))
             activity.append(now)
             while activity and now - activity[0] > PROACTIVE_ACTIVITY_WINDOW_SECONDS:
@@ -141,6 +156,9 @@ class ChatCog(commands.Cog):
             message.content,
         ).strip()
         if not user_text:
+            return
+
+        if await self.bot.chat_blacklist.inspect(message.guild.id, message.author.id, user_text):
             return
 
         await self.bot.request_log.record_message(message)
@@ -202,12 +220,21 @@ class ChatCog(commands.Cog):
                 )
                 return
 
+        if not self.bot.chat_allowed(message.guild.id, message.channel.id):
+            return
         if reply is None:
-            await message.reply("😵 *short-circuits* ...I couldn't think of anything, sorry!")
+            if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):
+                return
+            await message.reply("Chat is temporarily busy, unavailable, or at its safety limit. Please try again later.", mention_author=False)
+            return
+
+        if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):
             return
 
         command_ran = await self._run_natural_command(message, reply.commands)
         if not command_ran:
+            if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):
+                return
             rendered_reply = self._render_custom_emojis(reply.text, usable_emojis)
             for chunk in self._chunk_text(rendered_reply):
                 await message.reply(chunk)
@@ -225,6 +252,7 @@ class ChatCog(commands.Cog):
         await self._record_meyaya_conversation(
             guild_id,
             message.author.id,
+            message.author.display_name,
             user_text,
             reply.relationship_signal,
         )
@@ -421,7 +449,11 @@ class ChatCog(commands.Cog):
             if reply is None or self._is_no_reply(reply.text):
                 return
             # An administrator can disable replies while the model is working.
-            if not self.bot.autoresponder_enabled(guild_id):
+            if self.bot.chat_blacklist.is_blocked(guild_id, message.author.id):
+                return
+            if not self.bot.autoresponder_enabled(guild_id) or not self.bot.chat_allowed(
+                guild_id, message.channel.id
+            ):
                 return
 
             rendered_reply = self._render_custom_emojis(reply.text, usable_emojis)
@@ -560,6 +592,29 @@ class ChatCog(commands.Cog):
             attachment_names=attachment_names,
         )
 
+    async def _redirect_chat(self, message: discord.Message) -> None:
+        """Redirect explicit chat only, without model calls or quota consumption."""
+        channels = getattr(self.bot, "_guild_chat_channels", None)
+        bound = channels.get(message.guild.id) if channels is not None else None
+        if not bound or message.mention_everyone:
+            return
+        addressed = self.bot.user in message.mentions
+        if not addressed and message.reference is not None:
+            reply = await self._resolve_reply_context(message)
+            addressed = reply is not None and reply.author_id == self.bot.user.id
+        if not addressed:
+            return
+        if (await self.bot.get_context(message)).valid:
+            return  # Ordinary commands still work outside the chat channel.
+        try:
+            await message.reply(
+                f"Please chat with Meyaya in <#{bound}>.",
+                allowed_mentions=discord.AllowedMentions.none(),
+                mention_author=False,
+            )
+        except discord.HTTPException:
+            logger.debug("Could not send chat-channel redirect channel=%s", message.channel.id)
+
     @staticmethod
     def _reply_aware_prompt(
         current_speaker_label: str,
@@ -641,6 +696,7 @@ class ChatCog(commands.Cog):
         self,
         guild_id: int | None,
         user_id: int,
+        display_name: str,
         content: str,
         relationship_signal: str | None,
     ) -> None:
@@ -654,6 +710,7 @@ class ChatCog(commands.Cog):
                     user_id,
                     content,
                     relationship_signal,
+                    display_name,
                 )
                 await session.commit()
         except SQLAlchemyError:
@@ -695,6 +752,7 @@ class ChatCog(commands.Cog):
                     message.author.id,
                     definition,
                     guild_id=message.guild.id,
+                    actor_name=self.bot.user.display_name,
                 )
 
             actor = self.bot.user
@@ -826,6 +884,7 @@ class ChatCog(commands.Cog):
                     target.id,
                     definition,
                     guild_id=message.guild.id,
+                    actor_name=message.author.display_name,
                 )
 
             embed = build_interaction_embed(

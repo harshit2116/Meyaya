@@ -122,9 +122,10 @@ class CourtCog(commands.Cog):
         )
 
     @commands.hybrid_command(
-        name="court", description="File an entertainment court case against a member."
+        name="court", description="Take a member to Meyaya Court over a server dispute."
     )
     @app_commands.describe(defendant="Member being accused", reason="Charge or reason for the case")
+    @commands.guild_only()
     async def court(
         self,
         ctx: commands.Context,

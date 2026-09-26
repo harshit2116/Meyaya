@@ -20,6 +20,7 @@ class GuildSettings(Base):
         String(10), nullable=False, default="uwu", server_default="uwu"
     )
     updated_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    chat_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     daily_chat_limit: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="40", default=40
     )

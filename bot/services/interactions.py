@@ -63,6 +63,7 @@ class InteractionService:
         target_id: int,
         definition: InteractionDefinition,
         guild_id: int | None = None,
+        actor_name: str | None = None,
     ) -> InteractionResult:
         """Update storage and return a response payload for the interaction."""
 
@@ -80,7 +81,12 @@ class InteractionService:
             await self.users.record_interaction(actor_id, target_id, definition.name)
             count = await self.relationships.increment(actor_id, target_id, definition.name)
             if self.meyaya_user_id is not None and target_id == self.meyaya_user_id:
-                await self.meyaya_system.apply_interaction(guild_id, actor_id, definition.name)
+                await self.meyaya_system.apply_interaction(
+                    guild_id,
+                    actor_id,
+                    definition.name,
+                    display_name=actor_name,
+                )
             await self.session.commit()
         except BaseException:
             gif_task.cancel()

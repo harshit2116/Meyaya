@@ -5,9 +5,11 @@ from __future__ import annotations
 import discord
 from discord import app_commands
 from discord.ext import commands
+from sqlalchemy import select
 
 from bot.app import MeyayaBot
 from bot.models.memory import MemoryStatus
+from bot.models.meyaya_state import MeyayaUserState
 from bot.repositories.memories import MemoryRepository
 from bot.services.memory import MemoryOutcome, MemoryService
 from bot.utils.embeds import meyaya_embed
@@ -21,7 +23,11 @@ class MemoryCog(commands.Cog):
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
 
-    @commands.hybrid_command(name="memories", with_app_command=True)
+    @commands.hybrid_command(
+        name="memories",
+        description="See what Meyaya remembers about you or another member.",
+        with_app_command=True,
+    )
     @app_commands.describe(member="Member to inspect; Manage Server is required for others.")
     async def memories(
         self,
@@ -34,6 +40,9 @@ class MemoryCog(commands.Cog):
         if target.id != ctx.author.id and not self._can_manage_guild(ctx.author):
             await self._send(ctx, "You can only inspect your own Meyaya memories.")
             return
+
+        if ctx.interaction is not None:
+            await ctx.defer(ephemeral=True)
 
         guild_id = ctx.guild.id if ctx.guild else None
         async with self.bot.db_session() as session:
@@ -78,6 +87,61 @@ class MemoryCog(commands.Cog):
             icon="🧠",
         )
         await self._send_memory_list(ctx, embed)
+
+    @commands.hybrid_command(
+        name="nicknames",
+        description="See the nicknames Meyaya has given members in this server.",
+        with_app_command=True,
+    )
+    @commands.guild_only()
+    @commands.cooldown(1, 10, commands.BucketType.member)
+    @app_commands.describe(member="Show only the nickname Meyaya gave this member.")
+    async def nicknames(
+        self,
+        ctx: commands.Context,
+        member: discord.Member | None = None,
+    ) -> None:
+        """Show the stable nicknames Meyaya has assigned in this server."""
+
+        if ctx.interaction is not None:
+            await ctx.defer(ephemeral=True)
+
+        filters = [
+            MeyayaUserState.guild_id == ctx.guild.id,
+            MeyayaUserState.nickname.is_not(None),
+            MeyayaUserState.nickname != "",
+        ]
+        if member is not None:
+            filters.append(MeyayaUserState.user_id == member.id)
+        async with self.bot.db_session() as session:
+            records = (
+                await session.scalars(
+                    select(MeyayaUserState)
+                    .where(*filters)
+                    .order_by(MeyayaUserState.familiarity.desc(), MeyayaUserState.updated_at.desc())
+                    .limit(50)
+                )
+            ).all()
+
+        if not records:
+            target = f" for {member.display_name}" if member else " in this server"
+            await self._send(ctx, f"Meyaya has not given anyone a nickname{target} yet.")
+            return
+
+        lines = []
+        for record in records:
+            guild_member = ctx.guild.get_member(record.user_id)
+            display_name = guild_member.display_name if guild_member else f"User {record.user_id}"
+            safe_name = discord.utils.escape_markdown(display_name)
+            safe_nickname = discord.utils.escape_markdown(record.nickname or "")
+            lines.append(f'**{safe_name}** - "{safe_nickname}"')
+        embed = meyaya_embed(
+            "Meyaya's Nickname Book",
+            "\n".join(lines),
+            tone="soft",
+            icon="🌸",
+        )
+        await self._send(ctx, embed=embed)
 
     @staticmethod
     def _can_manage_guild(author: discord.abc.User) -> bool:

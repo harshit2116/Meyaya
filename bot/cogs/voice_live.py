@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from weakref import WeakValueDictionary
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from bot.app import MeyayaBot
 from bot.data.voices import GEMINI_LIVE_VOICES, canonical_voice_name
 from bot.services.voice_session import VoiceChatSession
+from bot.services.chat_blacklist import acknowledge_silently
+from bot.views.voice_picker import VoicePicker
+from bot.services.ai_guard import AILimitReached
 from bot.utils.embeds import meyaya_embed
 
 logger = logging.getLogger(__name__)
@@ -24,8 +28,51 @@ class VoiceLiveCog(commands.Cog):
         self._sessions: dict[int, VoiceChatSession] = {}
         self._lifecycle_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
         self._voice_overrides: dict[int, str] = {}
+        self._empty_since = {}
+
+    async def cog_load(self):
+        self._empty_watch.start()
+
+    @tasks.loop(seconds=15)
+    async def _empty_watch(self):
+        await self._check_empty_sessions()
+
+    @_empty_watch.before_loop
+    async def _before_empty_watch(self):
+        await self.bot.wait_until_ready()
+
+    async def _check_empty_sessions(self):
+        for guild_id, session in list(self._sessions.items()):
+            channel = getattr(session.voice_client, "channel", None)
+            if channel is None or any(not member.bot for member in channel.members):
+                self._empty_since.pop(guild_id, None)
+                continue
+            marker, since = self._empty_since.get(guild_id, (None, 0))
+            identity = (session, channel.id)
+            if marker != identity:
+                self._empty_since[guild_id] = (identity, time.monotonic())
+                continue
+            if time.monotonic() - since < 180:
+                continue
+            async with self._lifecycle_lock(guild_id):
+                if self._sessions.get(guild_id) is not session or any(
+                    not member.bot for member in channel.members
+                ):
+                    self._empty_since.pop(guild_id, None)
+                    continue
+                try:
+                    await session.close(reason="channel empty for 3 minutes")
+                except Exception:
+                    logger.exception("Automatic voice disconnect failed guild=%s", guild_id)
+                    continue
+                self._sessions.pop(guild_id, None)
+                self._empty_since.pop(guild_id, None)
+        for guild_id in set(self._empty_since) - self._sessions.keys():
+            self._empty_since.pop(guild_id, None)
 
     async def cog_unload(self) -> None:
+        self._empty_watch.cancel()
+        self._empty_since.clear()
         for session in list(self._sessions.values()):
             await session.close(reason="voice cog unload")
         self._sessions.clear()
@@ -73,8 +120,9 @@ class VoiceLiveCog(commands.Cog):
         return channel is not None and channel.id == session.connected_channel_id
 
     @commands.hybrid_command(
-        name="join", description="Join your voice channel and start Gemini live chat"
+        name="join", description="Join your voice channel and start talking with Meyaya."
     )
+    @commands.guild_only()
     async def join(self, ctx: commands.Context) -> None:
         if ctx.guild is None:
             await ctx.send("This command can only be used in a server.", ephemeral=True)
@@ -125,6 +173,11 @@ class VoiceLiveCog(commands.Cog):
             session = self._get_guild_session(ctx.guild.id)
             try:
                 await session.connect_and_start(channel)
+            except AILimitReached as error:
+                await session.close(reason="voice safety limit")
+                self._sessions.pop(ctx.guild.id, None)
+                await ctx.send(str(error), ephemeral=True)
+                return
             except Exception:
                 logger.exception("Failed to start VC live session")
                 await session.close(reason="voice startup failed")
@@ -144,7 +197,8 @@ class VoiceLiveCog(commands.Cog):
             icon="🎙️",
         )
 
-    @commands.hybrid_command(name="leave", description="Leave voice chat and stop Gemini live chat")
+    @commands.hybrid_command(name="leave", description="End voice chat and disconnect Meyaya.")
+    @commands.guild_only()
     async def leave(self, ctx: commands.Context) -> None:
         if ctx.guild is None:
             await ctx.send("This command can only be used in a server.", ephemeral=True)
@@ -175,8 +229,9 @@ class VoiceLiveCog(commands.Cog):
 
     @commands.hybrid_command(
         name="voicecheck",
-        description="Verify Gemini audio playback in the active voice channel",
+        description="Check whether Meyaya can speak in the current voice channel.",
     )
+    @commands.guild_only()
     async def voicecheck(self, ctx: commands.Context) -> None:
         if ctx.guild is None:
             await ctx.send("This command can only be used in a server.", ephemeral=True)
@@ -212,54 +267,141 @@ class VoiceLiveCog(commands.Cog):
             icon="🔊",
         )
 
-    @commands.hybrid_command(name="voice", description="Show or change Gemini live voice")
+    @commands.hybrid_command(
+        name="voice", description="Send a message and hear Meyaya reply in voice chat."
+    )
+    @commands.guild_only()
+    @commands.cooldown(1, 8, commands.BucketType.member)
+    async def voice(self, ctx: commands.Context, *, message: str) -> None:
+        message = message.strip()
+        if len(message) >= 2 and message[0] == message[-1] and message[0] in {'"', "'"}:
+            message = message[1:-1].strip()
+        if await self.bot.chat_blacklist.inspect(ctx.guild.id, ctx.author.id, message):
+            await acknowledge_silently(ctx)
+            return
+        if not message or len(message) > 1000:
+            await ctx.send("Send a message between 1 and 1,000 characters.", ephemeral=True)
+            return
+        session = self.active_session(ctx.guild.id)
+        if session is None:
+            await ctx.send(
+                "Join a voice channel and use `join` first, then `voice <message>`.", ephemeral=True
+            )
+            return
+        channel = getattr(getattr(ctx.author, "voice", None), "channel", None)
+        if channel is None or channel.id != session.connected_channel_id:
+            await ctx.send(
+                "Join Meyaya's voice channel to send her a spoken-reply request.", ephemeral=True
+            )
+            return
+        await ctx.defer(ephemeral=True)
+        try:
+            await asyncio.wait_for(session.reply_to_text(ctx.author.id, message), timeout=15)
+        except (RuntimeError, TimeoutError):
+            await ctx.send(
+                "The voice connection isn't ready. Try again shortly, or reconnect with `leave` and `join`.",
+                ephemeral=True,
+            )
+            return
+        await ctx.send("Sent. Listen for Meyaya in voice chat.", ephemeral=True)
+
+    @commands.hybrid_command(
+        name="listen",
+        description="Turn microphone listening on or off while staying in voice chat.",
+    )
+    @commands.guild_only()
+    @app_commands.choices(
+        mode=[
+            app_commands.Choice(name="On", value="on"),
+            app_commands.Choice(name="Off", value="off"),
+            app_commands.Choice(name="Status", value="status"),
+        ]
+    )
+    async def listen(self, ctx: commands.Context, mode: str = "status"):
+        mode = mode.lower().strip()
+        if mode not in {"on", "off", "status"}:
+            await ctx.send("Use `listen on`, `listen off`, or `listen status`.", ephemeral=True)
+            return
+        session = self.active_session(ctx.guild.id)
+        if session is None:
+            await ctx.send("Use `join` to start voice chat first.", ephemeral=True)
+            return
+        if not self._can_control_session(ctx.author, session):
+            await ctx.send(
+                "Join Meyaya's voice channel or ask a server manager to change listening.",
+                ephemeral=True,
+            )
+            return
+        await ctx.defer(ephemeral=True)
+        if mode != "status":
+            await session.set_listening(mode == "on")
+        await ctx.send(
+            f"Microphone listening is **{'on' if session.listening_enabled else 'off'}**. You can still use `voice <message>`.",
+            ephemeral=True,
+        )
+
+    @commands.hybrid_command(name="voiceset", description="Show or change Meyaya's speaking voice.")
     @app_commands.describe(name="Optional voice name, e.g. Kore, Leda, Aoede")
-    async def voice(self, ctx: commands.Context, name: str | None = None) -> None:
+    @commands.guild_only()
+    async def voiceset(self, ctx: commands.Context, name: str | None = None) -> None:
         if ctx.guild is None:
             await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
 
-        current_voice = self._voice_for_guild(ctx.guild.id)
-        if name is None:
-            await self._send_status(
-                ctx,
-                "Meyaya's Voice",
-                f"Current live voice for this server: **{current_voice}**\n"
-                "Use `/voice name:<voice>` to change new sessions.",
-                tone="soft",
-                icon="🎶",
-            )
-            return
-
         if not self._is_manager(ctx.author):
-            await ctx.send(
-                "Only a server manager can change Meyaya's voice.",
+            await ctx.send("Only a server manager can change Meyaya's voice.", ephemeral=True)
+            return
+        if name is None:
+            view = VoicePicker(self, ctx.author.id, ctx.guild.id)
+            view.message = await ctx.send(
+                f"Current voice: **{self._voice_for_guild(ctx.guild.id)}**\n"
+                "Choose from 30 studio voices below. An active session will disconnect and reconnect in the same channel. "
+                "Your microphone listening setting is preserved. Voice choices reset when the bot restarts.",
+                view=view,
                 ephemeral=True,
             )
             return
+        if name.strip().casefold() != "default" and canonical_voice_name(name) is None:
+            await ctx.send(
+                "Unknown voice. Use `voiceset` to browse the voice menu.", ephemeral=True
+            )
+            return
+        await ctx.defer(ephemeral=True)
+        await ctx.send(await self.change_voice(ctx.guild.id, name), ephemeral=True)
 
-        requested = name.strip()
-        if requested.casefold() == "default":
-            self._voice_overrides.pop(ctx.guild.id, None)
-            selected = self.bot.settings.gemini_voice
-        else:
-            selected = canonical_voice_name(requested)
-            if selected is None:
-                choices = ", ".join(GEMINI_LIVE_VOICES)
-                await ctx.send(
-                    f"That voice is not supported. Available voices: {choices}",
-                    ephemeral=True,
-                )
-                return
-            self._voice_overrides[ctx.guild.id] = selected
-
-        await self._send_status(
-            ctx,
-            "Voice Updated",
-            f"New voice sessions in this server will use **{selected}**.",
-            tone="success",
-            icon="🎶",
-        )
+    async def change_voice(self, guild_id: int, name: str) -> str:
+        reset = name.strip().casefold() == "default"
+        selected = self.bot.settings.gemini_voice if reset else canonical_voice_name(name)
+        if selected is None:
+            raise ValueError("Unsupported voice")
+        async with self._lifecycle_lock(guild_id):
+            if reset:
+                self._voice_overrides.pop(guild_id, None)
+            else:
+                self._voice_overrides[guild_id] = selected
+            previous = self._sessions.get(guild_id)
+            if previous is None:
+                return f"Voice set to **{selected}**. Use `join` when you are ready."
+            channel = getattr(previous.voice_client, "channel", None)
+            listening = previous.listening_enabled
+            self._sessions.pop(guild_id, None)
+            self._empty_since.pop(guild_id, None)
+            await previous.close(reason="voice selection changed")
+            if channel is None:
+                return f"Voice set to **{selected}**. Use `join` to reconnect."
+            replacement = self._get_guild_session(guild_id)
+            replacement.listening_enabled = listening
+            try:
+                await asyncio.wait_for(replacement.connect_and_start(channel), timeout=60)
+            except Exception:
+                logger.exception("Voice selection reconnect failed guild=%s", guild_id)
+                try:
+                    await replacement.close(reason="voice selection reconnect failed")
+                finally:
+                    if self._sessions.get(guild_id) is replacement:
+                        self._sessions.pop(guild_id, None)
+                return f"Voice saved as **{selected}**, but reconnecting failed. Try `join` again."
+            return f"Reconnected with **{selected}**. Microphone listening is **{'on' if listening else 'off'}**."
 
     @staticmethod
     async def _send_status(
@@ -286,6 +428,10 @@ class VoiceLiveCog(commands.Cog):
         if self.bot.user is None:
             return
         if member.id != self.bot.user.id:
+            if not member.bot and getattr(after, "channel", None) is not None:
+                session = self._sessions.get(member.guild.id)
+                if session and session.connected_channel_id == after.channel.id:
+                    self._empty_since.pop(member.guild.id, None)
             return
 
         guild = member.guild

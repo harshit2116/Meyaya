@@ -57,6 +57,18 @@ class MeyayaUserState(Base):
         Integer, nullable=False, default=0, server_default=text("0")
     )
     nickname: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    nickname_mode: Mapped[str] = mapped_column(
+        String(12), nullable=False, default="auto", server_default="auto"
+    )
+    nickname_revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    nickname_mode: Mapped[str] = mapped_column(
+        String(12), nullable=False, default="auto", server_default="auto"
+    )
+    nickname_revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     last_interaction_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -8,7 +8,9 @@ from bot.services.llm import LLMProvider
 from bot.services.model_router import ModelRouter, ModelTier
 
 
-def create_llm_provider(settings: Settings, http_session: aiohttp.ClientSession) -> LLMProvider:
+def create_llm_provider(
+    settings: Settings, http_session: aiohttp.ClientSession, guard=None
+) -> LLMProvider:
     """Build feature routes while keeping credentials and SDKs out of commands."""
     provider = settings.llm_provider.strip().casefold()
     if provider == "gemini":
@@ -17,21 +19,22 @@ def create_llm_provider(settings: Settings, http_session: aiohttp.ClientSession)
                 settings.gemini_api_key,
                 settings.gemini_fast_model,
                 http_session,
-                thinking_budget=0,
+                thinking_budget=None,
+                thinking_level="minimal",
             ),
             ModelTier.BALANCED: GeminiService(
                 settings.gemini_api_key,
                 settings.gemini_model,
                 http_session,
-                thinking_budget=0,
+                thinking_budget=None,
+                thinking_level="minimal",
             ),
             ModelTier.REASONING: GeminiService(
                 settings.gemini_api_key,
                 settings.gemini_reasoning_model,
                 http_session,
-                # Gemini 2.5 Pro cannot disable thinking; 128 is its documented
-                # minimum and leaves room for the bounded JSON response.
-                thinking_budget=128,
+                thinking_budget=None,
+                thinking_level="low",
             ),
             ModelTier.GROUNDED: GeminiService(
                 settings.gemini_api_key,
@@ -40,5 +43,16 @@ def create_llm_provider(settings: Settings, http_session: aiohttp.ClientSession)
                 thinking_budget=0,
             ),
         }
-        return ModelRouter(providers)
+        fallback = (
+            GeminiService(
+                settings.gemini_api_key,
+                settings.gemini_fallback_model,
+                http_session,
+                thinking_budget=None,
+                thinking_level="minimal",
+            )
+            if settings.gemini_fallback_model
+            else None
+        )
+        return ModelRouter(providers, guard=guard, fallback=fallback)
     raise ValueError(f"Unsupported LLM_PROVIDER: {provider!r}. Available: gemini")

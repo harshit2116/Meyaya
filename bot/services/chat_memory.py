@@ -20,7 +20,7 @@ MAX_TURNS = 12  # one turn = one user message + one model reply
 class ChatMemoryService:
     """Stores recent conversation turns per Discord channel."""
 
-    def __init__(self, redis: Redis) -> None:
+    def __init__(self, redis: Redis | None) -> None:
         self.redis = redis
         self._last_warning = float("-inf")
 
@@ -40,6 +40,9 @@ class ChatMemoryService:
 
     async def get_history(self, channel_id: int, user_id: int) -> list[ChatMessage]:
         """Return neutral turns, including older Gemini-shaped Redis entries."""
+
+        if self.redis is None:
+            return []
 
         try:
             raw_items = await self.redis.lrange(
@@ -96,6 +99,9 @@ class ChatMemoryService:
             {"role": "assistant", "content": model_text},
         )
         key = self._key(channel_id, user_id)
+
+        if self.redis is None:
+            return
 
         try:
             async with self.redis.pipeline(transaction=False) as pipe:

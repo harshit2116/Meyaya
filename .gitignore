@@ -3,7 +3,9 @@
 .env.*
 !.env.example
 !*.env.example
-/bot/private/
+/bot/private/*
+!/bot/private/personality.v1.json
+!/bot/private/gemini_persona.txt
 /full_read_me.md
 /FULL_READ_ME.md
 /tests/
@@ -35,6 +37,7 @@ htmlcov/
 coverage.xml
 
 # Runtime data and backups
+/tools/
 /logs/
 /backups/
 *.log
@@ -50,3 +53,10 @@ Thumbs.db
 *.swp
 *.swo
 .vscode/
+node_modules/
+.neon
+
+# Local agent integrations and deployment bundles
+/.agents/
+/skills-lock.json
+/archive/

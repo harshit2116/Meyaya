@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from bot.logging.telemetry import discord_context, event
+from bot.logging.telemetry import discord_context
 
 from datetime import date
-from hashlib import blake2b
 import logging
+from io import BytesIO
 from random import Random
 from secrets import SystemRandom
 
@@ -22,20 +22,6 @@ logger = logging.getLogger(__name__)
 
 RNG = SystemRandom()
 MAX_PROMPT_LENGTH = 300
-DAILY_CACHE_TTL_SECONDS = 172_800
-MAX_LOCAL_FORTUNES = 1024
-
-LUCKY_COLORS = (
-    ("Rose pink", 0xF48FB1),
-    ("Lavender", 0xB197FC),
-    ("Sky blue", 0x74C0FC),
-    ("Mint green", 0x63E6BE),
-    ("Sunshine yellow", 0xFFD43B),
-    ("Peach", 0xFFA94D),
-    ("Cherry red", 0xFF6B6B),
-    ("Moonlight silver", 0xCED4DA),
-)
-
 EIGHT_BALL_ANSWERS = (
     ("It is certain.", 0x57CC99),
     ("Absolutely - no doubt about it.", 0x57CC99),
@@ -47,15 +33,6 @@ EIGHT_BALL_ANSWERS = (
     ("I would not bet the server on it.", 0xF9844A),
     ("Probably not.", 0xF9844A),
     ("Absolutely not, bestie.", 0xF94144),
-)
-
-FORTUNE_FALLBACKS = (
-    "A small surprise is heading your way - act cool when it arrives.",
-    "Your next impulsive idea will work out better than it has any right to.",
-    "Someone will make you smile when you least expect it.",
-    "Good luck is nearby, but it may be disguised as extra effort.",
-    "You will win an argument soon, then realize peace was the better prize.",
-    "A familiar person is about to show you a completely unexpected side.",
 )
 
 RATE_FALLBACKS = (
@@ -88,25 +65,25 @@ class FunCog(commands.Cog):
             await ctx.send("Tell me what everyone is being judged for first.")
             return
 
-        candidates = [member for member in ctx.guild.members if not member.bot]
-        if not candidates:
+        eligible = [member for member in ctx.guild.members if not member.bot]
+        if not eligible:
             await ctx.send("I could not find anyone eligible to choose.")
             return
+        winner = RNG.choice(eligible)
 
-        winner = RNG.choice(candidates)
-        embed = meyaya_embed(
-            "Most Likely To",
-            f"**{scenario}**\n\nMeyaya's pick is {winner.mention}.",
-            icon="🎀",
-        )
+        safe_scenario = discord.utils.escape_mentions(discord.utils.escape_markdown(scenario))
+        embed = meyaya_embed("Most Likely", icon="🎭")
+        embed.add_field(name="The scenario", value=safe_scenario, inline=False)
+        embed.add_field(name="Meyaya's pick", value=winner.mention, inline=False)
         embed.set_thumbnail(url=str(winner.display_avatar.url))
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.hybrid_command(
         name="rate",
         description="Let Meyaya rate anything from 0 to 100.",
     )
     @app_commands.describe(thing="The person, object, or idea to rate")
+    @commands.guild_only()
     async def rate(self, ctx: commands.Context, *, thing: str) -> None:
         thing = self._clean_input(thing)
         if not thing:
@@ -128,7 +105,8 @@ class FunCog(commands.Cog):
 
         embed = meyaya_embed(
             "Meyaya's Rating",
-            f"**{thing}**\n\n## {score}/100\n{score_bar(score)}\n\n{verdict}",
+            f"{discord.utils.escape_markdown(thing)}\n\n"
+            f"**{score}/100**  {score_bar(score)}\n\n{verdict}",
             color=self._rating_color(score),
             icon="💯",
         )
@@ -167,6 +145,22 @@ class FunCog(commands.Cog):
                 date.today().isoformat(),
             ).randint(0, 100)
 
+        await ctx.defer()
+        verdict = self._bestie_verdict(score)
+        ship_cog = self.bot.get_cog("ShipCog")
+        if ship_cog is not None:
+            try:
+                card = await ship_cog._get_ship_card(
+                    user_one, user_two, score, verdict, theme="besties"
+                )
+            except Exception:
+                logger.exception("Failed to render bestiescore card")
+            else:
+                await ctx.send(
+                    file=discord.File(BytesIO(card), filename="bestiescore.png"),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+                return
         embed = meyaya_embed(
             f"{user_one.display_name} + {user_two.display_name}",
             description=(
@@ -218,7 +212,7 @@ class FunCog(commands.Cog):
                 f"Current member display name: {ctx.author.display_name}",
                 "This is a fun command result, not an ordinary conversation.",
                 "Return only the requested visible result with no directives or formatting.",
-            ]
+            ],
         )
         try:
             reply = await llm.generate(
@@ -262,10 +256,6 @@ class FunCog(commands.Cog):
                 "You can still be besties, but somebody needs to start carrying the conversation."
             )
         return "The vibes need emergency repairs. Try bonding over a mutual enemy."
-
-    @staticmethod
-    def _rating_bar(score: int) -> str:
-        return score_bar(score)
 
     @staticmethod
     def _rating_color(score: int) -> int:

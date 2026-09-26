@@ -21,6 +21,7 @@ from datetime import timedelta
 from weakref import WeakValueDictionary
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from bot.app import MeyayaBot
@@ -343,13 +344,19 @@ class MonitorCog(commands.Cog):
         async with self._decision_lock(message.guild.id, message.author.id):
             await self._process_non_english_candidate(message, content)
 
-    @commands.hybrid_command(name="monitor_add", with_app_command=True)
+    @commands.hybrid_command(
+        name="monitor_add",
+        description="Enforce the English-only rule in a channel.",
+        with_app_command=True,
+    )
     @commands.has_guild_permissions(manage_guild=True)
+    @commands.guild_only()
+    @app_commands.default_permissions(manage_guild=True)
     async def monitor_add(self, ctx: commands.Context, channel: discord.abc.GuildChannel) -> None:
         """Add a channel (text or voice) to the monitored list."""
         cid = getattr(channel, "id", None)
-        if cid is None:
-            await ctx.send("Invalid channel")
+        if cid is None or ctx.guild is None or getattr(getattr(channel, "guild", None), "id", None) != ctx.guild.id:
+            await ctx.send("Choose a channel belonging to this server.")
             return
         redis = getattr(self.bot, "redis", None)
         try:
@@ -368,15 +375,21 @@ class MonitorCog(commands.Cog):
             logger.exception("Failed to add channel to monitor set")
             await ctx.send("Failed to add channel to monitor list")
 
-    @commands.hybrid_command(name="monitor_remove", with_app_command=True)
+    @commands.hybrid_command(
+        name="monitor_remove",
+        description="Stop enforcing the English-only rule in a channel.",
+        with_app_command=True,
+    )
     @commands.has_guild_permissions(manage_guild=True)
+    @commands.guild_only()
+    @app_commands.default_permissions(manage_guild=True)
     async def monitor_remove(
         self, ctx: commands.Context, channel: discord.abc.GuildChannel
     ) -> None:
         """Remove a channel from the monitored list."""
         cid = getattr(channel, "id", None)
-        if cid is None:
-            await ctx.send("Invalid channel")
+        if cid is None or ctx.guild is None or getattr(getattr(channel, "guild", None), "id", None) != ctx.guild.id:
+            await ctx.send("Choose a channel belonging to this server.")
             return
         redis = getattr(self.bot, "redis", None)
         try:
@@ -395,14 +408,26 @@ class MonitorCog(commands.Cog):
             logger.exception("Failed to remove channel from monitor set")
             await ctx.send("Failed to remove channel from monitor list")
 
-    @commands.hybrid_command(name="monitor_list", with_app_command=True)
+    @commands.hybrid_command(
+        name="monitor_list",
+        description="Show every channel with English-only monitoring enabled.",
+        with_app_command=True,
+    )
     @commands.has_guild_permissions(manage_guild=True)
+    @commands.guild_only()
+    @app_commands.default_permissions(manage_guild=True)
     async def monitor_list(self, ctx: commands.Context) -> None:
         """List monitored channels."""
-        if not self._channels:
-            await ctx.send("No channels are currently monitored.")
+        if ctx.guild is None:
+            await ctx.send("Use this command inside a server.")
             return
-        mentions = "\n".join(f"- <#{channel_id}>" for channel_id in sorted(self._channels))
+        channels = sorted(channel.id for channel in ctx.guild.channels if channel.id in self._channels)
+        if not channels:
+            await ctx.send("No channels are currently monitored in this server.")
+            return
+        mentions = "\n".join(f"- <#{channel_id}>" for channel_id in channels[:100])
+        if len(channels) > 100:
+            mentions += f"\n...and {len(channels) - 100} more in this server."
         await ctx.send(
             embed=meyaya_embed(
                 "Monitored Channels",

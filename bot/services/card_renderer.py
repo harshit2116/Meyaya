@@ -101,7 +101,13 @@ def header(image, draw, result, name, accent, avatar):
     label(draw, (36, 68, 800, 42), name, 30)
     if avatar:
         try:
-            art = Image.open(BytesIO(avatar)).convert("RGBA")
+            if len(avatar) > 6 * 1024 * 1024:
+                raise ValueError("Avatar is too large")
+            with Image.open(BytesIO(avatar)) as source:
+                if source.width * source.height > 4_000_000:
+                    raise ValueError("Avatar dimensions are too large")
+                source.thumbnail((1024, 1024))
+                art = source.convert("RGBA")
             mask = Image.new("L", (58, 58))
             ImageDraw.Draw(mask).ellipse((0, 0, 57, 57), fill=255)
             art = ImageOps.fit(art, (58, 58))

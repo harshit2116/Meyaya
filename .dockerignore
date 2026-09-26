@@ -3,11 +3,15 @@
 !Dockerfile
 !pyproject.toml
 !README.md
+!requirements.txt
+!start.py
 !alembic.ini
 !alembic/
 !alembic/**
 !bot/
 !bot/**
-bot/private/
+bot/private/*
+!bot/private/personality.v1.json
+!bot/private/gemini_persona.txt
 **/__pycache__/
 **/*.pyc

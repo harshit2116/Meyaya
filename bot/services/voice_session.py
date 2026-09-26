@@ -7,6 +7,7 @@ from collections import deque
 import logging
 import threading
 import time
+from io import BytesIO
 
 try:
     import audioop  # Python <= 3.12
@@ -55,14 +56,26 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
         self._consecutive_speech_frames = 0
         self._utterance_active = False
         self._pre_roll: deque[bytes] = deque(maxlen=SPEECH_CONFIRM_FRAMES)
-        self._utterance_lock = threading.Lock()
+        self._utterance_lock = threading.RLock()
+        self._speaker_id = None
+        self._speaker_last_audio = 0.0
 
     def wants_opus(self) -> bool:
         return False
 
     def write(self, user: discord.Member | discord.User | None, data) -> None:
+        if not getattr(self.owner, "listening_enabled", True) or getattr(
+            self.owner, "_song_playing", False
+        ):
+            return
+        with self._utterance_lock:
+            self._write_speaker(user, data)
+
+    def _write_speaker(self, user, data) -> None:
         self.owner.note_received_frame(user, data)
         if user is None or user.bot:
+            return
+        if self.owner.bot.chat_blacklist.is_blocked(self.owner.guild_id, user.id):
             return
 
         pcm = getattr(data, "pcm", None)
@@ -74,6 +87,18 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
             rms = audioop.rms(pcm, 2)
         except Exception:
             rms = 0
+
+        now = time.monotonic()
+        if self._speaker_id is not None and now - self._speaker_last_audio > 1.2:
+            self.end_utterance()
+        if self._speaker_id is None:
+            if rms < SPEECH_RMS_THRESHOLD:
+                return
+            self._speaker_id = user.id
+        if self._speaker_id != user.id:
+            return
+        if rms >= SPEECH_RMS_THRESHOLD:
+            self._speaker_last_audio = now
 
         if rms >= SPEECH_RMS_THRESHOLD:
             self._consecutive_speech_frames += 1
@@ -110,6 +135,8 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
             self._utterance_active = False
             self._pre_roll.clear()
             self._consecutive_speech_frames = 0
+            self._speaker_id = None
+            self._state = ResampleState()
 
     def cleanup(self) -> None:
         return
@@ -135,6 +162,10 @@ class VoiceChatSession:
         self._user_is_speaking = False
         self._received_discord_audio = False
         self._logged_resample = False
+        self._song_playing = False
+        self.listening_enabled = True
+        self._voice_budget_task = None
+        self._voice_budget_registered = False
 
     @property
     def connected_channel_id(self) -> int | None:
@@ -161,6 +192,11 @@ class VoiceChatSession:
 
         if self.bot.settings.gemini_api_key == "":
             raise RuntimeError("GEMINI_API_KEY is missing")
+
+        if not self._voice_budget_registered:
+            await self.bot.ai_guard.start_voice(self.guild_id)
+            self._voice_budget_registered = True
+            self._voice_budget_task = asyncio.create_task(self._watch_voice_budget())
 
         if self.voice_client is None or not self.voice_client.is_connected():
             self.voice_client = await channel.connect(cls=voice_recv.VoiceRecvClient)
@@ -206,15 +242,35 @@ class VoiceChatSession:
         )
         self._log_dave_state()
 
+    async def _watch_voice_budget(self):
+        """Bound session duration, including silent/paused sessions."""
+        try:
+            for minute in range(1, self.bot.settings.voice_session_minutes + 1):
+                await asyncio.sleep(60)
+                if self._closed:
+                    return
+                if minute >= self.bot.settings.voice_session_minutes:
+                    break
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.warning("Voice session timer failed guild=%s", self.guild_id)
+        await self.close(reason="voice session duration reached")
+
     async def close(self, *, reason: str = "requested") -> None:
         if self._closed:
             return
         self._closed = True
+        if self._voice_budget_task and self._voice_budget_task is not asyncio.current_task():
+            self._voice_budget_task.cancel()
 
         logger.info("Stopping voice chat session guild=%s reason=%s", self.guild_id, reason)
 
         if self._gemini is not None:
-            await self._gemini.stop()
+            try:
+                await self._gemini.stop()
+            except Exception:
+                logger.exception("Voice provider shutdown failed")
             self._gemini = None
 
         self.play_source.close()
@@ -238,8 +294,12 @@ class VoiceChatSession:
 
             self.voice_client = None
 
+        if self._voice_budget_registered:
+            self.bot.ai_guard.end_voice(self.guild_id)
+            self._voice_budget_registered = False
+
     def enqueue_user_audio(self, pcm16: bytes) -> None:
-        if self._closed or self._gemini is None:
+        if self._closed or self._gemini is None or self._song_playing or not self.listening_enabled:
             return
         if not self._received_discord_audio:
             self._received_discord_audio = True
@@ -323,11 +383,86 @@ class VoiceChatSession:
     async def run_voice_check(self) -> None:
         """Verify Gemini output and Discord playback without microphone input."""
 
+        if self._song_playing:
+            raise RuntimeError("Wait until the song finishes before checking voice")
         if self._closed or self._gemini is None:
             raise RuntimeError("No active Gemini Live session")
         await self._gemini.send_text(
             "Say exactly: Voice connection is working. Do not add anything else."
         )
+
+    async def reply_to_text(self, user_id: int, message: str) -> None:
+        if await self.bot.chat_blacklist.inspect(self.guild_id, user_id, message):
+            return
+        if self._song_playing:
+            raise RuntimeError("A song is playing; try again when it finishes")
+        if not self.is_active or self._gemini is None:
+            raise RuntimeError("Voice session is not connected")
+        await self._gemini.send_text(
+            f"A member (Discord ID {user_id}) sent this text to the voice conversation. "
+            f"Reply aloud, briefly and naturally: {message}"
+        )
+
+    async def set_listening(self, enabled: bool) -> None:
+        self.listening_enabled = enabled
+        self._sink.end_utterance()
+        self._user_is_speaking = False
+        if self._end_of_utterance_handle is not None:
+            self._end_of_utterance_handle.cancel()
+            self._end_of_utterance_handle = None
+        if not enabled and self._gemini is not None:
+            self._gemini.clear_input_audio()
+            await self._gemini.signal_audio_end()
+
+    async def play_song(self, audio: bytes, *, executable: str = "ffmpeg") -> None:
+        """Stream decoded music into Discord, then resume the conversation source."""
+        if not self.is_active or self._song_playing:
+            raise RuntimeError("Voice is unavailable or a song is already playing")
+        client = self.voice_client
+        finished = asyncio.get_running_loop().create_future()
+        source = discord.FFmpegPCMAudio(
+            BytesIO(audio),
+            pipe=True,
+            executable=executable,
+            before_options="-nostdin -loglevel error",
+            options="-vn -t 90",
+        )
+        self._song_playing = True
+        self._sink.end_utterance()
+        if self._end_of_utterance_handle is not None:
+            self._end_of_utterance_handle.cancel()
+            self._end_of_utterance_handle = None
+        self._user_is_speaking = False
+        self.play_source.clear()
+
+        def complete(error):
+            if not finished.done():
+                if error:
+                    finished.set_exception(RuntimeError("Song playback failed"))
+                else:
+                    finished.set_result(None)
+
+        try:
+            # VoiceRecvClient.stop() also disables the microphone receiver.
+            client.stop_playing()
+            client.play(
+                source, after=lambda error: self._loop.call_soon_threadsafe(complete, error)
+            )
+            await asyncio.wait_for(finished, timeout=100)
+        finally:
+            client.stop_playing()
+            source.cleanup()
+            self.play_source.clear()
+            self._playback_state = ResampleState()
+            self._sink.end_utterance()
+            self._song_playing = False
+            if not self._closed and client.is_connected():
+                client.play(
+                    self.play_source,
+                    after=lambda error: (
+                        logger.error("Voice playback error: %s", error) if error else None
+                    ),
+                )
 
     def notify_user_speaking(self, user: discord.Member | discord.User) -> None:
         """Handle speech from the receive thread on the bot's asyncio loop."""
@@ -343,7 +478,7 @@ class VoiceChatSession:
     def _on_user_speaking(self, user_id: int) -> None:
         """Reset the utterance timer and interrupt audio once per utterance."""
 
-        if self._closed:
+        if self._closed or self._song_playing or not self.listening_enabled:
             return
 
         # Discord does not reliably provide silent PCM packets after a person stops
@@ -386,7 +521,7 @@ class VoiceChatSession:
         asyncio.run_coroutine_threadsafe(self._gemini.signal_audio_end(), self._loop)
 
     async def _on_gemini_audio(self, pcm24: bytes) -> None:
-        if self._closed:
+        if self._closed or self._song_playing:
             return
         try:
             pcm48 = gemini_pcm_24k_mono_to_discord_pcm_48k_stereo(
@@ -431,7 +566,13 @@ class VoiceChatSession:
         try:
             async with self.bot.db_session() as session:
                 service = MeyayaSystemService(session)
-                await service.record_conversation(self.guild_id, user_id)
+                guild = self.bot.get_guild(self.guild_id)
+                member = guild.get_member(user_id) if guild else None
+                await service.record_conversation(
+                    self.guild_id,
+                    user_id,
+                    display_name=member.display_name if member else None,
+                )
                 await session.commit()
         except SQLAlchemyError:
             logger.exception("Failed to update Meyaya System voice familiarity")

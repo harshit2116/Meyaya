@@ -46,11 +46,13 @@ class GeminiService(LLMProvider):
         http_session: aiohttp.ClientSession,
         *,
         thinking_budget: int | None = 0,
+        thinking_level: str | None = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.http_session = http_session
         self.thinking_budget = thinking_budget
+        self.thinking_level = thinking_level
         self.default_timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
 
     @observe("generate_text")
@@ -83,7 +85,9 @@ class GeminiService(LLMProvider):
         generation_config: dict[str, object] = {
             "maxOutputTokens": max_output_tokens or MAX_OUTPUT_TOKENS,
         }
-        if self.thinking_budget is not None:
+        if self.thinking_level is not None:
+            generation_config["thinkingConfig"] = {"thinkingLevel": self.thinking_level}
+        elif self.thinking_budget is not None:
             generation_config["thinkingConfig"] = {"thinkingBudget": self.thinking_budget}
         payload = {
             "system_instruction": {"parts": [{"text": system_instruction}]},
@@ -143,6 +147,10 @@ class GeminiService(LLMProvider):
                     break
             except (aiohttp.ClientError, TimeoutError) as exc:
                 request_failure(type(exc).__name__, attempt=attempt)
+                if isinstance(exc, TimeoutError):
+                    # Let the router try a different model rather than spending
+                    # another full timeout on the same unavailable endpoint.
+                    return None
                 if attempt < MAX_REQUEST_ATTEMPTS:
                     logger.warning(
                         "Gemini request errored; retrying attempt=%s error=%s",
@@ -220,7 +228,9 @@ class GeminiService(LLMProvider):
         generation_config: dict[str, object] = {
             "maxOutputTokens": max_output_tokens,
         }
-        if self.thinking_budget is not None:
+        if self.thinking_level is not None:
+            generation_config["thinkingConfig"] = {"thinkingLevel": self.thinking_level}
+        elif self.thinking_budget is not None:
             generation_config["thinkingConfig"] = {"thinkingBudget": self.thinking_budget}
         generate_payload = {
             "system_instruction": {"parts": [{"text": system_instruction}]},

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+from bot.utils.command_parameters import member_usage
 
 
 @dataclass(frozen=True, slots=True)
@@ -13,32 +14,37 @@ class HelpCommand:
     description: str
     category: str
 
+    def __post_init__(self):
+        object.__setattr__(self, "usage", member_usage(self.usage))
+
 
 CATEGORY_DESCRIPTIONS: dict[str, str] = {
-    "Social / AI": "Personalized social dialogue.",
-    "Fortune / Tarot": "Daily celestial image cards. No AI.",
-    "Fantasy / Profile": "Collectible-style fantasy image cards. No AI.",
-    "Single Player Games": "Quick logic-based solo games. No AI.",
-    "Essentials": "Profiles, GIF search, and command help.",
-    "Social Reactions": "Send expressive interactions to another member.",
-    "Daily Picks": "Results that stay consistent for the current day.",
-    "Fun and Scores": "Quick predictions, ratings, and compatibility results.",
-    "Relationships": "Meyaya's marriage and relationship features.",
-    "Multiplayer Games": "Anonymous lobby games judged after everyone submits.",
-    "Meyaya Court": "Entertainment-only courtroom cases and verdicts.",
-    "Fact Checking": "Source-backed analysis of selected Discord claims and arguments.",
-    "Memory": "Inspect or remove your permanent Meyaya memories.",
-    "Roleplay": "Chat with an approved character through a separate RP identity.",
-    "Voice Chat": "Control and diagnose Meyaya's live voice connection.",
-    "Server Admin": "Manage server settings and inspect Meyaya's service health.",
+    "Social": "Roasts, compliments, rankings, and impressions.",
+    "Fortune / Tarot": "Fortunes, tarot readings, and fate cards.",
+    "Fantasy / Profile": "Character summons and spirit guardians.",
+    "Single Player Games": "Short adventures, mysteries, and personality quizzes.",
+    "Essentials": "The best place to start with Meyaya.",
+    "Profile Studio": "Review a profile or turn its style into a card.",
+    "Social Reactions": "Hug, tease, cheer, or react to another member.",
+    "Daily Picks": "A new set of server picks every day.",
+    "Fun and Scores": "Ratings, predictions, and compatibility scores.",
+    "Relationships": "Proposals, marriages, vows, and divorce.",
+    "Multiplayer Games": "Lobby games where everyone submits an answer.",
+    "Meyaya Court": "Put a server dispute on trial for fun.",
+    "Fact Checking": "Check a claim against reliable sources.",
+    "Memory": "See what Meyaya remembers and the nicknames she gives.",
+    "Roleplay": "Talk to one of Meyaya's available characters.",
+    "Voice Chat": "Invite Meyaya into a voice channel and talk with her.",
+    "Server Admin": "Server settings, moderation, monitoring, and lockdowns.",
 }
 
 CATEGORY_EMOJIS: dict[str, str] = {
-    "Social / AI": "💬",
+    "Social": "💬",
     "Fortune / Tarot": "🔮",
     "Fantasy / Profile": "🌙",
     "Single Player Games": "🎲",
     "Essentials": "🌸",
+    "Profile Studio": "🎨",
     "Social Reactions": "🫶",
     "Daily Picks": "📅",
     "Fun and Scores": "✨",
@@ -55,7 +61,8 @@ CATEGORY_EMOJIS: dict[str, str] = {
 # User-facing navigation order. Keep everyday commands first and operational tools last.
 CATEGORY_ORDER: tuple[str, ...] = (
     "Essentials",
-    "Social / AI",
+    "Profile Studio",
+    "Social",
     "Social Reactions",
     "Fun and Scores",
     "Daily Picks",
@@ -73,8 +80,9 @@ CATEGORY_ORDER: tuple[str, ...] = (
 )
 
 COMMAND_ORDER: dict[str, tuple[str, ...]] = {
-    "Essentials": ("help", "profile", "gif"),
-    "Social / AI": ("roast", "compliment", "rank", "legacy", "impersonate"),
+    "Essentials": ("help", "profile", "nickname", "gif"),
+    "Profile Studio": ("profilecheck", "aura", "palette", "duostyle", "callingcard"),
+    "Social": ("roast", "compliment", "rank", "impersonate"),
     "Social Reactions": (
         "hug",
         "pat",
@@ -107,12 +115,16 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
     "Multiplayer Games": ("showdown", "survive", "excuse", "endgame"),
     "Meyaya Court": ("court", "setcourt", "removecourt"),
     "Roleplay": ("roleplay",),
-    "Memory": ("memories",),
+    "Memory": ("memories", "nicknames"),
     "Fact Checking": ("checkclaim",),
-    "Voice Chat": ("join", "voice", "voicecheck", "leave"),
+    "Voice Chat": ("join", "listen", "voice", "voiceset", "voicecheck", "leave"),
     "Server Admin": (
+        "serversetup",
+        "serverdashboard",
+        "chatblacklist",
         "prefix",
         "autoresponder",
+        "chatbind",
         "monitor_add",
         "monitor_list",
         "monitor_remove",
@@ -127,91 +139,177 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
 
 
 COMMANDS: tuple[HelpCommand, ...] = (
-    HelpCommand("roast", "roast [member]", "A gentle context-aware roast.", "Social / AI"),
-    HelpCommand("compliment", "compliment [member]", "A warm or funny compliment.", "Social / AI"),
-    HelpCommand("legacy", "legacy [member]", "Your fictional server legacy.", "Social / AI"),
+    HelpCommand("serversetup", "serversetup", "Set up chat access, automatic replies, and moderation with a guided menu.", "Server Admin"),
+    HelpCommand("serverdashboard", "serverdashboard", "See this server's daily allowance, remaining messages, activity, and settings.", "Server Admin"),
+    HelpCommand(
+        "profilecheck",
+        "profilecheck [member]",
+        "Score a member's avatar, banner, decoration, and overall profile look.",
+        "Profile Studio",
+    ),
+    HelpCommand(
+        "aura",
+        "aura [member]",
+        "Turn a member's profile colors into a personal aura card.",
+        "Profile Studio",
+    ),
+    HelpCommand(
+        "palette",
+        "palette [member]",
+        "Build a color palette from a member's avatar and banner.",
+        "Profile Studio",
+    ),
+    HelpCommand(
+        "duostyle",
+        "duostyle @first @second",
+        "See how well two members' profile styles match.",
+        "Profile Studio",
+    ),
+    HelpCommand(
+        "callingcard",
+        "callingcard [member]",
+        "Make a collectible card from a profile and Meyaya bond.",
+        "Profile Studio",
+    ),
+    HelpCommand(
+        "roast", "roast [member]", "Let Meyaya roast a member using their server antics.", "Social"
+    ),
+    HelpCommand(
+        "compliment",
+        "compliment [member]",
+        "Give a member a personal compliment with a funny twist.",
+        "Social",
+    ),
     HelpCommand(
         "summon",
         "summon [member]",
-        "Fantasy class, rarity and passive ability.",
+        "Summon an anime character with a rarity, class, traits, and passive.",
         "Fantasy / Profile",
     ),
     HelpCommand(
         "impersonate",
         "impersonate @member <message>",
-        "Send your exact text with their name/avatar, then delete your command. No AI.",
-        "Social / AI",
+        "Post your message with the chosen member's name and avatar.",
+        "Social",
     ),
     HelpCommand(
-        "tarot", "tarot [member]", "A three-card entertainment reading.", "Fortune / Tarot"
+        "tarot",
+        "tarot [member]",
+        "Draw three cards for the past, present, and future.",
+        "Fortune / Tarot",
     ),
-    HelpCommand("fate", "fate [member]", "Your fantasy fate archetype.", "Fortune / Tarot"),
     HelpCommand(
-        "guardian", "guardian [member]", "Your spirit guardian and power.", "Fantasy / Profile"
+        "fate",
+        "fate [member]",
+        "Reveal a member's fate, strength, path, and next chapter.",
+        "Fortune / Tarot",
+    ),
+    HelpCommand(
+        "guardian",
+        "guardian [member]",
+        "Reveal a member's spirit guardian, blessing, and weakness.",
+        "Fantasy / Profile",
     ),
     HelpCommand(
         "rank",
         "rank @first @second [third] [fourth] [fifth]",
-        "Rank three members in a ridiculous category.",
-        "Social / AI",
+        "Rank two to five members in a ridiculous category.",
+        "Social",
     ),
-    HelpCommand("escape", "escape", "A local branching escape adventure.", "Single Player Games"),
     HelpCommand(
-        "detective", "detective", "Clues, three suspects and one accusation.", "Single Player Games"
+        "escape",
+        "escape",
+        "Find a way out through a short branching adventure.",
+        "Single Player Games",
+    ),
+    HelpCommand(
+        "detective",
+        "detective",
+        "Study the clues, question three suspects, and name the culprit.",
+        "Single Player Games",
     ),
     HelpCommand(
         "personalitytest",
         "personalitytest",
-        "Six funny questions with a local scored result.",
+        "Answer six chaotic questions and discover your personality type.",
         "Single Player Games",
     ),
     HelpCommand(
         "argumenttimeline",
         "argumenttimeline [start] [ending]",
-        "Moderator: review an argument in order with evidence links.",
+        "Turn a Discord argument into a clear timeline with message links.",
+        "Server Admin",
+    ),
+    HelpCommand(
+        "chatblacklist",
+        "chatblacklist <member> [block|unblock|status] [reason]",
+        "Manage a member's access to Meyaya in this server.",
         "Server Admin",
     ),
     HelpCommand(
         "moderation",
         "moderation [feature] [enabled]",
-        "Configure 3-day probation, cross-channel spam and external invite rules.",
+        "Manage new-member probation, cross-channel spam, and invite blocking.",
         "Server Admin",
     ),
     HelpCommand(
         "lockdown",
         "lockdown [channel]",
-        "Lock one text channel and save its original permissions.",
+        "Lock one text channel until it is unlocked again.",
         "Server Admin",
     ),
-    HelpCommand("unlock", "unlock [channel]", "Restore a single-channel lockdown.", "Server Admin"),
+    HelpCommand(
+        "unlock",
+        "unlock [channel]",
+        "Unlock a channel and restore its permissions.",
+        "Server Admin",
+    ),
     HelpCommand(
         "raidlockdown",
         "raidlockdown",
-        "Lock all server text channels, including new ones during the raid.",
+        "Lock every text channel during a raid.",
         "Server Admin",
     ),
     HelpCommand(
         "raidunlock",
         "raidunlock",
-        "Restore raid lockdowns while keeping individual locks.",
+        "End a raid lockdown and restore channel permissions.",
+        "Server Admin",
+    ),
+    HelpCommand(
+        "chatbind",
+        "chatbind [channel|server|status] [#channel]",
+        "Choose where Meyaya chats: one channel or the entire server.",
         "Server Admin",
     ),
     HelpCommand(
         "autoresponder",
         "autoresponder [enable|disable|status]",
-        "Manage occasional automatic replies that adapt to server activity.",
+        "Turn Meyaya's occasional server replies on or off.",
         "Server Admin",
     ),
     HelpCommand(
-        "help", "help [command]", "Browse every command or inspect one command.", "Essentials"
+        "help", "help [command]", "Browse every command or look up one command.", "Essentials"
     ),
     HelpCommand(
         "profile",
         "profile [member]",
-        "Show Discord, social, marriage, mood, and Meyaya bond details.",
+        "See a member's Discord details, relationships, activity, and Meyaya bond.",
         "Essentials",
     ),
     HelpCommand("gif", "gif <query>", "Find a GIF matching a search query.", "Essentials"),
+    HelpCommand(
+        "nickname",
+        "nickname [status|refresh|keep|reroll|reject|on]",
+        "Control your Meyaya nickname in this server.",
+        "Essentials",
+    ),
+    HelpCommand(
+        "listen",
+        "listen [on|off|status]",
+        "Toggle microphone listening while staying in voice chat.",
+        "Voice Chat",
+    ),
     HelpCommand("hug", "hug [member]", "Give someone a warm hug.", "Social Reactions"),
     HelpCommand("kiss", "kiss [member]", "Give someone a playful kiss.", "Social Reactions"),
     HelpCommand("pat", "pat [member]", "Give someone a comforting pat.", "Social Reactions"),
@@ -242,14 +340,14 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "React to someone's antics with a facepalm.",
         "Social Reactions",
     ),
-    HelpCommand("iq", "iq [member]", "Show a member's stable daily IQ score.", "Daily Picks"),
-    HelpCommand("dumb", "dumb", "Reveal today's dumbest eligible member.", "Daily Picks"),
-    HelpCommand("smart", "smart", "Reveal today's smartest eligible member.", "Daily Picks"),
+    HelpCommand("iq", "iq [member]", "Give a member their IQ score for today.", "Daily Picks"),
+    HelpCommand("dumb", "dumb", "Reveal today's dumbest member.", "Daily Picks"),
+    HelpCommand("smart", "smart", "Reveal today's smartest member.", "Daily Picks"),
     HelpCommand("clown", "clown", "Reveal today's official server clown.", "Daily Picks"),
     HelpCommand(
         "ship",
         "ship <member> <member>",
-        "Roll a fresh romantic compatibility score.",
+        "Measure the romantic chemistry between two members.",
         "Fun and Scores",
     ),
     HelpCommand(
@@ -261,7 +359,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "fortune",
         "fortune [member] [question]",
-        "Reveal your stable daily fortune and lucky signs.",
+        "Reveal today's fortune, lucky signs, omen, and advice.",
         "Fortune / Tarot",
     ),
     HelpCommand(
@@ -270,7 +368,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "bestiescore",
         "bestiescore <member> [other]",
-        "Show today's friendship score for two members.",
+        "Measure today's friendship energy between two members.",
         "Fun and Scores",
     ),
     HelpCommand(
@@ -288,7 +386,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "marriage",
         "marriage [member]",
-        "Show a marriage, time together, and next anniversary.",
+        "See a member's spouse, time together, and next anniversary.",
         "Relationships",
     ),
     HelpCommand(
@@ -300,7 +398,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "divorce",
         "divorce",
-        "Open a confirmation before ending your marriage.",
+        "End your marriage after a confirmation.",
         "Relationships",
     ),
     HelpCommand(
@@ -321,13 +419,13 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "endgame",
         "endgame",
-        "End the active social game in this channel as its host.",
+        "End the game currently running in this channel.",
         "Multiplayer Games",
     ),
     HelpCommand(
         "court",
         "court <member> <reason>",
-        "File an entertainment-only case in the court channel.",
+        "Take another member to Meyaya Court.",
         "Meyaya Court",
     ),
     HelpCommand(
@@ -339,25 +437,31 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "removecourt",
         "removecourt",
-        "Disable the configured court channel for this server.",
+        "Remove this server's court channel.",
         "Meyaya Court",
     ),
     HelpCommand(
         "checkclaim",
         "checkclaim [message]",
-        "Fact-check only one replied-to or linked Discord message.",
+        "Check one replied-to or linked message against reliable sources.",
         "Fact Checking",
     ),
     HelpCommand(
         "memories",
         "memories [member]",
-        "Privately inspect categorized permanent memories.",
+        "Privately see what Meyaya remembers about a member.",
+        "Memory",
+    ),
+    HelpCommand(
+        "nicknames",
+        "nicknames [member]",
+        "See the nicknames Meyaya has given members in this server.",
         "Memory",
     ),
     HelpCommand(
         "roleplay",
         "roleplay <jungkook|alya> <message>",
-        "Get a one-message response from Jungkook RP or Alya RP.",
+        "Talk to Jungkook or Alya for one message.",
         "Roleplay",
     ),
     HelpCommand(
@@ -365,12 +469,21 @@ COMMANDS: tuple[HelpCommand, ...] = (
     ),
     HelpCommand("leave", "leave", "Stop live voice chat and disconnect Meyaya.", "Voice Chat"),
     HelpCommand(
-        "voice", "voice [name]", "Show or change the voice used for new sessions.", "Voice Chat"
+        "voice",
+        "voice <message>",
+        "Send a text message and hear Meyaya reply in your voice channel.",
+        "Voice Chat",
+    ),
+    HelpCommand(
+        "voiceset",
+        "voiceset [name]",
+        "Choose a speaking voice from a menu and reconnect immediately.",
+        "Voice Chat",
     ),
     HelpCommand(
         "voicecheck",
         "voicecheck",
-        "Test Gemini audio playback in the active voice channel.",
+        "Check whether Meyaya can speak in the current voice channel.",
         "Voice Chat",
     ),
     HelpCommand(

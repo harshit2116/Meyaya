@@ -28,14 +28,19 @@ from bot.services.klipy import KlipyService
 from bot.services.marriage import MarriageService
 from bot.repositories.guild_settings import GuildSettingsRepository
 from bot.utils.embeds import meyaya_embed
-from bot.services.usage import UsageService, is_silence
+from bot.utils.image_work import ImageBusy
+from bot.utils.command_parameters import normalize_member_parameters
+from bot.services.usage import ChatLimitReached, UsageService, is_silence
 from bot.services.request_log import RequestLogService, slash_content
+from bot.services.profile_aesthetic import ProfileAestheticService
+from bot.services.chat_blacklist import ChatBlacklistService
+from bot.services.ai_guard import AIGuard
 
 logger = logging.getLogger(__name__)
 
 HTTP_TIMEOUT = aiohttp.ClientTimeout(total=30, connect=10)
-HTTP_CONNECTION_LIMIT = 100
-HTTP_CONNECTIONS_PER_HOST = 20
+HTTP_CONNECTION_LIMIT = 20
+HTTP_CONNECTIONS_PER_HOST = 5
 
 
 DEFAULT_COMMAND_PREFIX = "uwu"
@@ -75,15 +80,20 @@ class MeyayaBot(commands.Bot):
             case_insensitive=True,
             intents=intents,
             help_command=None,
+            max_messages=settings.discord_message_cache_size,
+            chunk_guilds_at_startup=settings.discord_chunk_on_startup,
         )
         self.settings = settings
         self.started_at = time.monotonic()
         self._guild_prefixes: dict[int, str] = {}
         self._guild_autoresponders: dict[int, bool] = {}
+        self._guild_chat_channels: dict[int, int | None] | None = None
         self.engine = build_async_engine(settings.database_url)
         self.session_factory: async_sessionmaker[AsyncSession] = build_session_factory(self.engine)
         self.usage = UsageService(self.session_factory, settings.quota_exempt_guild_id)
         self.request_log = RequestLogService(self.session_factory)
+        self.chat_blacklist = ChatBlacklistService(self.session_factory)
+        self.ai_guard = AIGuard(self.session_factory, settings)
         self._request_log_maintenance = None
         self.dashboard = None
         self.redis: Redis | None = None
@@ -91,7 +101,16 @@ class MeyayaBot(commands.Bot):
         self._klipy_service: KlipyService | None = None
         self._chat_memory_service: ChatMemoryService | None = None
         self._llm_provider: LLMProvider | None = None
+        self._profile_aesthetic_service: ProfileAestheticService | None = None
         self.tree.on_error = self.on_app_command_error
+        self.tree.interaction_check = self._blacklist_interaction_check
+
+    async def _blacklist_interaction_check(self, interaction):
+        if self.chat_blacklist.is_blocked(interaction.guild_id, interaction.user.id):
+            await interaction.response.defer(ephemeral=True)
+            await interaction.delete_original_response()
+            return False
+        return True
 
     @asynccontextmanager
     async def db_session(self) -> AsyncSession:
@@ -103,6 +122,7 @@ class MeyayaBot(commands.Bot):
     async def setup_hook(self) -> None:
         """Load cogs and synchronize application commands."""
 
+        await self.chat_blacklist.load()
         if self.settings.dashboard_enabled:
             from bot.web.dashboard import Dashboard
 
@@ -116,12 +136,14 @@ class MeyayaBot(commands.Bot):
             logger.info("Redis connected")
         except RedisError:
             logger.warning(
-                "Redis unavailable. Start Redis and check REDIS_URL; cache requests reconnect automatically."
+                "Redis unavailable. Continuing without short-term cache for this process."
             )
             if self.settings.redis_required:
                 raise RuntimeError(
                     "Redis is required for this deployment but is unavailable"
                 ) from None
+            await self.redis.aclose()
+            self.redis = None
         connector = aiohttp.TCPConnector(
             limit=HTTP_CONNECTION_LIMIT,
             limit_per_host=HTTP_CONNECTIONS_PER_HOST,
@@ -141,7 +163,8 @@ class MeyayaBot(commands.Bot):
             self.redis,
         )
         self._chat_memory_service = ChatMemoryService(self.redis)
-        self._llm_provider = create_llm_provider(self.settings, self.http_session)
+        self._llm_provider = create_llm_provider(self.settings, self.http_session, self.ai_guard)
+        self._profile_aesthetic_service = ProfileAestheticService(self)
         await self._load_guild_prefixes()
         self._request_log_maintenance = asyncio.create_task(
             self.request_log.maintenance(), name="request-log-retention"
@@ -149,6 +172,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.interactions")
         await self.load_extension("bot.cogs.daily")
         await self.load_extension("bot.cogs.profile")
+        await self.load_extension("bot.cogs.profile_studio")
         await self.load_extension("bot.cogs.ship")
         await self.load_extension("bot.cogs.fun")
         await self.load_extension("bot.cogs.member_fun")
@@ -167,6 +191,8 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.voice_live")
         await self.load_extension("bot.cogs.admin")
         await self.load_extension("bot.cogs.moderation")
+        await self.load_extension("bot.cogs.presence")
+        normalize_member_parameters(self)
         synced = await self.tree.sync()
         logger.info("Synced %s global slash commands", len(synced))
         if self.settings.guild_id:
@@ -214,7 +240,9 @@ class MeyayaBot(commands.Bot):
         if isinstance(error, commands.CommandNotFound):
             return
         original = getattr(error, "original", error)
-        if isinstance(original, commands.CommandOnCooldown):
+        if isinstance(original, ImageBusy):
+            message = str(original)
+        elif isinstance(original, commands.CommandOnCooldown):
             message = f"That command needs a tiny break. Try again in {original.retry_after:.1f}s."
         elif isinstance(original, commands.MissingPermissions):
             message = "You do not have the server permissions needed for that command."
@@ -247,7 +275,9 @@ class MeyayaBot(commands.Bot):
         """Return the same friendly error language for slash commands."""
 
         original = getattr(error, "original", error)
-        if isinstance(original, discord.app_commands.CommandOnCooldown):
+        if isinstance(original, ImageBusy):
+            message = str(original)
+        elif isinstance(original, discord.app_commands.CommandOnCooldown):
             message = f"That command needs a tiny break. Try again in {original.retry_after:.1f}s."
         elif isinstance(original, discord.app_commands.MissingPermissions):
             message = "You do not have the server permissions needed for that command."
@@ -291,8 +321,17 @@ class MeyayaBot(commands.Bot):
 
         return self._llm_provider
 
+    def build_profile_aesthetic_service(self) -> ProfileAestheticService:
+        """Return the shared public-profile analyzer and its short-lived asset cache."""
+
+        if self._profile_aesthetic_service is None:
+            self._profile_aesthetic_service = ProfileAestheticService(self)
+        return self._profile_aesthetic_service
+
     async def generate_chat(self, guild_id, *args, **kwargs):
         """Reserve before generation and refund failures or silence responses."""
+        if guild_id is None:
+            raise ChatLimitReached("Meyaya chat commands are only available inside a server.")
         day = await self.usage.reserve(guild_id) if guild_id is not None else None
         charged = False
         try:
@@ -315,6 +354,10 @@ class MeyayaBot(commands.Bot):
             await self.request_log.record_message(ctx.message, kind="command")
 
     async def on_message(self, message):
+        if self.chat_blacklist.is_blocked(
+            message.guild.id if message.guild else None, message.author.id
+        ):
+            return
         moderation = self.get_cog("ModerationCog")
         if moderation and await moderation.should_block(message):
             return
@@ -379,6 +422,13 @@ class MeyayaBot(commands.Bot):
     def autoresponder_enabled(self, guild_id: int) -> bool:
         return self._guild_autoresponders.get(guild_id, False)
 
+    def chat_allowed(self, guild_id: int, channel_id: int) -> bool:
+        # If configuration could not load, don't accidentally bypass restrictions.
+        if self._guild_chat_channels is None:
+            return False
+        bound = self._guild_chat_channels.get(guild_id)
+        return bound is None or bound == channel_id
+
     def cache_autoresponder(self, guild_id: int, enabled: bool) -> None:
         self._guild_autoresponders[guild_id] = enabled
 
@@ -387,6 +437,9 @@ class MeyayaBot(commands.Bot):
 
         try:
             async with self.db_session() as session:
+                self._guild_chat_channels = await GuildSettingsRepository(
+                    session
+                ).list_chat_channels()
                 self._guild_prefixes = await GuildSettingsRepository(session).list_prefixes()
                 self._guild_autoresponders = await GuildSettingsRepository(
                     session

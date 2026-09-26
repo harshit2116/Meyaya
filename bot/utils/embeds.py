@@ -111,7 +111,11 @@ def build_interaction_embed(
     return embed
 
 
-def build_profile_embed(target: discord.Member, summary: ProfileSummaryLike) -> discord.Embed:
+def build_profile_embed(
+    target: discord.Member,
+    summary: ProfileSummaryLike,
+    visual=None,
+) -> discord.Embed:
     """Create a unified profile across Discord, Meyaya, social, and marriage data."""
 
     best_friend = (
@@ -135,6 +139,8 @@ def build_profile_embed(target: discord.Member, summary: ProfileSummaryLike) -> 
         f"{target.mention}\n" + "  •  ".join(summary.titles),
         icon="🌸",
     )
+    if visual is not None:
+        embed.color = discord.Color(int(visual.palette[0][1:], 16))
     embed.add_field(
         name="Meyaya's bond",
         value=(
@@ -183,6 +189,13 @@ def build_profile_embed(target: discord.Member, summary: ProfileSummaryLike) -> 
         ),
         inline=False,
     )
+    if visual is not None:
+        style_parts = [
+            f"Aura **{visual.palette[0].upper()}**",
+            "Decoration ✓" if visual.has_decoration else "No avatar decoration",
+            "Banner ✓" if visual.has_banner else "No banner",
+        ]
+        embed.add_field(name="Profile style", value="  •  ".join(style_parts), inline=False)
     embed.set_thumbnail(url=str(target.display_avatar.url))
     return embed
 
@@ -218,5 +231,7 @@ def build_ship_embed(
         icon="💞",
     )
     if attachment_filename:
+        embed.title = None
+        embed.description = None
         embed.set_image(url=f"attachment://{attachment_filename}")
     return embed

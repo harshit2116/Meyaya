@@ -31,6 +31,7 @@ class ModerationCog(commands.Cog):
         self.spam = SpamWindow()
         self._settings = {}
         self._checks = {}
+        self._next_check_cleanup = 0.0
         self._invites = {}
         self._notices = {}
         self._downloads = asyncio.Semaphore(3)
@@ -70,9 +71,11 @@ class ModerationCog(commands.Cog):
         if message.author.guild_permissions.manage_guild:
             return False
         now = time.monotonic()
-        for key, (when, task) in list(self._checks.items()):
-            if task.done() and now - when > 60:
-                self._checks.pop(key, None)
+        if now >= self._next_check_cleanup or len(self._checks) >= 2000:
+            self._next_check_cleanup = now + 5
+            for key, (when, task) in list(self._checks.items()):
+                if task.done() and now - when > 60:
+                    self._checks.pop(key, None)
         key = (message.id, str(message.edited_at))
         if key not in self._checks:
             if len(self._checks) >= 2000:
@@ -166,7 +169,7 @@ class ModerationCog(commands.Cog):
             await self.should_block(after)
 
     @commands.hybrid_command(
-        name="moderation", description="Show or configure deterministic moderation rules."
+        name="moderation", description="Show or change Meyaya's moderation settings."
     )
     @commands.has_guild_permissions(manage_guild=True)
     @app_commands.default_permissions(manage_guild=True)
@@ -235,7 +238,7 @@ class ModerationCog(commands.Cog):
             )
 
     @commands.hybrid_command(
-        name="lockdown", description="Lock one text channel, saving its previous permissions."
+        name="lockdown", description="Lock one text channel until it is unlocked again."
     )
     @commands.has_guild_permissions(manage_channels=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
@@ -243,7 +246,9 @@ class ModerationCog(commands.Cog):
     async def lockdown(self, ctx, channel: discord.TextChannel | None = None):
         await self._lock_command(ctx, channel)
 
-    @commands.hybrid_command(name="unlock", description="Restore a single-channel lockdown.")
+    @commands.hybrid_command(
+        name="unlock", description="Unlock a channel and restore its permissions."
+    )
     @commands.has_guild_permissions(manage_channels=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
     @app_commands.default_permissions(manage_channels=True)
@@ -260,7 +265,7 @@ class ModerationCog(commands.Cog):
         await self._lock_command(ctx, None, raid=True)
 
     @commands.hybrid_command(
-        name="raidunlock", description="Restore raid-locked channels, preserving individual locks."
+        name="raidunlock", description="End a raid lockdown and restore channel permissions."
     )
     @commands.has_guild_permissions(manage_guild=True)
     @commands.bot_has_guild_permissions(manage_roles=True)

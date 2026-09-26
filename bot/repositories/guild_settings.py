@@ -26,6 +26,20 @@ class GuildSettingsRepository(Repository):
         )
         return {int(guild_id): bool(enabled) for guild_id, enabled in result.all()}
 
+    async def list_chat_channels(self) -> dict[int, int | None]:
+        result = await self.session.execute(
+            select(GuildSettings.guild_id, GuildSettings.chat_channel_id)
+        )
+        return dict(result.all())
+
+    async def set_chat_channel(self, guild_id: int, channel_id: int | None, actor_id: int):
+        values = {"chat_channel_id": channel_id, "updated_by_user_id": actor_id}
+        await self.session.execute(
+            insert(GuildSettings)
+            .values(guild_id=guild_id, **values)
+            .on_conflict_do_update(index_elements=[GuildSettings.guild_id], set_=values)
+        )
+
     async def set_autoresponder(self, guild_id: int, enabled: bool, actor_id: int) -> None:
         await self.session.execute(
             insert(GuildSettings)

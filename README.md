@@ -15,6 +15,8 @@ and live voice conversations.
 
 ## Quick Start
 
+Hosting on HeavenCloud with 512 MB? Follow [the HeavenCloud setup](docs/heavencloud.md).
+
 For persistent Redis and container deployment, see [the deployment guide](docs/deployment.md).
 For server usage, daily chat limits, and the owner web dashboard, see [owner operations](docs/owner-dashboard.md).
 See [moderation controls](docs/moderation.md) and [Docker deployment](docs/deployment.md) for the new rules and hosting setup.
@@ -51,6 +53,9 @@ interactive command list.
 with `/prefix value:u` or `uwu prefix u`, and reset it with `/prefix value:reset`.
 Owner operations are available in the web dashboard.
 
+Server managers can run `/serversetup` for guided configuration and `/serverdashboard` for
+remaining messages and server activity. Both also work with `uwu`. See [server setup](docs/server-setup.md).
+
 ## Main Features
 
 - Social reactions with GIFs, counters, and response buttons
@@ -64,6 +69,7 @@ Owner operations are available in the web dashboard.
 - Reply-aware Gemini chat with personal memory and server lore
 - Jungkook RP and Alya RP replies with separate webhook names and avatars
 - Mood, familiarity, affection, annoyance, nicknames, and natural actions
+- Profile Studio image cards for profile checks, auras, palettes, duo styles, and calling cards
 - Optional three-strike English-only monitoring with 10-minute timeouts
 - Per-server command prefixes and a manager-only administration dashboard
 - Gemini Live voice chat with DAVE receive support and diagnostics
@@ -71,7 +77,8 @@ Owner operations are available in the web dashboard.
 
 ## Configuration
 
-Copy `.env.example` to `.env`. Never commit `.env` or files inside `bot/private/`.
+Copy `.env.example` to `.env`. Never commit `.env` or private identity/rule files.
+Only the sanitized `personality.v1.json` and `gemini_persona.txt` inside `bot/private/` are public.
 
 Important optional settings:
 
@@ -142,3 +149,6 @@ alembic check
 
 The application starts in `bot/main.py`, creates shared resources in `bot/app.py`, and loads every
 command cog from there.
+# Chat channel settings
+
+Server managers can use `uwu chatbind channel #chat` to limit Meyaya's conversational replies to one text channel, `uwu chatbind server` to allow chat across the server, or `uwu chatbind status` to see the setting. The same options are available through `/chatbind`. Automatic replies follow this setting; threads are excluded when bound to a channel. Other commands retain their usual access. The default is the entire server.

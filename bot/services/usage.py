@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 import re
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, case
 from sqlalchemy.dialects.postgresql import insert
 from bot.models.usage import GuildUsage
 from bot.models.guild_settings import GuildSettings
@@ -30,7 +30,7 @@ class UsageService:
             limit = 40 if limit is None else limit
             unlimited = guild_id == self.exempt_guild_id
             if limit == 0 and not unlimited:
-                raise ChatLimitReached("AI chat is disabled in this server.")
+                raise ChatLimitReached("Meyaya chat is disabled in this server.")
             statement = insert(GuildUsage).values(guild_id=guild_id, day=day, chats=1)
             statement = statement.on_conflict_do_update(
                 index_elements=[GuildUsage.guild_id, GuildUsage.day],
@@ -40,7 +40,7 @@ class UsageService:
             count = await session.scalar(statement)
             if count is None:
                 raise ChatLimitReached(
-                    f"This server has used its {limit} daily AI messages. The allowance resets at midnight UTC."
+                    f"This server has used its {limit} daily Meyaya messages. The allowance resets at midnight UTC."
                 )
             await session.commit()
         return day
@@ -73,22 +73,31 @@ class UsageService:
             rows = (
                 (
                     await session.execute(
-                        select(GuildUsage).where(GuildUsage.day >= today - timedelta(days=6))
+                        select(
+                            GuildUsage.guild_id,
+                            func.sum(
+                                case((GuildUsage.day == today, GuildUsage.chats), else_=0)
+                            ).label("today_chats"),
+                            func.sum(
+                                case((GuildUsage.day == today, GuildUsage.commands), else_=0)
+                            ).label("today_commands"),
+                            func.sum(GuildUsage.chats).label("week_chats"),
+                            func.sum(GuildUsage.commands).label("week_commands"),
+                        )
+                        .where(GuildUsage.day >= today - timedelta(days=6))
+                        .group_by(GuildUsage.guild_id)
                     )
                 )
-                .scalars()
+                .mappings()
                 .all()
             )
-            settings = (await session.execute(select(GuildSettings))).scalars().all()
-        result = {}
-        for row in rows:
-            item = result.setdefault(
-                row.guild_id,
-                {"today_chats": 0, "today_commands": 0, "week_chats": 0, "week_commands": 0},
-            )
-            item["week_chats"] += row.chats
-            item["week_commands"] += row.commands
-            if row.day == today:
-                item["today_chats"] = row.chats
-                item["today_commands"] = row.commands
+            settings = (
+                await session.execute(
+                    select(GuildSettings.guild_id, GuildSettings.daily_chat_limit)
+                )
+            ).all()
+        result = {
+            row["guild_id"]: {key: value for key, value in row.items() if key != "guild_id"}
+            for row in rows
+        }
         return result, {row.guild_id: row.daily_chat_limit for row in settings}

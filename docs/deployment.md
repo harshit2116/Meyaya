@@ -1,5 +1,8 @@
 # Running Meyaya
 
+For the 512 MB HeavenCloud bot-hosting panel, use [this guide](heavencloud.md) instead of Compose.
+The Compose example below requires additional RAM for PostgreSQL and Redis outside the bot's 512 MB limit.
+
 ## Local Redis repair
 
 Start Docker Desktop, then run:
@@ -28,8 +31,10 @@ games before restarting. Do not scale multiple bot instances with the same Disco
 2. Add `POSTGRES_PASSWORD` with a strong password and set
    `DEPLOY_DATABASE_URL=postgresql+asyncpg://meyaya:YOUR_URL_ENCODED_PASSWORD@postgres:5432/meyaya`.
    Both passwords must match; URL-encode reserved characters in the database URL only.
-3. Securely copy `bot/private/` to the host. It is mounted read-only and excluded from images and
-   Python packages. Ensure the container user (UID 10001) can read it. Leave `GUILD_ID` empty for
+3. Securely copy any private identity/rule files to the host. Only the sanitized personality
+   JSON and persona reference are public and included in images/packages; other private files
+   remain excluded. If mounting `bot/private/` read-only, include the two public files too so the
+   mount does not hide them. Ensure the container user (UID 10001) can read it. Leave `GUILD_ID` empty for
    global slash-command registration.
 4. Back up your existing PostgreSQL and Redis data. The new Compose database starts empty;
    it does not import your Windows database. Restore your database backup before starting the bot

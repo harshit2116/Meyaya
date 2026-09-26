@@ -58,6 +58,7 @@ class InteractionResponseView(discord.ui.View):
                 self.actor_id,
                 self.definition,
                 guild_id=interaction.guild.id if interaction.guild else None,
+                actor_name=interaction.user.display_name,
             )
         target_member = interaction.guild.get_member(self.actor_id) if interaction.guild else None
         embed = build_interaction_embed(

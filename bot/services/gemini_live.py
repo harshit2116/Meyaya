@@ -92,9 +92,15 @@ class GeminiLiveSession:
         }
 
     def _metric(self, name: str, **fields) -> None:
-        event(name, feature="voice", provider="gemini", model=self.model,
-              guild_id=self.guild_id, channel_id=self.channel_id,
-              **fields)
+        event(
+            name,
+            feature="voice",
+            provider="gemini",
+            model=self.model,
+            guild_id=self.guild_id,
+            channel_id=self.channel_id,
+            **fields,
+        )
 
     async def start(self) -> None:
         if self._running:
@@ -133,11 +139,19 @@ class GeminiLiveSession:
         try:
             session = await conn_cm.__aenter__()
         except Exception as exc:
-            self._metric("voice_connect", status="error", fallback_reason=type(exc).__name__,
-                         latency_ms=round((time.perf_counter() - started) * 1000, 2))
+            self._metric(
+                "voice_connect",
+                status="error",
+                fallback_reason=type(exc).__name__,
+                latency_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
             raise
-        self._metric("voice_connect", status="success", fallback_reason=None,
-                     latency_ms=round((time.perf_counter() - started) * 1000, 2))
+        self._metric(
+            "voice_connect",
+            status="success",
+            fallback_reason=None,
+            latency_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
         self._conn_cm = conn_cm
         self._session = session
         self._connected.set()
@@ -228,7 +242,7 @@ class GeminiLiveSession:
 
         if not self._running:
             raise RuntimeError("Gemini Live session is not running")
-        logger.info("Sending Gemini Live voice-check prompt")
+        logger.info("Sending text to live voice session")
         await self._send_with_recovery(text=text)
 
     def _next_queued_input(self) -> bytes | None | object:
@@ -236,6 +250,13 @@ class GeminiLiveSession:
             return self._input_audio_q.get_nowait()
         except queue.Empty:
             return _QUEUE_EMPTY
+
+    def clear_input_audio(self) -> None:
+        while True:
+            try:
+                self._input_audio_q.get_nowait()
+            except queue.Empty:
+                return
 
     async def _sender_loop(self) -> None:
         while self._running:
