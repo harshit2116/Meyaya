@@ -59,10 +59,10 @@ class DailyCog(commands.Cog):
             return
         day = date.today()
         score = DailyService.iq_score(ctx.guild.id, target.id, day)
-        name = discord.utils.escape_markdown(target.display_name)
+        name = f"<@{target.id}>"
         await ctx.send(
             f"IQ of {name} is {score} today.",
-            allowed_mentions=discord.AllowedMentions.none(),
+            allowed_mentions=discord.AllowedMentions(users=[target], roles=False, everyone=False, replied_user=False),
         )
 
     @commands.hybrid_command(name="dumb", description="Choose the dumbest member of the day.")
@@ -103,17 +103,11 @@ class DailyCog(commands.Cog):
                 kind,
                 candidates,
             )
-        winner = ctx.guild.get_member(winner_id)
-        if winner is None:
-            try:
-                winner = await ctx.guild.fetch_member(winner_id)
-            except discord.HTTPException:
-                pass
-        name = discord.utils.escape_markdown(winner.display_name) if winner else f"<@{winner_id}>"
+        name = f"<@{winner_id}>"
         label = {"dumbest": "dumbest member", "smartest": "smartest member", "clown": "clown"}[kind]
         await ctx.send(
             f"{name} is the {label} today.",
-            allowed_mentions=discord.AllowedMentions.none(),
+            allowed_mentions=discord.AllowedMentions(users=[discord.Object(id=winner_id)], roles=False, everyone=False, replied_user=False),
         )
 
 

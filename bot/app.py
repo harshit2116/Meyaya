@@ -95,6 +95,7 @@ class MeyayaBot(commands.Bot):
         self.chat_blacklist = ChatBlacklistService(self.session_factory)
         self.ai_guard = AIGuard(self.session_factory, settings)
         self._request_log_maintenance = None
+        self._dashboard_settings_refresh = None
         self.dashboard = None
         self.redis: Redis | None = None
         self.http_session: aiohttp.ClientSession | None = None
@@ -166,6 +167,7 @@ class MeyayaBot(commands.Bot):
         self._llm_provider = create_llm_provider(self.settings, self.http_session, self.ai_guard)
         self._profile_aesthetic_service = ProfileAestheticService(self)
         await self._load_guild_prefixes()
+        self._dashboard_settings_refresh = asyncio.create_task(self._refresh_dashboard_settings())
         self._request_log_maintenance = asyncio.create_task(
             self.request_log.maintenance(), name="request-log-retention"
         )
@@ -203,6 +205,11 @@ class MeyayaBot(commands.Bot):
     async def close(self) -> None:
         """Close external resources before shutting down the bot."""
 
+        if self._dashboard_settings_refresh is not None:
+            self._dashboard_settings_refresh.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._dashboard_settings_refresh
+            self._dashboard_settings_refresh = None
         if self._request_log_maintenance is not None:
             self._request_log_maintenance.cancel()
             with suppress(asyncio.CancelledError):
@@ -437,16 +444,27 @@ class MeyayaBot(commands.Bot):
 
         try:
             async with self.db_session() as session:
-                self._guild_chat_channels = await GuildSettingsRepository(
+                channels = await GuildSettingsRepository(
                     session
                 ).list_chat_channels()
-                self._guild_prefixes = await GuildSettingsRepository(session).list_prefixes()
-                self._guild_autoresponders = await GuildSettingsRepository(
+                prefixes = await GuildSettingsRepository(session).list_prefixes()
+                responders = await GuildSettingsRepository(
                     session
                 ).list_autoresponders()
+            self._guild_chat_channels = channels
+            self._guild_prefixes = prefixes
+            self._guild_autoresponders = responders
         except SQLAlchemyError:
-            logger.exception("Could not load server prefixes; using uwu until restart")
-            self._guild_prefixes = {}
+            logger.warning("Could not reload server settings; keeping last known configuration")
+
+    async def _refresh_dashboard_settings(self):
+        while True:
+            await asyncio.sleep(60)
+            try:
+                await self._load_guild_prefixes()
+                await self.chat_blacklist.load()
+            except SQLAlchemyError:
+                logger.warning("Could not refresh owner dashboard settings; retrying next minute")
 
     async def on_ready(self) -> None:
         """Log the connected bot account."""

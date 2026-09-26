@@ -152,3 +152,8 @@ command cog from there.
 # Chat channel settings
 
 Server managers can use `uwu chatbind channel #chat` to limit Meyaya's conversational replies to one text channel, `uwu chatbind server` to allow chat across the server, or `uwu chatbind status` to see the setting. The same options are available through `/chatbind`. Automatic replies follow this setting; threads are excluded when bound to a channel. Other commands retain their usual access. The default is the entire server.
+# Local owner dashboard
+
+Run `python dashboard.py` from the repository in your VS Code terminal. Use the same private `DATABASE_URL` as the hosted bot. This starts only the dashboard at `127.0.0.1:8080`, never a second Discord connection, and prints a private one-use login link valid for 60 seconds. Restart the launcher for another link; use `python dashboard.py --port 8081` if the port is busy. Stop with Ctrl+C.
+
+It reads cloud request logs, memories, nicknames, quotas and blacklist records. Settings and blacklist changes affect the shared production database; the updated bot refreshes its caches every 60 seconds. No migration is run. Server IDs are shown from saved records (not a live membership list); live Discord names, voice/game status and in-process model telemetry are unavailable. The hosted dashboard can remain disabled. Do not share the login link or database credentials.

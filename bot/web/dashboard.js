@@ -77,9 +77,14 @@ function renderServers() {
     card.append(element("h3", server.name), element("div", server.id, "id"), element("span", server.exempt ? "✦ Main server - Unlimited" : `${server.today_chats} / ${server.limit} Meyaya replies today`, "badge"));
     const progress = element("progress"); progress.max = Math.max(1, server.limit); progress.value = server.exempt ? 0 : server.today_chats; progress.setAttribute("aria-label", "Daily allowance used"); card.append(progress);
     const metrics = element("div", undefined, "metrics");
+    if (server.local) {
+      metrics.append(metric("Commands today", server.today_commands), metric("Meyaya replies / 7 days", server.week_chats), metric("Commands / 7 days", server.week_commands));
+      card.append(metrics, element("p", "Saved database records. Discord names, membership and live process statistics are unavailable. Settings apply on the updated host within 60 seconds.", "details"));
+    } else {
     metrics.append(metric("Members", server.members ?? "Unknown"), metric("Commands today", server.today_commands), metric("Meyaya replies / 7 days", server.week_chats), metric("Commands / 7 days", server.week_commands), metric("Response success", `${server.model_success_rate}%`), metric("Failed responses", server.model_failures), metric("Average latency", server.model_average_latency_ms === null ? "No data" : `${server.model_average_latency_ms} ms`), metric("Tokens this process", server.model_tokens.toLocaleString())); card.append(metrics);
     card.append(element("p", `${server.available ? "Available" : "Unavailable"} - ${server.readable_channels} readable - ${server.monitored_channels} monitored - Timeout: ${server.can_timeout ? "yes" : "no"}`, "details"));
     card.append(element("p", `${server.active_games} active games - Voice ${server.voice_active ? "connected" : "disconnected"}`, "details"));
+    }
     const prefixLabel = element("label", "Command prefix"), prefix = element("input"); prefix.value = server.prefix; prefix.maxLength = 10; prefix.required = true; prefixLabel.append(prefix);
     const limitLabel = element("label", "Daily Meyaya reply allowance (0 disables chat)"), limit = element("input"); limit.type = "number"; limit.min = "0"; limit.max = "10000"; limit.required = true; limit.value = server.limit; limit.disabled = server.exempt; limitLabel.append(limit);
     const toggle = element("label", undefined, "toggle"), auto = element("input"); auto.type = "checkbox"; auto.checked = server.autoresponder; toggle.append(auto, element("span", "Automatic replies enabled"));
@@ -99,7 +104,7 @@ function renderServers() {
 
 async function refresh() {
   const data = await api("/api/servers"); servers = data.servers;
-  $("connection").textContent = data.ready ? "● Connected" : "Connecting to Discord";
+  $("connection").textContent = data.mode === "local" ? "● Local dashboard · cloud database" : data.ready ? "● Connected" : "Connecting to Discord";
   $("total").textContent = servers.length; $("chats").textContent = servers.reduce((n, server) => n + server.today_chats, 0); $("commands").textContent = servers.reduce((n, server) => n + server.today_commands, 0);
   populateGuildFilters(); renderServers();
 }
@@ -192,6 +197,7 @@ function renderOperationGroup(target, items) {
 async function loadOperations() {
   api("/api/safety").then(data => {
     if (!token) return;
+    if (data.mode === "local") { $("safety-state").textContent = "Hosted runtime counters are unavailable in local mode."; return; }
     $("safety-state").textContent = `AI ${data.enabled ? "enabled" : "paused"} · Member cooldown ${data.member_cooldown_seconds}s · Running requests ${data.active_requests}/${data.max_concurrent} · Voice sessions ${data.active_voice_sessions}/${data.max_voice_sessions}`;
   }).catch(() => { if (token) $("safety-state").textContent = "Safety counters unavailable."; });
   $("operations-state").textContent = "Loading operational telemetry";
