@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from datetime import date
+import asyncio
+from collections import OrderedDict
+from time import monotonic
 
 import discord
 from discord import app_commands
@@ -17,6 +20,28 @@ class DailyCog(commands.Cog):
 
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
+        self._candidate_cache = OrderedDict()
+        self._candidate_lock = asyncio.Lock()
+
+    async def _candidate_ids(self, guild) -> list[int]:
+        # Startup chunking is deliberately disabled on small hosting plans.
+        # REST iteration doesn't populate Discord's permanent member cache.
+        if guild.chunked:
+            return sorted(member.id for member in guild.members if not member.bot)
+        async with self._candidate_lock:
+            cached = self._candidate_cache.get(guild.id)
+            if cached and cached[0] > monotonic():
+                self._candidate_cache.move_to_end(guild.id)
+                return cached[1]
+            async with asyncio.timeout(30):
+                candidates = sorted([member.id async for member in guild.fetch_members(limit=None)
+                                     if not member.bot])
+            # Bound retained memory; very large guilds are not cached.
+            if len(candidates) <= 10_000:
+                self._candidate_cache[guild.id] = (monotonic() + 600, candidates)
+                while len(self._candidate_cache) > 8:
+                    self._candidate_cache.popitem(last=False)
+            return candidates
 
     @commands.hybrid_command(name="iq", description="Show a daily IQ score for a member.")
     @app_commands.describe(member="Member to score; defaults to you")
@@ -62,7 +87,11 @@ class DailyCog(commands.Cog):
             return
         if ctx.interaction is not None:
             await ctx.defer()
-        candidates = sorted(member.id for member in ctx.guild.members if not member.bot)
+        try:
+            candidates = await self._candidate_ids(ctx.guild)
+        except (discord.HTTPException, discord.ClientException, TimeoutError):
+            await ctx.send("I couldn't load the server members right now. Please try again shortly.")
+            return
         if not candidates:
             await ctx.send("No eligible members were found.")
             return
@@ -75,6 +104,11 @@ class DailyCog(commands.Cog):
                 candidates,
             )
         winner = ctx.guild.get_member(winner_id)
+        if winner is None:
+            try:
+                winner = await ctx.guild.fetch_member(winner_id)
+            except discord.HTTPException:
+                pass
         name = discord.utils.escape_markdown(winner.display_name) if winner else f"<@{winner_id}>"
         label = {"dumbest": "dumbest member", "smartest": "smartest member", "clown": "clown"}[kind]
         await ctx.send(
