@@ -15,6 +15,7 @@ from bot.data.help_catalog import (
 from bot.utils.embeds import MeyayaColors, meyaya_embed
 
 HELP_COLOR = MeyayaColors.PINK
+SUPPORT_INVITE = "https://discord.gg/e9bK5ZbUZS"
 
 
 def build_help_embed(
@@ -80,7 +81,9 @@ def build_help_embed(
         description=(
             "Pick a category below or use `/help command:<name>`.\n\n"
             "Voice controls are under **Voice Chat**.\n"
-            f"You can call me with `/`, `{command_prefix}`, or {bot_mention}."
+            f"You can call me with `/`, `{command_prefix}`, or {bot_mention}.\n\n"
+            f"[Join Pondside Lounge]({SUPPORT_INVITE}) to report an issue or try "
+            "Meyaya without the daily server chat limit."
         ),
         color=HELP_COLOR,
         icon="🌸",
@@ -137,6 +140,10 @@ class HelpView(discord.ui.View):
         self.command_prefix = command_prefix
         self.message: discord.Message | None = None
         self.add_item(HelpCategorySelect(self))
+        self.add_item(discord.ui.Button(
+            label="Join Pondside Lounge", style=discord.ButtonStyle.link,
+            url=SUPPORT_INVITE, row=1,
+        ))
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.owner_id:
@@ -149,7 +156,8 @@ class HelpView(discord.ui.View):
 
     async def on_timeout(self) -> None:
         for child in self.children:
-            child.disabled = True
+            if not isinstance(child, discord.ui.Button) or child.url is None:
+                child.disabled = True
         if self.message is not None:
             try:
                 await self.message.edit(view=self)

@@ -79,7 +79,7 @@ function renderServers() {
     const metrics = element("div", undefined, "metrics");
     if (server.local) {
       metrics.append(metric("Commands today", server.today_commands), metric("Meyaya replies / 7 days", server.week_chats), metric("Commands / 7 days", server.week_commands));
-      card.append(metrics, element("p", "Saved database records. Discord names, membership and live process statistics are unavailable. Settings apply on the updated host within 60 seconds.", "details"));
+      card.append(metrics, element("p", "Saved database records with cached Discord server names. Live membership and process statistics are unavailable. Settings apply on the updated host within 60 seconds.", "details"));
     } else {
     metrics.append(metric("Members", server.members ?? "Unknown"), metric("Commands today", server.today_commands), metric("Meyaya replies / 7 days", server.week_chats), metric("Commands / 7 days", server.week_commands), metric("Response success", `${server.model_success_rate}%`), metric("Failed responses", server.model_failures), metric("Average latency", server.model_average_latency_ms === null ? "No data" : `${server.model_average_latency_ms} ms`), metric("Tokens this process", server.model_tokens.toLocaleString())); card.append(metrics);
     card.append(element("p", `${server.available ? "Available" : "Unavailable"} - ${server.readable_channels} readable - ${server.monitored_channels} monitored - Timeout: ${server.can_timeout ? "yes" : "no"}`, "details"));
@@ -89,7 +89,7 @@ function renderServers() {
     const limitLabel = element("label", "Daily Meyaya reply allowance (0 disables chat)"), limit = element("input"); limit.type = "number"; limit.min = "0"; limit.max = "10000"; limit.required = true; limit.value = server.limit; limit.disabled = server.exempt; limitLabel.append(limit);
     const toggle = element("label", undefined, "toggle"), auto = element("input"); auto.type = "checkbox"; auto.checked = server.autoresponder; toggle.append(auto, element("span", "Automatic replies enabled"));
     const save = element("button", "Save changes", "save"); card.append(prefixLabel, limitLabel, toggle, save);
-    const review = element("button", "View request log", "quiet save"); review.type = "button";
+    const review = element("button", "View AI chat log", "quiet save"); review.type = "button";
     review.addEventListener("click", () => { closeRequests(); selectedServer = server; $("request-title").textContent = `Requests - ${server.name}`; $("request-panel").hidden = false; $("request-panel").scrollIntoView({behavior: "smooth"}); loadRequests(false); }); card.append(review);
     const shortcuts = element("div", undefined, "card-actions");
     const memories = element("button", "Memories", "quiet"); memories.type = "button";
@@ -129,7 +129,7 @@ async function loadRequests(older) {
       const link = element("a", item.kind === "slash" ? "Open channel in Discord" : "Open message in Discord"); link.href = item.url; link.target = "_blank"; link.rel = "noopener noreferrer"; entry.append(link); $("request-items").append(entry);
     }
     requestCursor = data.next_cursor; $("request-more").hidden = !requestCursor;
-    $("request-state").textContent = $("request-items").children.length ? `${$("request-items").children.length} requests shown` : "No recorded requests in the last seven days.";
+    $("request-state").textContent = $("request-items").children.length ? `${$("request-items").children.length} AI chats shown` : "No recorded AI chats in the last seven days.";
   } catch (error) { if (version === requestVersion) $("request-state").textContent = error.message; }
   finally { if (version === requestVersion) $("request-more").disabled = false; }
 }

@@ -91,7 +91,8 @@ class RequestLogService:
     async def page(self, guild_id: int, before: int | None = None):
         cutoff = datetime.now(UTC) - timedelta(days=RETENTION_DAYS)
         statement = select(RequestLog).where(
-            RequestLog.guild_id == guild_id, RequestLog.created_at >= cutoff
+            RequestLog.guild_id == guild_id, RequestLog.created_at >= cutoff,
+            RequestLog.kind == 'chat',
         )
         if before is not None:
             statement = statement.where(RequestLog.event_id < before)

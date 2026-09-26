@@ -3,10 +3,11 @@ import argparse
 import asyncio
 import os
 import secrets
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from aiohttp import web
+from aiohttp import ClientSession, ClientTimeout, ClientError, web
 from sqlalchemy import select, union
 from bot.config.settings import Settings
 from bot.database.session import build_async_engine, build_session_factory
@@ -31,13 +32,55 @@ class LocalBackend:
         self.request_log = RequestLogService(self.db_session)
         self.chat_blacklist = ChatBlacklistService(self.db_session)
         self.guilds_by_id = {}
+        self._guild_names = {}
+        self._names_refresh_at = 0
+        self._names_lock = asyncio.Lock()
+
+    async def refresh_names(self):
+        """Read names over REST, never start another Discord gateway session."""
+        async with self._names_lock:
+            if time.monotonic() < self._names_refresh_at:
+                return
+            self._names_refresh_at = time.monotonic() + 300
+            if not self.settings.discord_token:
+                return
+            names = {}
+            after = None
+            try:
+                async with asyncio.timeout(20), ClientSession(
+                    timeout=ClientTimeout(total=10),
+                    headers={'Authorization': f'Bot {self.settings.discord_token}'},
+                ) as client:
+                    while True:
+                        params = {'limit': '200'}
+                        if after:
+                            params['after'] = after
+                        async with client.get('https://discord.com/api/v10/users/@me/guilds', params=params) as response:
+                            if response.status == 429:
+                                retry = (await response.json()).get('retry_after', 300)
+                                self._names_refresh_at = time.monotonic() + max(300, float(retry))
+                                return
+                            if response.status != 200:
+                                return  # Retain cached names during outages or token errors.
+                            rows = await response.json()
+                        names.update({int(row['id']): row['name'] for row in rows})
+                        if len(rows) < 200:
+                            break
+                        cursor = str(rows[-1]['id'])
+                        if cursor == after:
+                            return
+                        after = cursor
+                self._guild_names.update(names)
+            except (ClientError, TimeoutError, ValueError, KeyError, TypeError):
+                pass  # Never log credentials or provider response bodies.
 
     async def refresh(self):
+        await self.refresh_names()
         async with self.db_session() as session:
             ids = await session.scalars(union(*(select(model.guild_id) for model in (
                 GuildSettings, GuildUsage, RequestLog, BotMemory, MeyayaUserState, ChatBlacklist
             ))))
-            self.guilds_by_id = {gid: SimpleNamespace(id=gid, name=f"Server {gid}", get_member=lambda _: None)
+            self.guilds_by_id = {gid: SimpleNamespace(id=gid, name=self._guild_names.get(gid, f"Server {gid}"), get_member=lambda _: None)
                                  for gid in ids if gid is not None}
 
     def get_guild(self, guild_id):
@@ -92,7 +135,7 @@ class LocalDashboard(Dashboard):
 async def serve(port):
     # Ignore host deployment overrides: this launcher must never bind publicly.
     os.environ.pop('PORT', None)
-    settings = Settings(DISCORD_TOKEN='', REDIS_URL='', DASHBOARD_HOST='127.0.0.1',
+    settings = Settings(REDIS_URL='', DASHBOARD_HOST='127.0.0.1',
         DASHBOARD_PORT=port, DASHBOARD_PUBLIC_URL='', DASHBOARD_TRUSTED_PROXIES='',
         DASHBOARD_TOKEN=secrets.token_urlsafe(48))
     backend = LocalBackend(settings)
