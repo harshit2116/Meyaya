@@ -52,7 +52,7 @@ class LocalBackend:
 
 class LocalDashboard(Dashboard):
     def __init__(self, backend):
-        super().__init__(backend)
+        super().__init__(backend, local_no_auth=True)
         @web.middleware
         async def refresh_catalog(request, handler):
             # This middleware runs after authentication; no public database query.
@@ -60,6 +60,11 @@ class LocalDashboard(Dashboard):
                 await backend.refresh()
             return await handler(request)
         self.app.middlewares.append(refresh_catalog)
+
+    async def index(self, request):
+        response = await super().index(request)
+        response.text = response.text.replace('<body>', '<body data-local-dashboard="true">')
+        return response
 
     async def servers(self, request):
         usage, limits = await self.bot.usage.report()
@@ -96,9 +101,8 @@ async def serve(port):
         await backend.refresh()
         await dashboard.start()
         print('Local dashboard only. No Discord login, migrations, or AI requests.', flush=True)
-        print('Open this private one-use link within 60 seconds:', flush=True)
-        print(dashboard.login_link(), flush=True)
-        print('Restart this launcher for a fresh login link. Ctrl+C to stop.', flush=True)
+        print(f'Open http://127.0.0.1:{port} - no login required on this laptop.', flush=True)
+        print('Anyone using this laptop can access it while running. Ctrl+C to stop.', flush=True)
         await asyncio.Event().wait()
     finally:
         await dashboard.close()

@@ -62,8 +62,10 @@ async def server_report(bot):
 
 
 class Dashboard:
-    def __init__(self, bot):
+    def __init__(self, bot, *, local_no_auth=False):
         self.bot = bot
+        if local_no_auth and (bot.settings.dashboard_host != "127.0.0.1" or bot.settings.dashboard_public_url):
+            raise ValueError("Token-free mode is restricted to the local dashboard")
         self.runner = None
         self._login_links = {}
         self.security = DashboardSecurity(bot.settings)
@@ -78,7 +80,7 @@ class Dashboard:
                 if request.path.startswith("/api/"):
                     if request.path == "/api/login":
                         self.security.throttle(request.remote)
-                    else:
+                    elif not local_no_auth:
                         supplied = request.headers.get("Authorization", "")
                         if not supplied.startswith("Bearer ") or not self.security.authenticated(supplied[7:]):
                             self.security.throttle(request.remote)

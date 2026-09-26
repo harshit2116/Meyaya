@@ -260,7 +260,16 @@ async function useOwnerLink() {
     switchView("overview"); notice("");
   } catch (error) { lock(); notice(error.message); }
 }
-useOwnerLink();
+if (document.body.dataset.localDashboard === "true") {
+  token = "local"; // UI state only; local server enforces loopback and origin checks.
+  $("logout").hidden = true;
+  refresh().then(() => {
+    $("workspace").hidden = false; $("navigation").hidden = false; $("login").hidden = true;
+    switchView("overview"); notice("");
+  }).catch(error => notice(error.message));
+} else {
+  useOwnerLink();
+}
 
 async function loadBlacklist() {
   try {
