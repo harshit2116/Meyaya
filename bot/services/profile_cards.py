@@ -25,6 +25,24 @@ def _mix(left: tuple[int, int, int], right: tuple[int, int, int], amount: float)
     return tuple(int(a + (b - a) * amount) for a, b in zip(left, right, strict=True))
 
 
+def _readable_accent(color: str, background: str, minimum: float = 4.5) -> str:
+    """Lift dark avatar colors until they remain readable on the card surface."""
+    def luminance(rgb):
+        channels = [value / 255 for value in rgb]
+        linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+                  for value in channels]
+        return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+    original = _rgb(color)
+    surface = luminance(_rgb(background))
+    for step in range(101):
+        candidate = _mix(original, (255, 255, 255), step / 100)
+        light = luminance(candidate)
+        if (max(light, surface) + 0.05) / (min(light, surface) + 0.05) >= minimum:
+            return '#%02x%02x%02x' % candidate
+    return '#ffffff'
+
+
 def _background(size: tuple[int, int], primary: str, secondary: str) -> Image.Image:
     width, height = size
     dark = (12, 9, 19)
@@ -280,10 +298,11 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
     image = _background((1000, 720), visual.palette[3], visual.palette[0])
     draw = ImageDraw.Draw(image, "RGBA")
     _panel(draw, (28, 28, 972, 692))
-    draw.text((58, 50), "MEYAYA PROFILE CHECK", font=font(18), fill=visual.palette[2])
+    accent = _readable_accent(visual.palette[2], '#110e1a')
+    draw.text((58, 50), "MEYAYA PROFILE CHECK", font=font(18), fill=accent)
     label(draw, (58, 86, 650, 56), visual.name, 40, "white")
     draw.text((770, 58), f"{visual.overall_score}", font=font(72), fill="white")
-    draw.text((866, 103), "/ 100", font=font(21), fill=visual.palette[2])
+    draw.text((866, 103), "/ 100", font=font(21), fill=accent)
     _avatar(image, visual, (62, 175, 270, 270))
     draw = ImageDraw.Draw(image, "RGBA")
     _panel(draw, (368, 174, 940, 455), fill=(10, 8, 18, 155))
@@ -294,7 +313,8 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
         ("Originality", visual.originality_score),
     )
     for index, (name, value) in enumerate(scores):
-        _score_bar(draw, 402, 207 + index * 57, 495, name, value, visual.palette[index % 3])
+        bar_color = _readable_accent(visual.palette[index % 3], '#2a2533', minimum=3)
+        _score_bar(draw, 402, 207 + index * 57, 495, name, value, bar_color)
     elements = [
         name
         for enabled, name in (
@@ -309,7 +329,7 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
     ]
     if visual.badge_count:
         elements.append(f"{visual.badge_count} public badge(s)")
-    draw.text((62, 483), "PROFILE ELEMENTS", font=font(15), fill=visual.palette[2])
+    draw.text((62, 483), "PROFILE ELEMENTS", font=font(15), fill=accent)
     label(
         draw, (62, 512, 875, 54), "  •  ".join(elements) or "Clean and minimal setup", 22, "white"
     )
