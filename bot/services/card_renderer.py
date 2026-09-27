@@ -12,7 +12,7 @@ from bot.services.celestial import definitions
 ASSETS = Path(__file__).resolve().parents[1] / "assets" / "celestial"
 SIZES = {
     "tarot": (1080, 900),
-    "fortune": (1000, 820),
+    "fortune": (1000, 780),
     "fate": (1000, 780),
     "summon": (1000, 740),
     "guardian": (1000, 620),
@@ -149,27 +149,26 @@ def fortune(image, d, r):
     rose = "#9d5c7d"
     gold = "#b88645"
     paper = "#f6e9df"
-    d.rounded_rectangle((28, 122, 972, 790), radius=24, fill=paper, outline="#e8bdaf", width=2)
-    d.ellipse((52, 196, 256, 400), fill="#ecd0d8", outline=gold, width=3)
-    d.ellipse((69, 213, 239, 383), outline="#c98fa7", width=2)
+    d.rounded_rectangle((28, 122, 972, 750), radius=24, fill=paper, outline="#e8bdaf", width=2)
+    label(d, (52, 146, 878, 54), r.title, 36, ink)
+    d.line((52, 216, 930, 216), fill="#e0bdc9", width=2)
+    d.ellipse((52, 247, 256, 451), fill="#ecd0d8", outline=gold, width=3)
+    d.ellipse((69, 264, 239, 434), outline="#c98fa7", width=2)
     luck = fields["Luck"].split("/", 1)[0]
     for value, size, y, color in (
-        ("TODAY'S LUCK", 16, 244, rose),
-        (luck, 54, 283, ink),
-        ("/ 100", 18, 352, rose),
+        ("TODAY'S LUCK", 16, 302, rose),
+        (luck, 54, 351, ink),
+        ("/ 100", 18, 402, rose),
     ):
-        x = 154 - d.textlength(value, font=font(size)) / 2
-        d.text((x, y), value, font=font(size), fill=color)
-    label(d, (292, 151, 630, 70), r.title, 38, ink)
-    label(d, (294, 209, 620, 42), "YOUR DAY AT A GLANCE", 17, gold)
+        d.text((154, y), value, font=font(size), fill=color, anchor="mm")
     for i, k in enumerate(("Lucky number", "Color", "Lucky theme")):
-        x = 292 + i * 215
-        d.rounded_rectangle((x, 250, x + 198, 334), radius=12, fill="#ead7df")
-        label(d, (x + 14, 261, 170, 20), k.upper(), 14, rose)
-        label(d, (x + 14, 290, 170, 34), fields[k], 23, ink)
+        x = 292 + i * 218
+        d.rounded_rectangle((x, 240, x + 202, 340), radius=12, fill="#ead7df")
+        label(d, (x + 14, 253, 174, 20), k.upper(), 14, rose)
+        label(d, (x + 14, 283, 174, 48), fields[k], 23, ink)
     tile(
         d,
-        (292, 352, 638, 110),
+        (292, 356, 638, 120),
         "What today means",
         fields["Outlook"],
         gold,
@@ -179,7 +178,7 @@ def fortune(image, d, r):
     )
     tile(
         d,
-        (52, 486, 425, 128),
+        (52, 494, 431, 124),
         "Omen",
         fields["Omen"],
         rose,
@@ -189,7 +188,7 @@ def fortune(image, d, r):
     )
     tile(
         d,
-        (493, 486, 437, 128),
+        (499, 494, 431, 124),
         "Advice",
         fields["Advice"],
         rose,
@@ -201,7 +200,7 @@ def fortune(image, d, r):
     if oracle:
         tile(
             d,
-            (52, 638, 878, 116),
+            (52, 634, 878, 96),
             "The oracle answers",
             oracle,
             gold,
@@ -212,12 +211,12 @@ def fortune(image, d, r):
     else:
         label(
             d,
-            (75, 661, 830, 28),
+            (52, 653, 878, 30),
             "Carry the signs lightly - your choices still write the day.",
-            24,
+            22,
             ink,
         )
-        label(d, (75, 707, 830, 22), "Return tomorrow for a new reading.", 17, rose)
+        label(d, (52, 698, 878, 24), "Return tomorrow for a new reading.", 17, rose)
 
 
 def fate(image, d, r):
