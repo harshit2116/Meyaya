@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from hashlib import sha256
 from io import BytesIO
+from bisect import bisect_right
+from collections import OrderedDict
 
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
@@ -43,7 +45,29 @@ def _readable_accent(color: str, background: str, minimum: float = 4.5) -> str:
     return '#ffffff'
 
 
+_BACKGROUNDS = OrderedDict()
+_BACKGROUND_BUDGET = 4 * 1024 * 1024
+
+
 def _background(size: tuple[int, int], primary: str, secondary: str) -> Image.Image:
+    # Only called on the single Pillow worker. Copy so callers cannot alter
+    # another member's card; cap decoded pixels, not compressed file size.
+    key = (size, primary, secondary)
+    cached = _BACKGROUNDS.get(key)
+    if cached is not None:
+        _BACKGROUNDS.move_to_end(key)
+        return cached.copy()
+    image = _build_background(size, primary, secondary)
+    cost = image.width * image.height * 4
+    if cost <= _BACKGROUND_BUDGET:
+        while _BACKGROUNDS and sum(v.width * v.height * 4 for v in _BACKGROUNDS.values()) + cost > _BACKGROUND_BUDGET:
+            _, old = _BACKGROUNDS.popitem(last=False)
+            old.close()
+        _BACKGROUNDS[key] = image.copy()
+    return image
+
+
+def _build_background(size: tuple[int, int], primary: str, secondary: str) -> Image.Image:
     width, height = size
     dark = (12, 9, 19)
     left = _mix(_rgb(primary), dark, 0.68)
@@ -366,8 +390,23 @@ def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True) -
     return image
 
 
+def _animation_timeline(source, pixel_budget):
+    """Scan bounded frame timing; GIF seeking must decode intervening frames."""
+    starts, total = [], 0
+    limit = max(1, min(300, pixel_budget // (source.width * source.height)))
+    for index in range(limit):
+        try:
+            source.seek(index)
+        except EOFError:
+            break
+        starts.append(total)
+        total += max(20, min(10000, int(source.info.get("duration", 100) or 100)))
+    source.seek(0)
+    return starts, total
+
+
 def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
-    """Bound animation to 12 frames at 750px; static cards stay full-resolution PNGs."""
+    """Sample up to 12 frames across a bounded animation timeline at 750px."""
     sources = {}
     try:
         for key in ("avatar", "banner", "decoration"):
@@ -381,6 +420,13 @@ def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
             sources[key] = source
         if not sources:
             return profilecheck_card(visual), "png"
+        # Two decoding passes, at most 120M source pixels across all assets.
+        timelines = {key: _animation_timeline(source, 60_000_000 // len(sources))
+                     for key, source in sources.items()}
+        count = min(12, max(len(starts) for starts, _ in timelines.values()))
+        last_start = max(starts[-1] for starts, _ in timelines.values())
+        total = max(duration for _, duration in timelines.values())
+        times = [round(index * last_start / max(1, count - 1)) for index in range(count)]
         # Paint text, gradients and score bars once, not once per GIF frame.
         # A clean template also prevents transparent decorations leaving trails.
         template = _profilecheck_image(visual, include_avatar=False)
@@ -389,20 +435,14 @@ def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
         banner_mask = Image.new("L", (880, 164))
         ImageDraw.Draw(banner_mask).rounded_rectangle((0, 0, 879, 163), radius=16, fill=255)
         frames, durations = [], []
-        for index in range(12):
-            changes, delay, advanced = {}, 80, False
+        for index, timestamp in enumerate(times):
+            changes = {}
             for key, source in sources.items():
-                try:
-                    source.seek(index)
-                    advanced = True
-                except EOFError:
-                    pass  # Hold shorter animations on their final available frame.
+                starts, _ = timelines[key]
+                source.seek(max(0, bisect_right(starts, timestamp) - 1))
                 frame = source.convert("RGBA")
                 frame.thumbnail((880, 512))
                 changes[key] = frame
-                delay = max(delay, min(250, int(source.info.get("duration", 100))))
-            if not advanced:
-                break
             rendered = template.copy()
             if "banner" in changes:
                 rendered.paste(ImageOps.fit(changes["banner"], (880, 164)), (60, 155), banner_mask)
@@ -410,7 +450,8 @@ def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
                         changes.get("avatar", static_art.get("avatar")),
                         changes.get("decoration", static_art.get("decoration")))
             frames.append(rendered.resize((750, 675)).convert("P", palette=Image.Palette.ADAPTIVE, colors=128))
-            durations.append(delay)
+            end = times[index + 1] if index + 1 < count else total
+            durations.append(max(20, end - timestamp))
         output = BytesIO()
         frames[0].save(output, "GIF", save_all=True, append_images=frames[1:], duration=durations, loop=0, disposal=2)
         if output.tell() <= 8 * 1024 * 1024:

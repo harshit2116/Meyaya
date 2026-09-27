@@ -6,6 +6,7 @@ from datetime import date
 import asyncio
 from collections import OrderedDict
 from time import monotonic
+from weakref import WeakValueDictionary
 
 import discord
 from discord import app_commands
@@ -21,21 +22,34 @@ class DailyCog(commands.Cog):
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
         self._candidate_cache = OrderedDict()
-        self._candidate_lock = asyncio.Lock()
+        self._candidate_locks = WeakValueDictionary()
+        self._candidate_downloads = asyncio.Semaphore(2)
+
+    def _cached_candidates(self, guild_id):
+        cached = self._candidate_cache.get(guild_id)
+        if cached and cached[0] > monotonic():
+            self._candidate_cache.move_to_end(guild_id)
+            return cached[1]
+        self._candidate_cache.pop(guild_id, None)
+        return None
 
     async def _candidate_ids(self, guild) -> list[int]:
         # Startup chunking is deliberately disabled on small hosting plans.
         # REST iteration doesn't populate Discord's permanent member cache.
         if guild.chunked:
             return sorted(member.id for member in guild.members if not member.bot)
-        async with self._candidate_lock:
-            cached = self._candidate_cache.get(guild.id)
-            if cached and cached[0] > monotonic():
-                self._candidate_cache.move_to_end(guild.id)
-                return cached[1]
+        cached = self._cached_candidates(guild.id)
+        if cached is not None:
+            return cached
+        lock = self._candidate_locks.setdefault(guild.id, asyncio.Lock())
+        async with lock:
+            cached = self._cached_candidates(guild.id)
+            if cached is not None:
+                return cached
             async with asyncio.timeout(30):
-                candidates = sorted([member.id async for member in guild.fetch_members(limit=None)
-                                     if not member.bot])
+                async with self._candidate_downloads:
+                    candidates = sorted([member.id async for member in guild.fetch_members(limit=None)
+                                         if not member.bot])
             # Bound retained memory; very large guilds are not cached.
             if len(candidates) <= 10_000:
                 self._candidate_cache[guild.id] = (monotonic() + 600, candidates)

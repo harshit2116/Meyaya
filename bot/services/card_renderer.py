@@ -34,29 +34,37 @@ def font(size):
 
 
 def lines(draw, value, size, width):
-    result, line = [], ""
-    for char in str(value):
-        if char == "\n" or draw.textlength(line + char, font=font(size)) > width:
-            # Prefer a word boundary.
-            if char != "\n" and " " in line:
-                head, tail = line.rsplit(" ", 1)
-                result.append(head)
-                line = tail + char
-            else:
-                result.append(line)
-                line = "" if char == "\n" else char
-        else:
-            line += char
-    if line:
-        result.append(line)
+    # Binary-search each line's endpoint instead of shaping every growing
+    # prefix. Preserve word boundaries and split long unbroken names safely.
+    result = []
+    chosen_font = font(size)
+    for paragraph in str(value).split("\n"):
+        if not paragraph:
+            result.append("")
+        while paragraph:
+            if draw.textlength(paragraph, font=chosen_font) <= width:
+                result.append(paragraph)
+                break
+            low, high = 1, len(paragraph)
+            while low < high:
+                middle = (low + high + 1) // 2
+                if draw.textlength(paragraph[:middle], font=chosen_font) <= width:
+                    low = middle
+                else:
+                    high = middle - 1
+            boundary = paragraph.rfind(" ", 0, low + 1)
+            cut = boundary if boundary > 0 else low
+            result.append(paragraph[:cut])
+            paragraph = paragraph[cut + 1:] if boundary > 0 else paragraph[cut:]
     return result
 
 
 def label(draw, box, value, size=26, color="#eee8dc", minimum=16):
     x, y, w, h = box
-    while size > minimum and len(lines(draw, value, size, w)) * (size + 6) > h:
-        size -= 1
     wrapped = lines(draw, value, size, w)
+    while size > minimum and len(wrapped) * (size + 6) > h:
+        size -= 1
+        wrapped = lines(draw, value, size, w)
     count = max(1, h // (size + 6))
     if len(wrapped) > count:
         wrapped = wrapped[:count]
@@ -281,5 +289,5 @@ def render_card(result, name, avatar=b""):
         result.kind
     ](image, d, result)
     output = BytesIO()
-    image.save(output, format="PNG", optimize=True)
+    image.save(output, format="PNG", compress_level=3)
     return output.getvalue()

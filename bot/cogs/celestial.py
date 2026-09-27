@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import asyncio
+from time import monotonic
 from bot.utils.image_work import image_work, BoundedImageGate
 from io import BytesIO
 from collections import OrderedDict
@@ -15,6 +16,7 @@ class CelestialCog(commands.Cog):
         self.bot = bot
         self.cache = OrderedDict()
         self.render_slots = BoundedImageGate()
+        self.avatar_cache = OrderedDict()
 
     async def show(self, ctx, kind, member=None, question=""):
         member = member or ctx.author
@@ -26,12 +28,21 @@ class CelestialCog(commands.Cog):
         async with self.render_slots:
             png = self.cache.get(key)
             if png is None:
-                try:
-                    avatar = await asyncio.wait_for(
-                        member.display_avatar.with_size(128).read(), timeout=5
-                    )
-                except (discord.HTTPException, TimeoutError):
-                    avatar = b""
+                asset = member.display_avatar.with_size(128).with_format("png")
+                avatar_key = str(asset)
+                cached = self.avatar_cache.get(avatar_key)
+                if cached and monotonic() - cached[0] < 600:
+                    avatar = cached[1]
+                    self.avatar_cache.move_to_end(avatar_key)
+                else:
+                    try:
+                        avatar = await asyncio.wait_for(asset.read(), timeout=5)
+                    except (discord.HTTPException, TimeoutError):
+                        avatar = b""
+                    if avatar:
+                        self.avatar_cache[avatar_key] = (monotonic(), avatar)
+                        while len(self.avatar_cache) > 32 or sum(len(v[1]) for v in self.avatar_cache.values()) > 1024 * 1024:
+                            self.avatar_cache.popitem(last=False)
                 png = await image_work(render_card, result, member.display_name, avatar)
                 self.cache[key] = png
                 while len(self.cache) > 8 or sum(map(len, self.cache.values())) > 4 * 1024 * 1024:

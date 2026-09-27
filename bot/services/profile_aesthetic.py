@@ -58,19 +58,27 @@ class ProfileAestheticService:
         # Fixed-size locks coalesce repeated requests without an unbounded lock table.
         self._member_locks = [asyncio.Lock() for _ in range(32)]
 
-    async def inspect(self, member: discord.Member, *, refresh: bool = False) -> ProfileVisual:
+    async def inspect(self, member: discord.Member, *, refresh: bool = False, animated: bool = False) -> ProfileVisual:
         async with self._inspect_slots:
             async with self._member_locks[member.id % len(self._member_locks)]:
                 if refresh:
                     # Server avatars/banners and global profile data can change
                     # independently of the gateway's cached Member object.
-                    member = await member.guild.fetch_member(member.id)
-                return await self._inspect(member, refresh=refresh)
+                    member, fetched = await asyncio.gather(
+                        member.guild.fetch_member(member.id), self.bot.fetch_user(member.id))
+                    return await self._inspect(member, refresh=True, fetched_user=fetched, animated=animated)
+                return await self._inspect(member, refresh=refresh, animated=animated)
 
-    async def _inspect(self, member: discord.Member, *, refresh: bool = False) -> ProfileVisual:
+    async def _inspect(self, member: discord.Member, *, refresh: bool = False, fetched_user=None, animated: bool = False) -> ProfileVisual:
         now = time.monotonic()
         cached_user = self._user_cache.get(member.id)
-        if not refresh and cached_user and now - cached_user[0] < CACHE_TTL_SECONDS:
+        if fetched_user is not None:
+            fetched = fetched_user
+            self._user_cache[member.id] = (now, fetched)
+            self._user_cache.move_to_end(member.id)
+            while len(self._user_cache) > 128:
+                self._user_cache.popitem(last=False)
+        elif not refresh and cached_user and now - cached_user[0] < CACHE_TTL_SECONDS:
             fetched = cached_user[1]
         else:
             try:
@@ -91,6 +99,11 @@ class ProfileAestheticService:
             banner_asset.with_size(1024).with_static_format("png") if banner_asset else None
         )
         decoration_asset = decoration_asset.with_size(512) if decoration_asset else None
+        animated_banner = bool(banner_asset and banner_asset.is_animated())
+        if not animated:
+            avatar_asset = avatar_asset.with_format("png")
+            banner_asset = banner_asset.with_format("png") if banner_asset else None
+            decoration_asset = decoration_asset.with_format("png") if decoration_asset else None
         urls = tuple(
             str(asset) if asset is not None else ""
             for asset in (avatar_asset, banner_asset, decoration_asset)
@@ -138,7 +151,7 @@ class ProfileAestheticService:
             accent_value=getattr(accent, "value", None),
             fingerprint=blake2s(cache_key.encode("utf-8"), digest_size=8).hexdigest(),
         )
-        visual = replace(visual, animated_banner=bool(banner_asset and banner_asset.is_animated()),
+        visual = replace(visual, animated_banner=animated_banner,
                          banner_available=banner_asset is not None)
         # Do not preserve a transient failed asset download for half an hour.
         if all(not url or data is not None for url, data in zip(urls, (avatar, banner, decoration))):

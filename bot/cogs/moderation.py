@@ -30,6 +30,7 @@ class ModerationCog(commands.Cog):
         self.lockdown_service = LockdownService(bot)
         self.spam = SpamWindow()
         self._settings = {}
+        self._settings_locks = [asyncio.Lock() for _ in range(16)]
         self._checks = {}
         self._next_check_cleanup = 0.0
         self._invites = {}
@@ -37,6 +38,11 @@ class ModerationCog(commands.Cog):
         self._downloads = asyncio.Semaphore(3)
 
     async def settings(self, guild_id):
+        # Coalesce expired settings reads from simultaneous message listeners.
+        async with self._settings_locks[guild_id % len(self._settings_locks)]:
+            return await self._load_settings(guild_id)
+
+    async def _load_settings(self, guild_id):
         cached = self._settings.get(guild_id)
         if cached and time.monotonic() - cached[0] < 60:
             return cached[1]

@@ -74,13 +74,14 @@ class ProfileStudioCog(commands.Cog):
         if target is None:
             return
         started = monotonic()
-        visual = await self.aesthetics.inspect(target, refresh=True)
+        visual = await self.aesthetics.inspect(target, refresh=True, animated=True)
         inspected = monotonic()
         visual, rendered, extension = await self._profile_renderer.render(visual)
         prepared = monotonic()
         await ctx.send(file=discord.File(BytesIO(rendered), filename=f"meyaya-profile-check.{extension}"),
                        allowed_mentions=discord.AllowedMentions.none())
-        logging.getLogger(__name__).debug(
+        logging.getLogger(__name__).log(
+            logging.INFO if monotonic() - started >= 2 else logging.DEBUG,
             "profilecheck inspect_ms=%.1f prepare_ms=%.1f upload_ms=%.1f",
             (inspected-started)*1000, (prepared-inspected)*1000, (monotonic()-prepared)*1000)
         from bot.services.profile_cards import profilecheck_feedback

@@ -44,6 +44,7 @@ class ShipCog(commands.Cog):
         self.service = ShipService()
         self._avatar_cache: dict[object, ByteCacheEntry] = {}
         self._card_cache: dict[object, ByteCacheEntry] = {}
+        self._avatar_locks = [asyncio.Lock() for _ in range(16)]
 
     @commands.hybrid_command(
         name="ship",
@@ -153,10 +154,14 @@ class ShipCog(commands.Cog):
 
     async def _get_avatar_bytes(self, asset: discord.Asset) -> bytes:
         key = str(asset.url)
+        async with self._avatar_locks[hash(key) % len(self._avatar_locks)]:
+            return await self._download_avatar(asset, key)
+
+    async def _download_avatar(self, asset, key) -> bytes:
         cached = self._get_cached(self._avatar_cache, key)
         if cached is not None:
             return cached
-        data = await asset.read()
+        data = await asyncio.wait_for(asset.read(), timeout=5)
         self._put_cached(self._avatar_cache, key, data)
         return data
 

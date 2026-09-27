@@ -353,6 +353,10 @@ class MeyayaBot(commands.Bot):
                 await self.usage.refund(guild_id, day)
 
     async def on_command_completion(self, ctx):
+        # Numeric timings only: never log arguments or message contents.
+        elapsed = (discord.utils.utcnow() - ctx.message.created_at).total_seconds()
+        if elapsed >= 2:
+            logger.info("slow_command command=%s message_to_completion_ms=%.0f", ctx.command.qualified_name, elapsed * 1000)
         # Hybrid commands also emit app-command completion; count them only there.
         if ctx.guild is not None and ctx.interaction is None:
             await self._count_command(ctx.guild.id)
@@ -367,8 +371,12 @@ class MeyayaBot(commands.Bot):
         ):
             return
         moderation = self.get_cog("ModerationCog")
+        checked_at = time.monotonic()
         if moderation and await moderation.should_block(message):
             return
+        delay = time.monotonic() - checked_at
+        if delay >= 1:
+            logger.info("slow_message_gate moderation_ms=%.0f", delay * 1000)
         await self.process_commands(message)
 
     async def on_interaction(self, interaction):
@@ -459,8 +467,13 @@ class MeyayaBot(commands.Bot):
             logger.warning("Could not reload server settings; keeping last known configuration")
 
     async def _refresh_dashboard_settings(self):
+        from bot.utils.host_metrics import HostMetrics
+        metrics = HostMetrics()
+        metrics.record(0)
         while True:
+            expected = time.monotonic() + 60
             await asyncio.sleep(60)
+            metrics.record(max(0, time.monotonic() - expected))
             try:
                 await self._load_guild_prefixes()
                 await self.chat_blacklist.load()

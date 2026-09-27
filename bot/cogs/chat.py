@@ -161,26 +161,32 @@ class ChatCog(commands.Cog):
         if await self.bot.chat_blacklist.inspect(message.guild.id, message.author.id, user_text):
             return
 
-        await self.bot.request_log.record_message(message)
-
         llm = self.bot.build_llm_provider()
         if llm is None:
+            await self.bot.request_log.record_message(message)
             await message.reply(
                 "💤 *rubs eyes* ...my brain isn't plugged in right now. Try again later!"
             )
             return
 
         guild_id = message.guild.id if message.guild else None
+        context_started = time.monotonic()
+        chat_memory = self.bot.build_chat_memory_service()
+        async def load_history():
+            return await chat_memory.get_history(message.channel.id, message.author.id) if chat_memory else []
+
         (
             context_lines,
             state_lines,
             memory_lines,
             lore_lines,
+            history,
         ) = await asyncio.gather(
             self._build_context_lines(message),
             self._load_meyaya_state_lines(message),
             self._load_memories(guild_id, message.author.id),
             self._load_server_lore(guild_id),
+            load_history(),
         )
         context_lines.extend(state_lines)
         usable_emojis = self._usable_custom_emojis(message)
@@ -193,22 +199,17 @@ class ChatCog(commands.Cog):
             lore_lines=lore_lines,
         )
 
-        chat_memory = self.bot.build_chat_memory_service()
-        history = (
-            await chat_memory.get_history(message.channel.id, message.author.id)
-            if chat_memory
-            else []
-        )
-
         user_prompt = self._reply_aware_prompt(
             self._speaker_label(message.author),
             user_text,
             reply_context,
         )
+        context_ready = time.monotonic()
         async with message.channel.typing():
             try:
-                reply = await self.bot.generate_chat(
-                    guild_id, system_instruction, user_prompt, history=history
+                reply, _ = await asyncio.gather(
+                    self.bot.generate_chat(guild_id, system_instruction, user_prompt, history=history),
+                    self.bot.request_log.record_message(message),
                 )
             except ChatLimitReached as exc:
                 await message.reply(str(exc), mention_author=False)
@@ -220,6 +221,11 @@ class ChatCog(commands.Cog):
                 )
                 return
 
+        generation_ready = time.monotonic()
+        if generation_ready - context_started >= 2:
+            logger.info("slow_chat context_ms=%.0f generation_and_quota_ms=%.0f",
+                        (context_ready - context_started) * 1000,
+                        (generation_ready - context_ready) * 1000)
         if not self.bot.chat_allowed(message.guild.id, message.channel.id):
             return
         if reply is None:
@@ -357,9 +363,9 @@ class ChatCog(commands.Cog):
             return
 
         is_monitored = getattr(monitor_cog, "is_channel_monitored", lambda _: False)(message)
-        language_check = getattr(monitor_cog, "_detect_lang", None) if is_monitored else None
+        language_check = getattr(monitor_cog, "detect_language", None) if is_monitored else None
         if language_check is not None:
-            language = language_check(content)
+            language = await language_check(content)
             if language != "en" and not language.startswith("en"):
                 return
 
@@ -996,8 +1002,12 @@ class ChatCog(commands.Cog):
                     summary = await profile_service.build(message.author.id, message.guild.id)
                 except Exception:  # noqa: BLE001
                     summary = None
-                marriage_service = self.bot.build_marriage_service(session)
-                marriage = await marriage_service.get_active_marriage(message.author.id)
+                if summary is not None:
+                    partner_id = summary.marriage.partner_id if summary.marriage else None
+                else:
+                    marriage_service = self.bot.build_marriage_service(session)
+                    marriage = await marriage_service.get_active_marriage(message.author.id)
+                    partner_id = (marriage.user_b_id if marriage.user_a_id == message.author.id else marriage.user_a_id) if marriage else None
 
             if summary is not None:
                 lines.append(
@@ -1010,14 +1020,9 @@ class ChatCog(commands.Cog):
                         f'"{summary.favorite_interaction}".'
                     )
 
-            if marriage is not None:
-                other_id = (
-                    marriage.user_b_id
-                    if marriage.user_a_id == message.author.id
-                    else marriage.user_a_id
-                )
+            if partner_id is not None:
                 lines.append(
-                    f"{message.author.display_name} is currently married to <@{other_id}>."
+                    f"{message.author.display_name} is currently married to <@{partner_id}>."
                 )
             else:
                 lines.append(f"{message.author.display_name} is currently single.")

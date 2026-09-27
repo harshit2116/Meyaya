@@ -66,6 +66,7 @@ ENGLISH_NUDGES = (
 class MonitorCog(commands.Cog):
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
+        self._language_lock = asyncio.Lock()
         self.settings = get_settings()
         self._channels: set[int] = set(self.settings.monitor_channel_ids or [])
         self._last_seen: dict[tuple[int, int], float] = {}
@@ -123,6 +124,12 @@ class MonitorCog(commands.Cog):
             self._nudge_cycle = list(ENGLISH_NUDGES)
             random.shuffle(self._nudge_cycle)
         return self._nudge_cycle.pop()
+
+    async def detect_language(self, content: str) -> str:
+        # langdetect initializes statistical models and can block for seconds.
+        # Serialize it off the Discord event loop, leaving commands responsive.
+        async with self._language_lock:
+            return await asyncio.to_thread(self._detect_lang, content)
 
     @staticmethod
     def _detect_lang(content: str) -> str:
@@ -335,7 +342,7 @@ class MonitorCog(commands.Cog):
         if not content:
             return
 
-        lang = self._detect_lang(content)
+        lang = await self.detect_language(content)
 
         if lang == "en" or lang.startswith("en"):
             # Nothing to do for English messages.

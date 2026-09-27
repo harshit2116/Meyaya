@@ -28,19 +28,34 @@ class ProfileCheckRenderer:
         self.ttl = ttl
         self.gate = BoundedImageGate()
 
+    def _cached(self, key):
+        entry = self.cache.get(key)
+        if entry is None:
+            return None
+        created, result, size = entry
+        if monotonic() - created >= self.ttl:
+            del self.cache[key]
+            self.bytes -= size
+            return None
+        self.cache.move_to_end(key)
+        return result
+
     async def render(self, visual):
         # Fingerprint includes name, asset URLs, accent and scoring metadata.
         # Content hashes distinguish a failed download from a later recovery.
         key = (visual.asset_fingerprint, hash(visual.avatar), hash(visual.banner), hash(visual.decoration))
+        cached = self._cached(key)
+        if cached is not None:
+            return cached
         async with self.gate:
             now = monotonic()
             for old_key, (created, _, size) in list(self.cache.items()):
                 if now - created >= self.ttl:
                     del self.cache[old_key]
                     self.bytes -= size
-            if key in self.cache:
-                self.cache.move_to_end(key)
-                return self.cache[key][1]
+            cached = self._cached(key)
+            if cached is not None:
+                return cached
             # Waiting callers recheck the cache after the first render finishes.
             result = await image_work(_render, visual)
             size = len(result[1]) + sum(len(asset) for asset in (visual.avatar, visual.banner, visual.decoration) if asset)

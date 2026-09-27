@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import asyncio
 from dataclasses import dataclass
 from random import SystemRandom
 import time
@@ -147,7 +148,8 @@ class KlipyService:
         try:
             if self.cache is not None and pairs:
                 KEY = "klipy:recent_urls"
-                recent = await self.cache.zrange(KEY, 0, -1)
+                async with asyncio.timeout(0.25):
+                    recent = await self.cache.zrange(KEY, -200, -1)
                 recent_set = {
                     r.decode() if isinstance(r, (bytes, bytearray)) else str(r) for r in recent
                 }
@@ -177,11 +179,12 @@ class KlipyService:
             if self.cache is not None and isinstance(chosen_url, str) and chosen_url:
                 KEY = "klipy:recent_urls"
                 now = int(time.time())
-                await self.cache.zadd(KEY, {chosen_url: now})
-                count = await self.cache.zcard(KEY)
-                if count > 200:
-                    # remove oldest entries, keep the newest 200
-                    await self.cache.zremrangebyrank(KEY, 0, count - 201)
+                async with asyncio.timeout(0.25):
+                    async with self.cache.pipeline(transaction=True) as pipe:
+                        pipe.zadd(KEY, {chosen_url: now})
+                        # Trim to 200 entries without a separate count round trip.
+                        pipe.zremrangebyrank(KEY, 0, -201)
+                        await pipe.execute()
         except Exception:
             logger.exception("Failed to update Redis recent set for Klipy")
 

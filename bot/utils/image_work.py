@@ -1,6 +1,8 @@
 """Share one Pillow worker across commands to keep native image memory bounded."""
 
 import asyncio
+import logging
+from time import monotonic
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from weakref import WeakKeyDictionary
@@ -52,7 +54,11 @@ class BoundedImageGate:
 async def image_work(function, *args, **kwargs):
     loop = asyncio.get_running_loop()
     slot = _slots.setdefault(loop, BoundedImageGate())
+    queued = monotonic()
     await slot.acquire()
+    wait = monotonic() - queued
+    if wait >= 0.5:
+        logging.getLogger(__name__).info("image_queue function=%s wait_ms=%.0f", getattr(function, "__name__", "image"), wait * 1000)
     try:
         future = loop.run_in_executor(_executor, partial(function, *args, **kwargs))
     except BaseException:
