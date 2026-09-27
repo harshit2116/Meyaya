@@ -21,10 +21,12 @@ class ImageBusy(commands.CommandError):
 class BoundedImageGate:
     """Bound waiting callers as well as running jobs, before they fetch assets."""
 
-    def __init__(self, capacity=4):
+    def __init__(self, capacity=4, *, concurrency=1):
+        if not 1 <= concurrency <= capacity:
+            raise ValueError("Concurrency must be between one and capacity")
         self.capacity = capacity
         self.pending = 0
-        self.slot = asyncio.Semaphore(1)
+        self.slot = asyncio.Semaphore(concurrency)
 
     async def acquire(self):
         if self.pending >= self.capacity:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from bot.logging.telemetry import discord_context, event
 
 import logging
+from bot.utils.typing import background_typing
 from typing import Literal
 
 import discord
@@ -97,7 +98,7 @@ class RoleplayCog(commands.Cog):
         instruction = build_roleplay_instruction(character, speaker)
 
         try:
-            async with ctx.typing():
+            async with background_typing(ctx.channel):
                 generated = await self.bot.generate_chat(
                     ctx.guild.id,
                     instruction,

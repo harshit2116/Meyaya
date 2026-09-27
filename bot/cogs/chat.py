@@ -5,6 +5,7 @@ from __future__ import annotations
 from bot.logging.telemetry import discord_context, event
 
 import asyncio
+from bot.utils.typing import background_typing
 from collections import deque
 from dataclasses import dataclass
 import json
@@ -202,7 +203,7 @@ class ChatCog(commands.Cog):
             reply_context,
         )
         context_ready = time.monotonic()
-        async with message.channel.typing():
+        async with background_typing(message.channel):
             try:
                 reply, _ = await asyncio.gather(
                     self.bot.generate_chat(guild_id, system_instruction, user_prompt, history=history),
@@ -439,7 +440,7 @@ class ChatCog(commands.Cog):
                 content,
                 reply_context,
             )
-            async with message.channel.typing():
+            async with background_typing(message.channel):
                 reply = await self.bot.generate_chat(
                     guild_id,
                     system_instruction,

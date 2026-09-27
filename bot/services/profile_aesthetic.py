@@ -9,8 +9,10 @@ from dataclasses import dataclass, replace
 from hashlib import blake2s
 from io import BytesIO
 import math
+import logging
 import time
 import colorsys
+from weakref import WeakValueDictionary
 
 import aiohttp
 import discord
@@ -18,6 +20,7 @@ from PIL import Image, ImageEnhance, ImageStat
 
 MAX_ASSET_BYTES = 6 * 1024 * 1024
 CACHE_TTL_SECONDS = 30 * 60
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +59,9 @@ class ProfileAestheticService:
         self._cache_bytes = 0
         self._asset_cache = OrderedDict()
         self._asset_cache_bytes = 0
-        self._inspect_slots = BoundedImageGate()
+        # Overlap two network inspections, but keep CPU/Pillow work serialized.
+        self._inspect_slots = BoundedImageGate(concurrency=2)
+        self._asset_locks = WeakValueDictionary()
         # Fixed-size locks coalesce repeated requests without an unbounded lock table.
         self._member_locks = [asyncio.Lock() for _ in range(32)]
 
@@ -66,8 +71,10 @@ class ProfileAestheticService:
                 if refresh:
                     # Server avatars/banners and global profile data can change
                     # independently of the gateway's cached Member object.
+                    started = time.monotonic()
                     member, fetched = await asyncio.gather(
                         member.guild.fetch_member(member.id), self.bot.fetch_user(member.id))
+                    logger.info("profile_metadata fetch_ms=%.0f", (time.monotonic() - started) * 1000)
                     return await self._inspect(member, refresh=True, fetched_user=fetched, animated=animated)
                 return await self._inspect(member, refresh=refresh, animated=animated)
 
@@ -136,11 +143,13 @@ class ProfileAestheticService:
         if cached and now - cached[0] < CACHE_TTL_SECONDS:
             return cached[1]
 
+        started = time.monotonic()
         avatar, banner, decoration = await asyncio.gather(
             self._download(urls[0]),
             self._download(urls[1]),
             self._download(urls[2]),
         )
+        downloaded = time.monotonic()
         visual = await image_work(
             self._analyze,
             member,
@@ -155,6 +164,8 @@ class ProfileAestheticService:
         )
         visual = replace(visual, animated_banner=animated_banner,
                          banner_available=banner_asset is not None)
+        logger.info("profile_assets download_ms=%.0f analysis_and_queue_ms=%.0f",
+                    (downloaded - started) * 1000, (time.monotonic() - downloaded) * 1000)
         # Do not preserve a transient failed asset download for half an hour.
         if all(not url or data is not None for url, data in zip(urls, (avatar, banner, decoration))):
             self._store(cache_key, visual)
@@ -177,6 +188,13 @@ class ProfileAestheticService:
             self._cache_bytes -= self._asset_size(removed)
 
     async def _download(self, url: str) -> bytes | None:
+        if not url:
+            return None
+        lock = self._asset_locks.setdefault(url, asyncio.Lock())
+        async with lock:
+            return await self._download_once(url)
+
+    async def _download_once(self, url: str) -> bytes | None:
         # Discord asset URLs include their content hash. A changed banner
         # should not force a second download of an unchanged avatar.
         now = time.monotonic()

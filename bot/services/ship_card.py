@@ -52,12 +52,16 @@ def render_ship_card(
     for data, name, cx in ((first, name_one, 204), (second, name_two, 756)):
         draw.ellipse((cx - 116, 119, cx + 116, 351), outline="#553347", width=1)
         draw.ellipse((cx - 109, 126, cx + 109, 344), fill=pink)
-        with Image.open(BytesIO(data)) as source:
-            if source.width * source.height > 4_000_000:
-                raise ValueError("Avatar is too large")
-            avatar = ImageOps.fit(
-                source.convert("RGBA"), (208, 208), method=Image.Resampling.LANCZOS
-            )
+        try:
+            with Image.open(BytesIO(data)) as source:
+                if source.width * source.height > 4_000_000:
+                    raise ValueError("Avatar is too large")
+                avatar = ImageOps.fit(
+                    source.convert("RGBA"), (208, 208), method=Image.Resampling.LANCZOS
+                )
+        except (OSError, ValueError):
+            avatar = Image.new("RGBA", (208, 208), "#291e31")
+            centered(ImageDraw.Draw(avatar), name[:1] or "?", 104, 104, 180, 72, pale)
         mask = Image.new("L", (208, 208))
         ImageDraw.Draw(mask).ellipse((0, 0, 207, 207), fill=255)
         portrait = Image.new("RGBA", avatar.size, "#291e31")

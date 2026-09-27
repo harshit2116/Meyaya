@@ -31,7 +31,8 @@ from bot.utils.embeds import meyaya_embed
 from bot.utils.image_work import ImageBusy
 from bot.utils.command_parameters import normalize_member_parameters
 from bot.services.usage import ChatLimitReached, UsageService, is_silence
-from bot.services.request_log import RequestLogService, slash_content
+from bot.services.request_log import RequestLogService
+from bot.utils.command_context import TimedContext
 from bot.services.profile_aesthetic import ProfileAestheticService
 from bot.services.chat_blacklist import ChatBlacklistService
 from bot.services.ai_guard import AIGuard
@@ -206,6 +207,7 @@ class MeyayaBot(commands.Bot):
     async def close(self) -> None:
         """Close external resources before shutting down the bot."""
 
+        await self.request_log.close()
         if self._dashboard_settings_refresh is not None:
             self._dashboard_settings_refresh.cancel()
             with suppress(asyncio.CancelledError):
@@ -356,6 +358,9 @@ class MeyayaBot(commands.Bot):
             if day is not None and not charged:
                 await self.usage.refund(guild_id, day)
 
+    async def get_context(self, origin, /, *, cls=TimedContext):
+        return await super().get_context(origin, cls=cls)
+
     async def on_command_completion(self, ctx):
         # Numeric timings only: never log arguments or message contents.
         elapsed = (discord.utils.utcnow() - ctx.message.created_at).total_seconds()
@@ -366,8 +371,8 @@ class MeyayaBot(commands.Bot):
             await self._count_command(ctx.guild.id)
 
     async def on_command(self, ctx):
-        if ctx.interaction is None:
-            await self.request_log.record_message(ctx.message, kind="command")
+        # Review logs are AI-chat only; command counts are recorded on completion.
+        return
 
     async def on_message(self, message):
         if self.chat_blacklist.is_blocked(
@@ -384,24 +389,7 @@ class MeyayaBot(commands.Bot):
         await self.process_commands(message)
 
     async def on_interaction(self, interaction):
-        if (
-            interaction.type is not discord.InteractionType.application_command
-            or interaction.guild_id is None
-        ):
-            return
-        data = interaction.data or {}
-        # Exclude message/user context menus, buttons and modal payloads.
-        if data.get("type", 1) != 1:
-            return
-        await self.request_log.record(
-            event_id=interaction.id,
-            guild_id=interaction.guild_id,
-            channel_id=interaction.channel_id,
-            user_id=interaction.user.id,
-            user_name=str(interaction.user),
-            kind="slash",
-            content=slash_content(data),
-        )
+        return
 
     async def on_app_command_completion(self, interaction, command):
         if interaction.guild_id is not None:

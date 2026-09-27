@@ -37,6 +37,10 @@ class RequestLogService:
     def __init__(self, sessions):
         self.sessions = sessions
         self._last_failure = float("-inf")
+        self._pending = set()
+        self._closing = False
+        # Review logging must not occupy the whole three-connection DB pool.
+        self._write_slot = asyncio.Semaphore(1)
 
     async def record(
         self, *, event_id, guild_id, channel_id, user_id, user_name, kind, content, message_id=None
@@ -82,16 +86,44 @@ class RequestLogService:
     async def record_message(self, message, kind="chat"):
         if message.guild is None or message.author.bot:
             return
-        await self.record(
+        if self._closing or kind != "chat":
+            return
+        if len(self._pending) >= 8:
+            now = time.monotonic()
+            if now - self._last_failure >= 60:
+                logger.warning("Request review logging busy; skipping new entry")
+                self._last_failure = now
+            return
+        # Only retain bounded scalar fields, never the entire Discord message.
+        task = asyncio.create_task(self._queued_record(
             event_id=message.id,
             guild_id=message.guild.id,
             channel_id=message.channel.id,
             user_id=message.author.id,
             user_name=str(message.author),
             kind=kind,
-            content=message.content or "[No text supplied]",
+            content=(message.content or "[No text supplied]")[:MAX_CONTENT],
             message_id=message.id,
-        )
+        ), name="chat-request-log")
+        self._pending.add(task)
+        task.add_done_callback(self._record_done)
+
+    async def _queued_record(self, **fields):
+        async with self._write_slot:
+            await self.record(**fields)
+
+    def _record_done(self, task):
+        self._pending.discard(task)
+        if not task.cancelled() and task.exception() is not None:
+            logger.warning("Request review logging failed")
+
+    async def close(self):
+        self._closing = True
+        if self._pending:
+            _, pending = await asyncio.wait(tuple(self._pending), timeout=3)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
 
     async def page(self, guild_id: int, before: int | None = None):
         cutoff = datetime.now(UTC) - timedelta(days=RETENTION_DAYS)

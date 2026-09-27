@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import aiohttp
+from bot.utils.typing import background_typing
 from bot.utils.image_work import image_work
 from dataclasses import dataclass
 import io
@@ -61,7 +63,7 @@ class ShipCog(commands.Cog):
             await ctx.defer()
             embed, file = await self._build_ship_response(user_one, user_two)
         else:
-            async with ctx.typing():
+            async with background_typing(ctx.channel):
                 embed, file = await self._build_ship_response(user_one, user_two)
         if file is None:
             await ctx.send(embed=embed)
@@ -149,7 +151,8 @@ class ShipCog(commands.Cog):
             label,
             theme=theme,
         )
-        self._put_cached(self._card_cache, card_key, image_bytes)
+        if avatar_one and avatar_two:
+            self._put_cached(self._card_cache, card_key, image_bytes)
         return image_bytes
 
     async def _get_avatar_bytes(self, asset: discord.Asset) -> bytes:
@@ -161,7 +164,29 @@ class ShipCog(commands.Cog):
         cached = self._get_cached(self._avatar_cache, key)
         if cached is not None:
             return cached
-        data = await asyncio.wait_for(asset.read(), timeout=5)
+        try:
+            # Reuse the application's CDN connection pool, independently of
+            # Discord's API connector. Bound both time and downloaded bytes.
+            async with asyncio.timeout(8):
+                session = getattr(self.bot, "http_session", None)
+                if session is not None and not session.closed:
+                    async with session.get(key) as response:
+                        response.raise_for_status()
+                        data = bytearray()
+                        async for chunk in response.content.iter_chunked(65536):
+                            data.extend(chunk)
+                            if len(data) > 2 * 1024 * 1024:
+                                raise ValueError("Avatar exceeds download limit")
+                        data = bytes(data)
+                else:
+                    data = await asset.read()
+                    if len(data) > 2 * 1024 * 1024:
+                        raise ValueError("Avatar exceeds download limit")
+        except (TimeoutError, aiohttp.ClientError, discord.HTTPException, OSError, ValueError):
+            logger.warning("ship_avatar_unavailable; rendering initials instead", exc_info=False)
+            # Keep the heart card and the other member's photo. Never cache
+            # missing artwork: the next command must retry the real avatar.
+            return b""
         self._put_cached(self._avatar_cache, key, data)
         return data
 

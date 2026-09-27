@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass
 import time
 from urllib.parse import urlparse
+from weakref import WeakValueDictionary
 
 import aiohttp
 
@@ -63,7 +64,8 @@ class AniListCharacterProvider:
         self.http_session = http_session
         self.cache_ttl = cache_ttl
         self._cache: dict[int, tuple[float, CharacterDisplay]] = {}
-        self._locks: dict[int, asyncio.Lock] = {}
+        # Retain a lock only while requests for that character are active.
+        self._locks = WeakValueDictionary()
 
     async def fetch(self, provider_id: int) -> CharacterDisplay:
         provider_id = int(provider_id)
