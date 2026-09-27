@@ -42,6 +42,8 @@ class ProfileVisual:
     animated_avatar: bool
     accent_color: str | None
     asset_fingerprint: str
+    animated_banner: bool = False
+    banner_available: bool = False
 
 
 class ProfileAestheticService:
@@ -94,7 +96,8 @@ class ProfileAestheticService:
         )
         public_flags = getattr(fetched, "public_flags", None) or member.public_flags
         badge_count = len(public_flags.all()) if public_flags else 0
-        nameplate = bool(collectibles)
+        nameplate = any(getattr(getattr(item, "type", None), "value", getattr(item, "type", None)) == "nameplate"
+                        for item in (collectibles or []))
         primary_guild = getattr(fetched, "primary_guild", None)
         server_tag = bool(primary_guild and getattr(primary_guild, "tag", None))
         accent = getattr(fetched, "accent_color", None)
@@ -131,6 +134,8 @@ class ProfileAestheticService:
             accent_value=getattr(accent, "value", None),
             fingerprint=blake2s(cache_key.encode("utf-8"), digest_size=8).hexdigest(),
         )
+        visual = replace(visual, animated_banner=bool(banner_asset and banner_asset.is_animated()),
+                         banner_available=banner_asset is not None)
         self._store(cache_key, visual)
         return visual
 
@@ -322,6 +327,8 @@ def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
     avatar = service._open(visual.avatar)
     banner = service._open(visual.banner)
     decoration = service._open(visual.decoration)
+    if banner is None and not visual.banner_available and visual.accent_color is not None:
+        banner = Image.new("RGB", (32, 32), visual.accent_color)
     if avatar is None:
         return visual
     avatar_palette = service._palette([avatar])
@@ -329,11 +336,26 @@ def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
     for asset in (banner, decoration):
         if asset is None:
             continue
+        if asset is decoration and visual.decoration:
+            # Transparent pixels are not a dark design choice. Inspect only ink.
+            with Image.open(BytesIO(visual.decoration)) as raw:
+                raw.thumbnail((96, 96))
+                pixels = [p[:3] for p in raw.convert("RGBA").getdata() if p[3] >= 128]
+            if not pixels:
+                continue
+            asset = Image.new("RGB", (len(pixels), 1))
+            asset.putdata(pixels)
         other = service._palette([asset])
         # Compare each prominent asset color to its nearest avatar color.
         distance = sum(min(service._distance(service._rgb(color), service._rgb(base))
                            for base in avatar_palette[:3]) for color in other[:3]) / 3
-        matches.append(service._clamp(round(96 - distance * 0.35)))
+        match = service._clamp(round(96 - distance * 0.35))
+        # Solid neutral backdrops coordinate by contrast, not hue matching.
+        stat = ImageStat.Stat(asset.convert("RGB"))
+        if asset is banner and max(stat.stddev) < 8 and max(stat.mean) - min(stat.mean) < 18:
+            contrast_gap = abs(sum(stat.mean)/3 - sum(ImageStat.Stat(avatar).mean)/3)
+            match = max(match, min(92, round(68 + contrast_gap * .12)))
+        matches.append(match)
     harmony = round(sum(matches) / len(matches)) if matches else visual.harmony_score
     contrast = min(100, sum(ImageStat.Stat(avatar.resize((96, 96))).stddev) / 3 * 1.6)
     detail = service._clamp(round(25 + min(1, avatar.convert('L').entropy() / 7.5) * 55 + contrast * .15))

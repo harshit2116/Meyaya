@@ -162,6 +162,7 @@ class MemberFunCog(commands.Cog):
 
     async def send_imitation(self, ctx, member, content):
         channel = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
+        stage = "list"
         try:
             async with self.webhook_lock:
                 hooks = await channel.webhooks()
@@ -177,6 +178,7 @@ class MemberFunCog(commands.Cog):
                     None,
                 )
                 if hook is None:
+                    stage = "create"
                     hook = await channel.create_webhook(name="Meyaya impressions")
             kwargs = {
                 "username": member.display_name[:80],
@@ -186,10 +188,27 @@ class MemberFunCog(commands.Cog):
             }
             if isinstance(ctx.channel, discord.Thread):
                 kwargs["thread"] = ctx.channel
+            stage = "send"
             await hook.send(content, **kwargs)
-        except discord.HTTPException:
+        except discord.HTTPException as exc:
+            # Never log the exception text/URL: webhook tokens and user content
+            # can occur there. Numeric codes and the stage are enough to triage.
+            log.warning("impersonate_webhook_failed stage=%s status=%s code=%s channel_id=%s",
+                        stage, exc.status, exc.code, ctx.channel.id)
+            if exc.status == 403:
+                detail = "Discord denied access. Check the channel and thread permissions."
+            elif exc.code == 30007:
+                detail = "This channel has reached Discord's webhook limit."
+            elif exc.code == 50035:
+                detail = "Discord rejected the message details, such as the display name or avatar."
+            elif exc.status == 404:
+                detail = "The webhook or its channel is no longer available. Try again."
+            elif exc.status == 429:
+                detail = "Discord is rate-limiting webhooks. Please try again later."
+            else:
+                detail = "Discord couldn't complete the webhook request. Please try again shortly."
             await ctx.send(
-                "I couldn't send that webhook message. Check my channel permissions.",
+                f"{detail} (Step: {stage}; code: {exc.code}; HTTP: {exc.status}.)",
                 ephemeral=True,
             )
             return

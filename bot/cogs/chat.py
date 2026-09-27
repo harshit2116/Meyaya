@@ -949,6 +949,7 @@ class ChatCog(commands.Cog):
         return any(re.search(rf"\b{re.escape(term)}\b", normalized) is not None for term in terms)
 
     async def _build_context_lines(self, message: discord.Message) -> list[str]:
+        from bot.prompts.command_knowledge import command_knowledge
         speaker = self._speaker_label(message.author)
         private_identity = get_private_identity()
         parent_name = private_identity.parents.get(message.author.id)
@@ -1021,6 +1022,15 @@ class ChatCog(commands.Cog):
             else:
                 lines.append(f"{message.author.display_name} is currently single.")
 
+        lines.extend(command_knowledge(self.bot, message.content))
+        lines.append(f"Written command prefix here: {self.bot.prefix_for_guild(message.guild.id if message.guild else None)}")
+        studio = self.bot.get_cog("ProfileStudioCog")
+        if studio is not None:
+            review = studio.recent_review(message)
+            if review:
+                from bot.prompts.command_knowledge import PROFILE_HELP
+                lines.append(PROFILE_HELP)
+                lines.append(review)
         return lines
 
     @staticmethod

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 from io import BytesIO
+from dataclasses import replace
 
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
@@ -309,9 +310,15 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
         mask = Image.new('L', banner.size)
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, 879, 163), radius=16, fill=255)
         image.paste(banner, (60, 155), mask)
+    elif visual.accent_color is not None and not visual.banner_available:
+        _panel(draw, (60, 155, 940, 319), fill=(*_rgb(visual.accent_color), 255))
+        text_color = _readable_accent("#ffffff", visual.accent_color)
+        if sum(_rgb(visual.accent_color)) > 540:
+            text_color = "#15121d"
+        draw.text((500, 220), f"SOLID BANNER / {visual.accent_color.upper()}", anchor="mm", font=font(20), fill=text_color)
     else:
         _panel(draw, (60, 155, 940, 319), fill=(38, 30, 48, 255))
-        draw.text((500, 220), 'AVATAR-LED PROFILE', anchor='mm', font=font(22), fill=accent)
+        draw.text((500, 220), 'BANNER NOT AVAILABLE TO BOT', anchor='mm', font=font(20), fill=accent)
     # Render the review below the banner with room for the full decoration.
     _avatar(image, visual, (62, 355, 270, 270))
     draw = ImageDraw.Draw(image, "RGBA")
@@ -334,6 +341,8 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
             (visual.has_server_tag, "Server tag"),
             (visual.has_server_avatar, "Server avatar"),
             (visual.animated_avatar, "Animated avatar"),
+            (visual.animated_banner, "Animated banner"),
+            (not visual.banner_available and not visual.banner and visual.accent_color is not None, "Solid banner color"),
         )
         if enabled
     ]
@@ -348,7 +357,55 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
     draw.text((80, 754), grade, font=font(14), fill="#efb8d5")
     label(draw, (80, 779, 840, 27), verdict, 18, "white")
     label(draw, (80, 815, 840, 26), tip, 16, "#d7cadf")
+    label(draw, (62, 855, 875, 17), "API-visible assets only. Profile effects / panel themes unavailable. Scores use still frames.", 12, "#cfc3d5", minimum=12)
     return _save(image)
+
+
+def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
+    """Bound animation to 12 frames at 750px; static cards stay full-resolution PNGs."""
+    sources = {}
+    try:
+        for key in ("avatar", "banner", "decoration"):
+            data = getattr(visual, key)
+            if not data:
+                continue
+            source = Image.open(BytesIO(data))
+            if source.width * source.height > 4_000_000 or not getattr(source, "is_animated", False):
+                source.close()
+                continue
+            sources[key] = source
+        if not sources:
+            return profilecheck_card(visual), "png"
+        frames, durations = [], []
+        for index in range(12):
+            changes, delay, advanced = {}, 80, False
+            for key, source in sources.items():
+                try:
+                    source.seek(index)
+                    advanced = True
+                except EOFError:
+                    pass  # Hold shorter animations on their final available frame.
+                frame = source.convert("RGBA")
+                frame.thumbnail((880, 512))
+                stream = BytesIO()
+                frame.save(stream, "PNG")
+                changes[key] = stream.getvalue()
+                delay = max(delay, min(250, int(source.info.get("duration", 100))))
+            if not advanced:
+                break
+            with Image.open(BytesIO(profilecheck_card(replace(visual, **changes)))) as rendered:
+                frames.append(rendered.resize((750, 675)).convert("P", palette=Image.Palette.ADAPTIVE, colors=128))
+            durations.append(delay)
+        output = BytesIO()
+        frames[0].save(output, "GIF", save_all=True, append_images=frames[1:], duration=durations, loop=0, disposal=2)
+        if output.tell() <= 8 * 1024 * 1024:
+            return output.getvalue(), "gif"
+    except (OSError, ValueError, EOFError):
+        pass
+    finally:
+        for source in sources.values():
+            source.close()
+    return profilecheck_card(visual), "png"
 
 
 AURA_ARCHETYPES = {
