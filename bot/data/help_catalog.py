@@ -80,8 +80,8 @@ CATEGORY_ORDER: tuple[str, ...] = (
 )
 
 COMMAND_ORDER: dict[str, tuple[str, ...]] = {
-    "Essentials": ("help", "profile", "nickname", "gif"),
-    "Profile Studio": ("profilecheck", "aura", "palette", "duostyle", "callingcard"),
+    "Essentials": ("help", "profile", "nickname", "gif", "feedback"),
+    "Profile Studio": ("profilecheck", "aura", "palette", "duostyle", "callingcard", "room"),
     "Social": ("roast", "compliment", "rank", "impersonate"),
     "Social Reactions": (
         "hug",
@@ -106,7 +106,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
         "facepalm",
         "cry",
     ),
-    "Fun and Scores": ("ship", "bestiescore", "rate", "mostlikely", "8ball"),
+    "Fun and Scores": ("ship", "bestiescore", "rate", "mostlikely", "8ball", "warninglabel"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
     "Fantasy / Profile": ("summon", "guardian"),
@@ -139,6 +139,9 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
 
 
 COMMANDS: tuple[HelpCommand, ...] = (
+    HelpCommand("feedback", "feedback", "Join Pondside Lounge to report bugs or suggest features.", "Essentials"),
+    HelpCommand("warninglabel", "warninglabel [@member]", "Give a member fictional warnings, side effects, and handling instructions.", "Fun and Scores"),
+    HelpCommand("room", "room [@member]", "Imagine lighting, furniture, music, and a strange shelf object from profile colors.", "Profile Studio"),
     HelpCommand("serversetup", "serversetup", "Set up chat access, automatic replies, and moderation with a guided menu.", "Server Admin"),
     HelpCommand("serverdashboard", "serverdashboard", "See this server's daily allowance, remaining messages, activity, and settings.", "Server Admin"),
     HelpCommand(
@@ -352,8 +355,8 @@ COMMANDS: tuple[HelpCommand, ...] = (
     ),
     HelpCommand(
         "mostlikely",
-        "mostlikely <scenario>",
-        "Choose who best matches a funny scenario.",
+        "mostlikely [@member1] [@member2] [@member3] <scenario>",
+        "Choose from mentioned members, or the whole server when nobody is specified.",
         "Fun and Scores",
     ),
     HelpCommand(

@@ -69,15 +69,29 @@ def draw_card(kind, guild_id, user_id, *, day=None, question=""):
         elif luck >= 46:
             outlook = f"A balanced day rewards steady choices. Let {theme} guide one decision instead of rushing everything."
         else:
-            outlook = f"Move gently and protect your energy. A small act of {theme} can turn the mood around before the day ends."
+            outlook = f"Move gently and protect your energy. Today's focus is {theme}; small steps are enough."
+        # All interpretive copy comes from the same score band, not independent rolls.
+        if luck >= 76:
+            titles = ("A little courage goes a long way", "Make room for a bright surprise", "The wind is at your back")
+            omens = ("An invitation opens a promising door.", "A small success gives you fresh momentum.")
+            advice = ("Take one thoughtful step toward something you want.", "Share your idea while the spark is fresh.")
+        elif luck >= 46:
+            titles = ("Good things at your own pace", "A steady hand, a softer day", "Find the magic in the ordinary")
+            omens = ("A familiar routine brings an unexpected smile.", "A conversation helps one piece fall into place.")
+            advice = ("Finish one small thing before starting another.", "Leave a little room in your plans for a detour.")
+        else:
+            titles = ("A softer pace is still progress", "Protect your peace today", "Small steps count today")
+            omens = ("A delay gives you a useful moment to reconsider.", "A quiet break helps you see things more clearly.")
+            advice = ("Choose the manageable task and let the rest wait.", "Pause before committing; you do not need to rush.")
+        title = rng.choice(titles)
         fields = [
             ("Luck", f"{luck}/100"),
             ("Lucky number", str(rng.randint(1, 99))),
             ("Color", rng.choice(data["colors"])),
             ("Lucky theme", theme),
             ("Outlook", outlook),
-            ("Omen", rng.choice(data["omens"])),
-            ("Advice", rng.choice(data["advice"])),
+            ("Omen", rng.choice(omens)),
+            ("Advice", rng.choice(advice)),
         ]
         if question.strip():
             q_rng = Random(
@@ -161,7 +175,7 @@ def draw_card(kind, guild_id, user_id, *, day=None, question=""):
         }[kind]
         selected = (f"{prefix}_{[r[0] for r in data[group]].index(title)}",)
     else:
-        selected = (f"verdict_{data['verdicts'].index(title)}",)
+        selected = (f"fortune_{'high' if luck >= 76 else 'steady' if luck >= 46 else 'gentle'}_{titles.index(title)}",)
     return CardResult(
         kind,
         day,

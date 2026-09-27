@@ -6,6 +6,7 @@ from bot.logging.telemetry import discord_context, event
 
 import re
 import time
+import logging
 
 import discord
 from discord import app_commands
@@ -29,6 +30,7 @@ MESSAGE_LINK = re.compile(
 )
 FACT_CHECK_COOLDOWN_SECONDS = 60
 MAX_DISCORD_CHUNK = 1900
+logger = logging.getLogger(__name__)
 
 
 class FactCheckInputError(Exception):
@@ -45,6 +47,7 @@ class FactCheckCog(commands.Cog):
 
     @commands.hybrid_command(
         name="argumenttimeline",
+        aliases=["arguementtimeline"],
         description="Build a clear timeline from a Discord argument.",
     )
     @app_commands.describe(
@@ -63,10 +66,10 @@ class FactCheckCog(commands.Cog):
         """Analyze every selected message from the start through the optional end."""
 
         if not self._supported_channel(ctx):
-            await ctx.send("Fact checking only works in a server text channel or thread.")
+            await ctx.send("Use this command in a server channel with message history.")
             return
         if ctx.interaction is not None:
-            await ctx.defer()
+            await ctx.defer(ephemeral=True)
 
         try:
             replied = await self._replied_message(ctx)
@@ -102,13 +105,13 @@ class FactCheckCog(commands.Cog):
         """Analyze one replied-to or linked Discord message without surrounding chat."""
 
         if not self._supported_channel(ctx):
-            await ctx.send("Fact checking only works in a server text channel or thread.")
+            await ctx.send("Use this command in a server channel with message history.")
             return
         if ctx.interaction is not None:
             await ctx.defer()
 
         try:
-            selected = await self._replied_message(ctx)
+            selected = await self._message_from_link(ctx, message) if message else await self._replied_message(ctx)
             if selected is None:
                 if message is None:
                     raise FactCheckInputError(
@@ -133,7 +136,6 @@ class FactCheckCog(commands.Cog):
             await ctx.send("Please wait a minute before requesting another review.", ephemeral=True)
             return
         self._inflight.add(key)
-        self._last_check[key] = now
         try:
             report = await build_timeline(self.bot.build_llm_provider(), messages)
             for chunk in split_discord_report(report):
@@ -142,6 +144,11 @@ class FactCheckCog(commands.Cog):
                     allowed_mentions=discord.AllowedMentions.none(),
                     ephemeral=ctx.interaction is not None,
                 )
+            self._last_check[key] = time.monotonic()
+        except Exception:
+            logger.exception("Argument timeline failed")
+            await ctx.send("I couldn't build that timeline right now. Please try again shortly.",
+                           ephemeral=ctx.interaction is not None)
         finally:
             self._inflight.discard(key)
 
@@ -158,7 +165,7 @@ class FactCheckCog(commands.Cog):
         if key in self._inflight:
             await ctx.send("You already have a fact check running.", ephemeral=True)
             return
-        remaining = FACT_CHECK_COOLDOWN_SECONDS - (now - self._last_check.get(key, 0.0))
+        remaining = FACT_CHECK_COOLDOWN_SECONDS - (now - self._last_check.get(key, float("-inf")))
         if remaining > 0:
             await ctx.send(
                 f"Please wait {int(remaining) + 1} seconds before another fact check.",
@@ -175,19 +182,22 @@ class FactCheckCog(commands.Cog):
                 detail = f" Try again in about {exc.retry_after_seconds} seconds."
             else:
                 detail = (
-                    " The Google API project's Search grounding quota may be exhausted or "
-                    "billing may need attention."
+                    " Please try again later."
                 )
             await ctx.send(
-                "Google Search grounding is rate-limited, so Meyaya did not make a "
+                "Source checking is temporarily busy, so Meyaya did not make a "
                 f"fact-check conclusion.{detail}"
             )
             return
         except GroundingError:
             await ctx.send(
-                "Google Search grounding is unavailable right now, so Meyaya did not make a "
+                "Source checking is unavailable right now, so Meyaya did not make a "
                 "fact-check conclusion. Try again shortly."
             )
+            return
+        except Exception:
+            logger.exception("Claim check failed")
+            await ctx.send("I couldn't check that claim right now. No conclusion was made. Please try again shortly.")
             return
         finally:
             self._inflight.discard(key)
@@ -312,7 +322,7 @@ class FactCheckCog(commands.Cog):
     @staticmethod
     def _supported_channel(ctx: commands.Context) -> bool:
         return ctx.guild is not None and isinstance(
-            ctx.channel, (discord.TextChannel, discord.Thread)
+            ctx.channel, (discord.TextChannel, discord.Thread, discord.VoiceChannel, discord.StageChannel)
         )
 
 

@@ -177,6 +177,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.profile_studio")
         await self.load_extension("bot.cogs.ship")
         await self.load_extension("bot.cogs.fun")
+        await self.load_extension("bot.cogs.extras")
         await self.load_extension("bot.cogs.member_fun")
         await self.load_extension("bot.cogs.celestial")
         await self.load_extension("bot.cogs.character_catalog")

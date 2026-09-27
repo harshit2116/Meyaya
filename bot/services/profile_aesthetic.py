@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from bot.utils.image_work import image_work, BoundedImageGate
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import blake2s
 from io import BytesIO
 import math
@@ -314,6 +314,33 @@ class ProfileAestheticService:
     @staticmethod
     def _clamp(value: int) -> int:
         return max(0, min(100, value))
+
+
+def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
+    """Review visible assets without identity randomness or accessory-count scores."""
+    service = ProfileAestheticService
+    avatar = service._open(visual.avatar)
+    banner = service._open(visual.banner)
+    decoration = service._open(visual.decoration)
+    if avatar is None:
+        return visual
+    avatar_palette = service._palette([avatar])
+    matches = []
+    for asset in (banner, decoration):
+        if asset is None:
+            continue
+        other = service._palette([asset])
+        # Compare each prominent asset color to its nearest avatar color.
+        distance = sum(min(service._distance(service._rgb(color), service._rgb(base))
+                           for base in avatar_palette[:3]) for color in other[:3]) / 3
+        matches.append(service._clamp(round(96 - distance * 0.35)))
+    harmony = round(sum(matches) / len(matches)) if matches else visual.harmony_score
+    contrast = min(100, sum(ImageStat.Stat(avatar.resize((96, 96))).stddev) / 3 * 1.6)
+    detail = service._clamp(round(25 + min(1, avatar.convert('L').entropy() / 7.5) * 55 + contrast * .15))
+    styling = service._clamp(round(visual.avatar_score * .4 + harmony * .6))
+    overall = round(visual.avatar_score * .35 + styling * .20 + harmony * .30 + detail * .15)
+    return replace(visual, styling_score=styling, harmony_score=harmony,
+                   originality_score=detail, overall_score=overall)
 
 
 def profile_affinity(visual: ProfileVisual) -> str:

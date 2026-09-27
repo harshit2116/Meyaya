@@ -234,6 +234,7 @@ class InteractionsCog(commands.Cog):
                     bot_mention=bot_mention,
                     command_prefix=command_prefix,
                     command_name=command,
+                    bot=bot,
                 ),
                 view=view,
             )
@@ -264,6 +265,7 @@ class InteractionsCog(commands.Cog):
                     bot_mention=bot_mention,
                     command_prefix=command_prefix,
                     command_name=command,
+                    bot=bot,
                 ),
                 view=view,
             )

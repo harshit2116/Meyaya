@@ -65,6 +65,8 @@ class FactCheckService:
         grounded = await self.llm.grounded_generate(
             system,
             "Fact-check this JSON evidence:\n" + json.dumps(evidence, ensure_ascii=False),
+            max_output_tokens=1800,
+            timeout_seconds=45,
         )
         if grounded is None:
             return None

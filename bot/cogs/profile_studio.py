@@ -20,6 +20,7 @@ from bot.services.profile_cards import (
     profilecheck_card,
 )
 from bot.services.profiles import ProfileService
+from bot.services.profile_aesthetic import profilecheck_analysis
 
 
 class ProfileStudioCog(commands.Cog):
@@ -56,6 +57,7 @@ class ProfileStudioCog(commands.Cog):
         if target is None:
             return
         visual = await self.aesthetics.inspect(target)
+        visual = await image_work(profilecheck_analysis, visual)
         rendered = await image_work(profilecheck_card, visual)
         await self._send_card(ctx, rendered, "meyaya-profile-check.png")
 

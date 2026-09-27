@@ -12,7 +12,7 @@ from bot.services.celestial import definitions
 ASSETS = Path(__file__).resolve().parents[1] / "assets" / "celestial"
 SIZES = {
     "tarot": (1080, 900),
-    "fortune": (1000, 780),
+    "fortune": (1000, 900),
     "fate": (1000, 780),
     "summon": (1000, 740),
     "guardian": (1000, 620),
@@ -144,79 +144,32 @@ def tarot(image, d, r):
 
 
 def fortune(image, d, r):
-    fields = dict(r.fields)
-    ink = "#3e2948"
-    rose = "#9d5c7d"
-    gold = "#b88645"
-    paper = "#f6e9df"
-    d.rounded_rectangle((28, 122, 972, 750), radius=24, fill=paper, outline="#e8bdaf", width=2)
-    label(d, (52, 146, 878, 54), r.title, 36, ink)
-    d.line((52, 216, 930, 216), fill="#e0bdc9", width=2)
-    d.ellipse((52, 247, 256, 451), fill="#ecd0d8", outline=gold, width=3)
-    d.ellipse((69, 264, 239, 434), outline="#c98fa7", width=2)
-    luck = fields["Luck"].split("/", 1)[0]
-    for value, size, y, color in (
-        ("TODAY'S LUCK", 16, 302, rose),
-        (luck, 54, 351, ink),
-        ("/ 100", 18, 402, rose),
-    ):
-        d.text((154, y), value, font=font(size), fill=color, anchor="mm")
-    for i, k in enumerate(("Lucky number", "Color", "Lucky theme")):
-        x = 292 + i * 218
-        d.rounded_rectangle((x, 240, x + 202, 340), radius=12, fill="#ead7df")
-        label(d, (x + 14, 253, 174, 20), k.upper(), 14, rose)
-        label(d, (x + 14, 283, 174, 48), fields[k], 23, ink)
-    tile(
-        d,
-        (292, 356, 638, 120),
-        "What today means",
-        fields["Outlook"],
-        gold,
-        fill="#fff7f0",
-        size=22,
-        text_color=ink,
-    )
-    tile(
-        d,
-        (52, 494, 431, 124),
-        "Omen",
-        fields["Omen"],
-        rose,
-        fill="#ead7df",
-        size=22,
-        text_color=ink,
-    )
-    tile(
-        d,
-        (499, 494, 431, 124),
-        "Advice",
-        fields["Advice"],
-        rose,
-        fill="#ead7df",
-        size=22,
-        text_color=ink,
-    )
-    oracle = fields.get("Question oracle")
+    f = dict(r.fields)
+    ink, muted, gold = "#f6eee6", "#bdb0ce", "#e8c893"
+    # A dark editorial reading: one hero, three compact tokens, two clear takeaways.
+    d.rounded_rectangle((32, 124, 968, 444), radius=26, fill="#262039", outline="#51435e", width=2)
+    label(d, (60, 151, 590, 24), "YOUR DAILY CHAPTER", 15, gold)
+    label(d, (60, 196, 575, 106), r.title, 40, ink)
+    label(d, (60, 324, 575, 92), f["Outlook"], 22, muted)
+    luck = max(0, min(100, int(f["Luck"].split("/")[0])))
+    d.ellipse((706, 173, 918, 385), fill="#191626", outline="#51435e", width=2)
+    d.arc((715, 182, 909, 376), start=-90, end=-90 + max(1, luck * 3.6), fill=gold, width=7)
+    d.text((812, 231), "TODAY'S LUCK", font=font(14), fill=muted, anchor="mm")
+    d.text((812, 285), str(luck), font=font(64), fill=ink, anchor="mm")
+    d.text((812, 338), "OUT OF 100", font=font(13), fill=gold, anchor="mm")
+    for i, key in enumerate(("Lucky number", "Color", "Lucky theme")):
+        x = 32 + i * 318
+        tile(d, (x, 463, 300, 99), key, f[key], gold, fill="#292239", size=23, text_color=ink)
+    for x, key in ((32, "Omen"), (510, "Advice")):
+        tile(d, (x, 581, 458, 134), key, f[key], gold, fill="#211d30", size=23, text_color=ink)
+    oracle = f.get("Question oracle")
     if oracle:
-        tile(
-            d,
-            (52, 634, 878, 96),
-            "The oracle answers",
-            oracle,
-            gold,
-            fill="#fff7f0",
-            size=24,
-            text_color=ink,
-        )
+        tile(d, (32, 734, 936, 96), "Your question / the oracle answers", oracle, gold,
+             fill="#30263c", size=23, text_color=ink)
     else:
-        label(
-            d,
-            (52, 653, 878, 30),
-            "Carry the signs lightly - your choices still write the day.",
-            22,
-            ink,
-        )
-        label(d, (52, 698, 878, 24), "Return tomorrow for a new reading.", 17, rose)
+        d.line((60, 756, 940, 756), fill="#51435e", width=1)
+        label(d, (60, 777, 880, 28), "A little perspective for today. Your choices still write the story.", 20, muted)
+    label(d, (60, 851, 880, 23), "MEYAYA  /  FOR FUN, NOT A PREDICTION  /  RETURNS DAILY", 13, gold, minimum=13)
 
 
 def fate(image, d, r):
@@ -317,7 +270,7 @@ def guardian(image, d, r):
 def render_card(result, name, avatar=b""):
     colors = {
         "tarot": ("#221a30", "#dbbd7a"),
-        "fortune": ("#61465f", "#efc7b9"),
+        "fortune": ("#14121f", "#e8c893"),
         "fate": ("#1c1835", "#bdacfa"),
         "summon": ("#171f2c", "#d6b784"),
         "guardian": ("#102c2c", "#94e1cd"),

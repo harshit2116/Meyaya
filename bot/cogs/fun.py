@@ -55,7 +55,10 @@ class FunCog(commands.Cog):
         description="Choose who is most likely to match a scenario.",
     )
     @app_commands.describe(scenario="What is someone most likely to do?")
-    async def mostlikely(self, ctx: commands.Context, *, scenario: str) -> None:
+    async def mostlikely(self, ctx: commands.Context,
+                         member1: discord.Member | None = None,
+                         member2: discord.Member | None = None,
+                         member3: discord.Member | None = None, *, scenario: str) -> None:
         if ctx.guild is None:
             await ctx.send("This command only works inside a server.")
             return
@@ -65,17 +68,35 @@ class FunCog(commands.Cog):
             await ctx.send("Tell me what everyone is being judged for first.")
             return
 
-        eligible = [member for member in ctx.guild.members if not member.bot]
+        if ctx.interaction is not None:
+            await ctx.defer()
+        # Share the daily commands' bounded REST-backed member cache: on the
+        # small host, guild.members may contain only the bot itself.
+        picker = self.bot.get_cog("DailyCog")
+        selected = [m for m in (member1, member2, member3) if m is not None]
+        selected.extend(getattr(getattr(ctx, "message", None), "mentions", []))
+        if selected and any(m.bot for m in selected):
+            await ctx.send("Choose human members for this one, not bots.")
+            return
+        try:
+            eligible = list(dict.fromkeys(m.id for m in selected)) if selected else await picker._candidate_ids(ctx.guild) if picker else [
+                member.id for member in ctx.guild.members if not member.bot
+            ]
+        except (discord.HTTPException, discord.ClientException, TimeoutError):
+            await ctx.send("I couldn't load the server members right now. Please try again shortly.")
+            return
         if not eligible:
             await ctx.send("I could not find anyone eligible to choose.")
             return
-        winner = RNG.choice(eligible)
+        winner_id = RNG.choice(eligible)
+        winner = ctx.guild.get_member(winner_id)
 
         safe_scenario = discord.utils.escape_mentions(discord.utils.escape_markdown(scenario))
         embed = meyaya_embed("Most Likely", icon="🎭")
         embed.add_field(name="The scenario", value=safe_scenario, inline=False)
-        embed.add_field(name="Meyaya's pick", value=winner.mention, inline=False)
-        embed.set_thumbnail(url=str(winner.display_avatar.url))
+        embed.add_field(name="Meyaya's pick", value=f"<@{winner_id}>", inline=False)
+        if winner is not None:
+            embed.set_thumbnail(url=str(winner.display_avatar.url))
         await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
     @commands.hybrid_command(

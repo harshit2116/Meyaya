@@ -282,39 +282,49 @@ def profilecheck_feedback(visual: ProfileVisual) -> tuple[str, str, str]:
         "avatar": visual.avatar_score,
         "styling": visual.styling_score,
         "color harmony": visual.harmony_score,
-        "originality": visual.originality_score,
+        "detail": visual.originality_score,
     }
     weakest = min(scores, key=scores.get)
     tips = {
         "avatar": "Best upgrade: use a clearer avatar with stronger contrast and composition.",
-        "styling": "Best upgrade: coordinate a banner, decoration, or server-specific avatar.",
-        "color harmony": "Best upgrade: make the avatar and banner share a tighter color story.",
-        "originality": "Best upgrade: add one signature detail that does not look copied from everyone else.",
+        "styling": "Best upgrade: simplify competing details so the avatar remains the focal point.",
+        "color harmony": "Best upgrade: repeat one avatar accent color in the banner or decoration." if visual.has_banner or visual.has_decoration else "Best upgrade: use a clearer balance of light and dark in your avatar.",
+        "detail": "Best upgrade: choose artwork with a clear subject that stays readable at small sizes.",
     }
     return grade, comment, tips[weakest]
 
 
 def profilecheck_card(visual: ProfileVisual) -> bytes:
-    image = _background((1000, 720), visual.palette[3], visual.palette[0])
+    image = _background((1000, 900), visual.palette[3], visual.palette[0])
     draw = ImageDraw.Draw(image, "RGBA")
-    _panel(draw, (28, 28, 972, 692))
+    _panel(draw, (28, 28, 972, 872))
     accent = _readable_accent(visual.palette[2], '#110e1a')
     draw.text((58, 50), "MEYAYA PROFILE CHECK", font=font(18), fill=accent)
     label(draw, (58, 86, 650, 56), visual.name, 40, "white")
     draw.text((770, 58), f"{visual.overall_score}", font=font(72), fill="white")
     draw.text((866, 103), "/ 100", font=font(21), fill=accent)
-    _avatar(image, visual, (62, 175, 270, 270))
+    banner = _open(visual.banner)
+    if banner is not None:
+        banner = ImageOps.fit(banner, (880, 164))
+        mask = Image.new('L', banner.size)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, 879, 163), radius=16, fill=255)
+        image.paste(banner, (60, 155), mask)
+    else:
+        _panel(draw, (60, 155, 940, 319), fill=(38, 30, 48, 255))
+        draw.text((500, 220), 'AVATAR-LED PROFILE', anchor='mm', font=font(22), fill=accent)
+    # Render the review below the banner with room for the full decoration.
+    _avatar(image, visual, (62, 355, 270, 270))
     draw = ImageDraw.Draw(image, "RGBA")
-    _panel(draw, (368, 174, 940, 455), fill=(10, 8, 18, 155))
+    _panel(draw, (368, 354, 940, 635), fill=(10, 8, 18, 155))
     scores = (
         ("Avatar", visual.avatar_score),
-        ("Styling", visual.styling_score),
+        ("Cohesion", visual.styling_score),
         ("Color harmony", visual.harmony_score),
-        ("Originality", visual.originality_score),
+        ("Visual detail", visual.originality_score),
     )
     for index, (name, value) in enumerate(scores):
         bar_color = _readable_accent(visual.palette[index % 3], '#2a2533', minimum=3)
-        _score_bar(draw, 402, 207 + index * 57, 495, name, value, bar_color)
+        _score_bar(draw, 402, 387 + index * 57, 495, name, value, bar_color)
     elements = [
         name
         for enabled, name in (
@@ -329,15 +339,15 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
     ]
     if visual.badge_count:
         elements.append(f"{visual.badge_count} public badge(s)")
-    draw.text((62, 483), "PROFILE ELEMENTS", font=font(15), fill=accent)
+    draw.text((62, 657), "PROFILE ELEMENTS", font=font(15), fill=accent)
     label(
-        draw, (62, 512, 875, 54), "  •  ".join(elements) or "Clean and minimal setup", 22, "white"
+        draw, (62, 683, 875, 54), "  •  ".join(elements) or "Clean and minimal setup", 20, "white"
     )
     grade, verdict, tip = profilecheck_feedback(visual)
-    _panel(draw, (58, 574, 942, 674), fill=(48, 35, 55, 255))
-    draw.text((80, 589), grade, font=font(14), fill="#efb8d5")
-    label(draw, (80, 612, 840, 27), verdict, 18, "white")
-    label(draw, (80, 643, 840, 20), tip, 14, "#d7cadf")
+    _panel(draw, (58, 742, 942, 852), fill=(48, 35, 55, 255))
+    draw.text((80, 754), grade, font=font(14), fill="#efb8d5")
+    label(draw, (80, 779, 840, 27), verdict, 18, "white")
+    label(draw, (80, 815, 840, 26), tip, 16, "#d7cadf")
     return _save(image)
 
 
@@ -652,6 +662,7 @@ def duostyle_card(left: ProfileVisual, right: ProfileVisual) -> bytes:
     )
     verdict = duostyle_feedback(left, right, compatibility)
     _centered_wrapped_text(draw, verdict, 550, 304, 218, 17, "#f5d5e7")
+    _centered_wrapped_text(draw, duostyle_reason(left, right), 550, 407, 236, 14, "#d8cbdc")
 
     for visual, center_x in ((left, 226), (right, 874)):
         _panel(draw, (center_x - 176, 416, center_x + 176, 480), fill=(23, 18, 31, 230))
@@ -683,6 +694,17 @@ def duostyle_card(left: ProfileVisual, right: ProfileVisual) -> bytes:
         minimum_size=13,
     )
     return _save(image)
+
+
+def duostyle_reason(left: ProfileVisual, right: ProfileVisual) -> str:
+    """Describe observable palette differences without another model call."""
+    a, b = [_rgb(c) for c in left.palette[:4]], [_rgb(c) for c in right.palette[:4]]
+    distance = sum(min(sum((x-y)**2 for x,y in zip(c,d))**0.5 for d in b) for c in a) / len(a)
+    reverse = sum(min(sum((x-y)**2 for x,y in zip(c,d))**0.5 for d in a) for c in b) / len(b)
+    brightness = lambda colors: sum(.2126*r + .7152*g + .0722*b for r,g,b in colors)/len(colors)
+    palette = "Closely matched colors" if (distance+reverse)/2 < 65 else "Distinct color palettes"
+    light = "similar brightness" if abs(brightness(a)-brightness(b)) < 35 else "contrasting brightness"
+    return f"{palette}, {light}."
 
 
 def callingcard_card(
