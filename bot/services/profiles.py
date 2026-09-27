@@ -27,6 +27,7 @@ class ProfileSummary:
     meyaya: MeyayaProfileState
     marriage: MarriageSummary | None
     titles: tuple[str, ...]
+    prompt_lines: tuple[str, ...] = ()
 
 
 class ProfileService:
@@ -36,7 +37,7 @@ class ProfileService:
         self.session = session
         self.meyaya_system = MeyayaSystemService(session)
 
-    async def build(self, user_id: int, guild_id: int | None = None) -> ProfileSummary:
+    async def build(self, user_id: int, guild_id: int | None = None, *, display_name: str | None = None) -> ProfileSummary:
         """Load statistics, state, marriage, and social aggregates efficiently."""
 
         stats, global_state, user_state, marriage = await self._load_core(
@@ -56,6 +57,9 @@ class ProfileService:
         total_received = stats.total_received if stats is not None else 0
         total_interactions = stats.total_interactions if stats is not None else 0
         return ProfileSummary(
+            prompt_lines=tuple(self.meyaya_system.prompt_lines_from_records(
+                user_id, display_name, global_state, user_state
+            )) if display_name is not None else (),
             total_given=total_given,
             total_received=total_received,
             total_interactions=total_interactions,

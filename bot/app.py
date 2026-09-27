@@ -340,7 +340,11 @@ class MeyayaBot(commands.Bot):
         """Reserve before generation and refund failures or silence responses."""
         if guild_id is None:
             raise ChatLimitReached("Meyaya chat commands are only available inside a server.")
+        reserve_started = time.monotonic()
         day = await self.usage.reserve(guild_id) if guild_id is not None else None
+        reserve_ms = (time.monotonic() - reserve_started) * 1000
+        if reserve_ms >= 250:
+            logger.info("chat_quota reserve_ms=%.0f", reserve_ms)
         charged = False
         try:
             result = await self._llm_provider.generate(*args, **kwargs)

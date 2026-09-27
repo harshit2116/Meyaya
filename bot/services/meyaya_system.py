@@ -296,6 +296,11 @@ class MeyayaSystemService:
         now = self._now()
         global_state = await self.states.get_global(scope_id)
         user_state = await self.states.get_user(scope_id, user_id)
+        return self.prompt_lines_from_records(user_id, display_name, global_state, user_state, now=now)
+
+    def prompt_lines_from_records(self, user_id, display_name, global_state, user_state, *, now=None):
+        """Reuse freshly loaded profile records without fetching them again."""
+        now = now or self._now()
         global_values = self._effective_global(global_state, now)
         user_values = self._effective_user(user_state, now)
         return self._format_prompt_lines(

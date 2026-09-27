@@ -54,6 +54,8 @@ class ProfileAestheticService:
         self._cache: OrderedDict[str, tuple[float, ProfileVisual]] = OrderedDict()
         self._user_cache: OrderedDict[int, tuple[float, discord.User | None]] = OrderedDict()
         self._cache_bytes = 0
+        self._asset_cache = OrderedDict()
+        self._asset_cache_bytes = 0
         self._inspect_slots = BoundedImageGate()
         # Fixed-size locks coalesce repeated requests without an unbounded lock table.
         self._member_locks = [asyncio.Lock() for _ in range(32)]
@@ -175,6 +177,32 @@ class ProfileAestheticService:
             self._cache_bytes -= self._asset_size(removed)
 
     async def _download(self, url: str) -> bytes | None:
+        # Discord asset URLs include their content hash. A changed banner
+        # should not force a second download of an unchanged avatar.
+        now = time.monotonic()
+        for key, (created, data) in list(self._asset_cache.items()):
+            if now - created >= 600:
+                del self._asset_cache[key]
+                self._asset_cache_bytes -= len(data)
+        cached = self._asset_cache.get(url)
+        if cached is not None:
+            self._asset_cache.move_to_end(url)
+            return cached[1]
+        data = await self._fetch_asset(url)
+        budget = 2 * 1024 * 1024
+        if data and len(data) <= budget:
+            # Recheck after awaiting: avatar and banner can share a URL.
+            previous = self._asset_cache.pop(url, None)
+            if previous:
+                self._asset_cache_bytes -= len(previous[1])
+            while self._asset_cache and (len(self._asset_cache) >= 32 or self._asset_cache_bytes + len(data) > budget):
+                _, (_, removed) = self._asset_cache.popitem(last=False)
+                self._asset_cache_bytes -= len(removed)
+            self._asset_cache[url] = (time.monotonic(), data)
+            self._asset_cache_bytes += len(data)
+        return data
+
+    async def _fetch_asset(self, url: str) -> bytes | None:
         if not url or self.bot.http_session is None:
             return None
         try:

@@ -93,15 +93,23 @@ def paste(image, art, box, cover=False):
 
 
 def base(kind, color, accent):
+    # This layer has no user content. Never hand the cached image to a caller
+    # that will draw on it. One entry is at most 1080*900*3 bytes (~2.8 MiB).
+    image = _base_image(kind, color, accent).copy()
+    return image, ImageDraw.Draw(image)
+
+
+@lru_cache(maxsize=1)
+def _base_image(kind, color, accent):
     image = Image.new("RGB", SIZES[kind], color)
-    background = load_art(ASSETS / "backgrounds/violet.png")
-    if background is not None and kind != "fortune":
+    background = load_art(ASSETS / "backgrounds/violet.png") if kind != "fortune" else None
+    if background is not None:
         background = ImageOps.fit(background.convert("RGB"), image.size)
         image = Image.blend(image, background, 0.16 if kind != "guardian" else 0.10)
     d = ImageDraw.Draw(image)
     w, h = image.size
     d.rounded_rectangle((14, 14, w - 15, h - 15), radius=22, outline=accent, width=2)
-    return image, d
+    return image
 
 
 def header(image, draw, result, name, accent, avatar):

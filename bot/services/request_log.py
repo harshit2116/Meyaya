@@ -48,6 +48,7 @@ class RequestLogService:
             if len(content) <= MAX_CONTENT
             else content[: MAX_CONTENT - 20] + "\n[content truncated]"
         )
+        started = time.monotonic()
         try:
             async with asyncio.timeout(3):
                 async with self.sessions() as session:
@@ -73,6 +74,10 @@ class RequestLogService:
                     "Request review logging unavailable; some requests were not recorded"
                 )
                 self._last_failure = now
+        finally:
+            elapsed = (time.monotonic() - started) * 1000
+            if elapsed >= 500:
+                logger.info("request_log write_ms=%.0f", elapsed)
 
     async def record_message(self, message, kind="chat"):
         if message.guild is None or message.author.bot:

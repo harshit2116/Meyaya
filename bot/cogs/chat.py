@@ -177,18 +177,15 @@ class ChatCog(commands.Cog):
 
         (
             context_lines,
-            state_lines,
             memory_lines,
             lore_lines,
             history,
         ) = await asyncio.gather(
             self._build_context_lines(message),
-            self._load_meyaya_state_lines(message),
             self._load_memories(guild_id, message.author.id),
             self._load_server_lore(guild_id),
             load_history(),
         )
-        context_lines.extend(state_lines)
         usable_emojis = self._usable_custom_emojis(message)
         emoji_instruction = self._custom_emoji_instruction(usable_emojis)
         if emoji_instruction is not None:
@@ -414,16 +411,13 @@ class ChatCog(commands.Cog):
         try:
             (
                 context_lines,
-                state_lines,
                 memory_lines,
                 lore_lines,
             ) = await asyncio.gather(
                 self._build_context_lines(message),
-                self._load_meyaya_state_lines(message),
                 self._load_memories(guild_id, message.author.id),
                 self._load_server_lore(guild_id),
             )
-            context_lines.extend(state_lines)
             usable_emojis = self._usable_custom_emojis(message)
             emoji_instruction = self._custom_emoji_instruction(usable_emojis)
             if emoji_instruction is not None:
@@ -999,7 +993,7 @@ class ChatCog(commands.Cog):
             async with self.bot.db_session() as session:
                 profile_service = ProfileService(session)
                 try:
-                    summary = await profile_service.build(message.author.id, message.guild.id)
+                    summary = await profile_service.build(message.author.id, message.guild.id, display_name=message.author.display_name)
                 except Exception:  # noqa: BLE001
                     summary = None
                 if summary is not None:
@@ -1010,6 +1004,7 @@ class ChatCog(commands.Cog):
                     partner_id = (marriage.user_b_id if marriage.user_a_id == message.author.id else marriage.user_a_id) if marriage else None
 
             if summary is not None:
+                lines.extend(summary.prompt_lines)
                 lines.append(
                     f"{message.author.display_name} has given {summary.total_given} and "
                     f"received {summary.total_received} affectionate interactions on this bot."
@@ -1020,6 +1015,8 @@ class ChatCog(commands.Cog):
                         f'"{summary.favorite_interaction}".'
                     )
 
+            if summary is None:
+                lines.extend(await self._load_meyaya_state_lines(message))
             if partner_id is not None:
                 lines.append(
                     f"{message.author.display_name} is currently married to <@{partner_id}>."
