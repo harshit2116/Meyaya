@@ -348,7 +348,7 @@ class CourtCog(commands.Cog):
         )
         if judgement.punishment:
             embed.add_field(
-                name="Entertainment-only sentence", value=judgement.punishment, inline=False
+                name="Sentence", value=judgement.punishment, inline=False
             )
         return embed
 

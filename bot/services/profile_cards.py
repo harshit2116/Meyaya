@@ -357,7 +357,6 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
     draw.text((80, 754), grade, font=font(14), fill="#efb8d5")
     label(draw, (80, 779, 840, 27), verdict, 18, "white")
     label(draw, (80, 815, 840, 26), tip, 16, "#d7cadf")
-    label(draw, (62, 855, 875, 17), "API-visible assets only. Profile effects / panel themes unavailable. Scores use still frames.", 12, "#cfc3d5", minimum=12)
     return _save(image)
 
 
@@ -740,16 +739,6 @@ def duostyle_card(left: ProfileVisual, right: ProfileVisual) -> bytes:
                 outline=(255, 255, 255, 28),
             )
     draw.line((421, 277, 679, 277), fill=(255, 255, 255, 28), width=1)
-    _centered_text(
-        draw,
-        "Visual compatibility, not a relationship prediction.",
-        550,
-        584,
-        700,
-        15,
-        "#d6cbdc",
-        minimum_size=13,
-    )
     return _save(image)
 
 

@@ -103,7 +103,6 @@ class ExtrasCog(commands.Cog):
         embed.set_thumbnail(url=str(target.display_avatar.url))
         for key in fields:
             embed.add_field(name=key, value=safe_text(result[key]), inline=False)
-        embed.set_footer(text="Imagined from profile colors, not a real room." if room else "Fictional packaging. Handle the actual human kindly.")
         return embed
 
 

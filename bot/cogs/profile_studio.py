@@ -76,9 +76,7 @@ class ProfileStudioCog(commands.Cog):
         visual = await self.aesthetics.inspect(target)
         visual = await image_work(profilecheck_analysis, visual)
         rendered, extension = await image_work(profilecheck_media, visual)
-        await ctx.send("Reviewing API-visible assets; full-profile effects and panel themes aren't exposed by Discord. "
-                       + ("Short animated preview; scores use still frames." if extension == "gif" else "Still preview; scores use still frames."),
-                       file=discord.File(BytesIO(rendered), filename=f"meyaya-profile-check.{extension}"),
+        await ctx.send(file=discord.File(BytesIO(rendered), filename=f"meyaya-profile-check.{extension}"),
                        allowed_mentions=discord.AllowedMentions.none())
         from bot.services.profile_cards import profilecheck_feedback
         key = (ctx.guild.id, ctx.channel.id, ctx.author.id)

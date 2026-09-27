@@ -27,7 +27,7 @@ async def build_timeline(llm, messages):
         discord.utils.escape_markdown(str(text)[:350])
     )
     lines = [
-        f"Review of {len(messages)} messages. Interpretation only, not a fact check.\n",
+        f"Review of {len(messages)} messages.\n",
         safe(result.get("summary", "")),
     ]
     events = []

@@ -169,7 +169,7 @@ def fortune(image, d, r):
     else:
         d.line((60, 756, 940, 756), fill="#51435e", width=1)
         label(d, (60, 777, 880, 28), "A little perspective for today. Your choices still write the story.", 20, muted)
-    label(d, (60, 851, 880, 23), "MEYAYA  /  FOR FUN, NOT A PREDICTION  /  RETURNS DAILY", 13, gold, minimum=13)
+    label(d, (60, 851, 880, 23), "MEYAYA  /  YOUR DAILY FORTUNE", 13, gold, minimum=13)
 
 
 def fate(image, d, r):
