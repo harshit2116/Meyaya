@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections import OrderedDict
 from time import monotonic
 from bot.utils.image_work import image_work
@@ -20,11 +21,9 @@ from bot.services.profile_cards import (
     callingcard_card,
     duostyle_card,
     palette_card,
-    profilecheck_card,
-    profilecheck_media,
 )
 from bot.services.profiles import ProfileService
-from bot.services.profile_aesthetic import profilecheck_analysis
+from bot.services.profilecheck_render import ProfileCheckRenderer
 
 
 class ProfileStudioCog(commands.Cog):
@@ -34,6 +33,7 @@ class ProfileStudioCog(commands.Cog):
         self.bot = bot
         self.aesthetics = bot.build_profile_aesthetic_service()
         self._reviews = OrderedDict()
+        self._profile_renderer = ProfileCheckRenderer()
 
     def recent_review(self, message):
         key = (getattr(message.guild, "id", None), message.channel.id, message.author.id)
@@ -73,11 +73,16 @@ class ProfileStudioCog(commands.Cog):
         target = await self._member(ctx, member)
         if target is None:
             return
-        visual = await self.aesthetics.inspect(target)
-        visual = await image_work(profilecheck_analysis, visual)
-        rendered, extension = await image_work(profilecheck_media, visual)
+        started = monotonic()
+        visual = await self.aesthetics.inspect(target, refresh=True)
+        inspected = monotonic()
+        visual, rendered, extension = await self._profile_renderer.render(visual)
+        prepared = monotonic()
         await ctx.send(file=discord.File(BytesIO(rendered), filename=f"meyaya-profile-check.{extension}"),
                        allowed_mentions=discord.AllowedMentions.none())
+        logging.getLogger(__name__).debug(
+            "profilecheck inspect_ms=%.1f prepare_ms=%.1f upload_ms=%.1f",
+            (inspected-started)*1000, (prepared-inspected)*1000, (monotonic()-prepared)*1000)
         from bot.services.profile_cards import profilecheck_feedback
         key = (ctx.guild.id, ctx.channel.id, ctx.author.id)
         self._reviews[key] = (monotonic(), {

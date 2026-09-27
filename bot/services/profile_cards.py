@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from hashlib import sha256
 from io import BytesIO
-from dataclasses import replace
 
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
@@ -78,8 +77,11 @@ def _open(data: bytes | None) -> Image.Image | None:
 
 
 def _avatar(image: Image.Image, visual: ProfileVisual, box: tuple[int, int, int, int]) -> None:
+    _avatar_art(image, visual, box, _open(visual.avatar), _open(visual.decoration))
+
+
+def _avatar_art(image, visual, box, art, decoration) -> None:
     x, y, size, _ = box
-    art = _open(visual.avatar)
     if art is None:
         art = Image.new("RGBA", (size, size), _rgb(visual.palette[1]) + (255,))
         fallback = ImageDraw.Draw(art)
@@ -92,7 +94,6 @@ def _avatar(image: Image.Image, visual: ProfileVisual, box: tuple[int, int, int,
     mask = Image.new("L", (size, size))
     ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
     image.paste(art, (x, y), mask)
-    decoration = _open(visual.decoration)
     if decoration is not None:
         decoration = ImageOps.contain(decoration, (size + 38, size + 38))
         image.alpha_composite(decoration, (x - 19, y - 19))
@@ -175,7 +176,7 @@ def _centered_wrapped_text(
 
 def _save(image: Image.Image) -> bytes:
     output = BytesIO()
-    image.convert("RGB").save(output, "PNG", optimize=True)
+    image.convert("RGB").save(output, "PNG", compress_level=3)
     return output.getvalue()
 
 
@@ -296,6 +297,10 @@ def profilecheck_feedback(visual: ProfileVisual) -> tuple[str, str, str]:
 
 
 def profilecheck_card(visual: ProfileVisual) -> bytes:
+    return _save(_profilecheck_image(visual))
+
+
+def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True) -> Image.Image:
     image = _background((1000, 900), visual.palette[3], visual.palette[0])
     draw = ImageDraw.Draw(image, "RGBA")
     _panel(draw, (28, 28, 972, 872))
@@ -320,7 +325,8 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
         _panel(draw, (60, 155, 940, 319), fill=(38, 30, 48, 255))
         draw.text((500, 220), 'BANNER NOT AVAILABLE TO BOT', anchor='mm', font=font(20), fill=accent)
     # Render the review below the banner with room for the full decoration.
-    _avatar(image, visual, (62, 355, 270, 270))
+    if include_avatar:
+        _avatar(image, visual, (62, 355, 270, 270))
     draw = ImageDraw.Draw(image, "RGBA")
     _panel(draw, (368, 354, 940, 635), fill=(10, 8, 18, 155))
     scores = (
@@ -357,7 +363,7 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
     draw.text((80, 754), grade, font=font(14), fill="#efb8d5")
     label(draw, (80, 779, 840, 27), verdict, 18, "white")
     label(draw, (80, 815, 840, 26), tip, 16, "#d7cadf")
-    return _save(image)
+    return image
 
 
 def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
@@ -375,6 +381,13 @@ def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
             sources[key] = source
         if not sources:
             return profilecheck_card(visual), "png"
+        # Paint text, gradients and score bars once, not once per GIF frame.
+        # A clean template also prevents transparent decorations leaving trails.
+        template = _profilecheck_image(visual, include_avatar=False)
+        static_art = {key: _open(getattr(visual, key)) for key in ("avatar", "decoration")
+                      if key not in sources}
+        banner_mask = Image.new("L", (880, 164))
+        ImageDraw.Draw(banner_mask).rounded_rectangle((0, 0, 879, 163), radius=16, fill=255)
         frames, durations = [], []
         for index in range(12):
             changes, delay, advanced = {}, 80, False
@@ -386,14 +399,17 @@ def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
                     pass  # Hold shorter animations on their final available frame.
                 frame = source.convert("RGBA")
                 frame.thumbnail((880, 512))
-                stream = BytesIO()
-                frame.save(stream, "PNG")
-                changes[key] = stream.getvalue()
+                changes[key] = frame
                 delay = max(delay, min(250, int(source.info.get("duration", 100))))
             if not advanced:
                 break
-            with Image.open(BytesIO(profilecheck_card(replace(visual, **changes)))) as rendered:
-                frames.append(rendered.resize((750, 675)).convert("P", palette=Image.Palette.ADAPTIVE, colors=128))
+            rendered = template.copy()
+            if "banner" in changes:
+                rendered.paste(ImageOps.fit(changes["banner"], (880, 164)), (60, 155), banner_mask)
+            _avatar_art(rendered, visual, (62, 355, 270, 270),
+                        changes.get("avatar", static_art.get("avatar")),
+                        changes.get("decoration", static_art.get("decoration")))
+            frames.append(rendered.resize((750, 675)).convert("P", palette=Image.Palette.ADAPTIVE, colors=128))
             durations.append(delay)
         output = BytesIO()
         frames[0].save(output, "GIF", save_all=True, append_images=frames[1:], duration=durations, loop=0, disposal=2)

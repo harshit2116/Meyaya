@@ -58,31 +58,35 @@ class ProfileAestheticService:
         # Fixed-size locks coalesce repeated requests without an unbounded lock table.
         self._member_locks = [asyncio.Lock() for _ in range(32)]
 
-    async def inspect(self, member: discord.Member) -> ProfileVisual:
+    async def inspect(self, member: discord.Member, *, refresh: bool = False) -> ProfileVisual:
         async with self._inspect_slots:
             async with self._member_locks[member.id % len(self._member_locks)]:
-                return await self._inspect(member)
+                if refresh:
+                    # Server avatars/banners and global profile data can change
+                    # independently of the gateway's cached Member object.
+                    member = await member.guild.fetch_member(member.id)
+                return await self._inspect(member, refresh=refresh)
 
-    async def _inspect(self, member: discord.Member) -> ProfileVisual:
+    async def _inspect(self, member: discord.Member, *, refresh: bool = False) -> ProfileVisual:
         now = time.monotonic()
         cached_user = self._user_cache.get(member.id)
-        if cached_user and now - cached_user[0] < CACHE_TTL_SECONDS:
+        if not refresh and cached_user and now - cached_user[0] < CACHE_TTL_SECONDS:
             fetched = cached_user[1]
         else:
             try:
                 fetched = await self.bot.fetch_user(member.id)
             except discord.HTTPException:
+                if refresh:
+                    raise
                 fetched = None
             self._user_cache[member.id] = (now, fetched)
             self._user_cache.move_to_end(member.id)
             while len(self._user_cache) > 128:
                 self._user_cache.popitem(last=False)
 
-        avatar_asset = member.display_avatar.with_size(512).with_static_format("png")
+        avatar_asset = (member.guild_avatar or getattr(fetched, "display_avatar", None) or member.display_avatar).with_size(512).with_static_format("png")
         banner_asset = getattr(member, "guild_banner", None) or getattr(fetched, "banner", None)
-        decoration_asset = getattr(member, "avatar_decoration", None) or getattr(
-            fetched, "avatar_decoration", None
-        )
+        decoration_asset = getattr(member, "avatar_decoration", None) or getattr(fetched, "avatar_decoration", None)
         banner_asset = (
             banner_asset.with_size(1024).with_static_format("png") if banner_asset else None
         )
@@ -136,7 +140,9 @@ class ProfileAestheticService:
         )
         visual = replace(visual, animated_banner=bool(banner_asset and banner_asset.is_animated()),
                          banner_available=banner_asset is not None)
-        self._store(cache_key, visual)
+        # Do not preserve a transient failed asset download for half an hour.
+        if all(not url or data is not None for url, data in zip(urls, (avatar, banner, decoration))):
+            self._store(cache_key, visual)
         return visual
 
     @staticmethod
