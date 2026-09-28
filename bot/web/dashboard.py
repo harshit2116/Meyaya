@@ -1,6 +1,8 @@
 """Local-first owner dashboard using the existing aiohttp dependency."""
 
 import hmac
+import asyncio
+import discord
 import logging
 import os
 import secrets
@@ -17,6 +19,7 @@ from bot.models.guild_settings import GuildSettings
 from bot.models.memory import BotMemory, MemoryStatus
 from bot.models.meyaya_state import MeyayaUserState
 from bot.web.security import DashboardSecurity, SESSION_SECONDS
+from bot.web.server_info import cached_server_info, cached_member_preview
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +44,8 @@ async def server_report(bot):
                 "name": guild.name,
                 "members": guild.member_count,
                 "owner_id": str(guild.owner_id),
+                "owner_name": guild.owner.display_name if guild.owner else None,
+                "icon_url": str(guild.icon.url) if guild.icon else None,
                 "available": not guild.unavailable,
                 "readable_channels": accessible,
                 "can_timeout": bool(permissions and permissions.moderate_members),
@@ -68,6 +73,10 @@ class Dashboard:
             raise ValueError("Token-free mode is restricted to the local dashboard")
         self.runner = None
         self._login_links = {}
+        self._owner_names = {}
+        self._owner_lock = asyncio.Lock()
+        self._member_previews = {}
+        self._member_lock = asyncio.Lock()
         self.security = DashboardSecurity(bot.settings)
         token = bot.settings.dashboard_token
         if len(token) < 32:
@@ -105,7 +114,7 @@ class Dashboard:
                     "X-Content-Type-Options": "nosniff",
                     "X-Frame-Options": "DENY",
                     "Referrer-Policy": "no-referrer",
-                    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'",
+                    "Content-Security-Policy": "default-src 'self'; img-src 'self' https://cdn.discordapp.com; script-src 'self'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'",
                     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
                 }
             )
@@ -117,11 +126,14 @@ class Dashboard:
         self.app.router.add_get("/", self.index)
         self.app.router.add_post("/api/login", self.login)
         self.app.router.add_post("/api/logout", self.logout)
+        self.app.router.add_post("/api/window", self.window_login)
         self.app.router.add_get("/api/blacklist", self.blacklist)
         self.app.router.add_patch("/api/blacklist", self.update_blacklist)
         self.app.router.add_get("/dashboard.js", self.script)
         self.app.router.add_get("/dashboard.css", self.style)
         self.app.router.add_get("/api/servers", self.servers)
+        self.app.router.add_get("/api/servers/{guild_id}/details", self.server_details)
+        self.app.router.add_get("/api/servers/{guild_id}/summary", self.server_summary)
         self.app.router.add_get("/api/servers/{guild_id}/requests", self.requests)
         self.app.router.add_get("/api/memories", self.memories)
         self.app.router.add_get("/api/nicknames", self.nicknames)
@@ -183,6 +195,24 @@ class Dashboard:
     async def logout(self, request):
         self.security.revoke(request.headers.get("Authorization", "")[7:])
         return web.json_response({"ok": True})
+
+    async def window_login(self, request):
+        try:
+            body = await request.json()
+            guild_id = int(body['guild_id'])
+            if not 0 < guild_id < 2**64:
+                raise ValueError()
+        except (ValueError, KeyError, TypeError):
+            raise web.HTTPBadRequest(text='Invalid server ID')
+        if self.bot.get_guild(guild_id) is None:
+            raise web.HTTPNotFound(text='Server not found')
+        now = time.monotonic()
+        self._login_links = {key: expiry for key, expiry in self._login_links.items() if expiry > now}
+        if len(self._login_links) >= 10:
+            raise web.HTTPTooManyRequests(text='Too many pending windows; retry shortly.')
+        code = secrets.token_urlsafe(32)
+        self._login_links[code] = now + 60
+        return web.json_response({'url': f'/?server={guild_id}#login={code}'})
 
     async def blacklist(self, request):
         from bot.models.chat_blacklist import ChatBlacklist
@@ -265,6 +295,76 @@ class Dashboard:
         if self.bot.get_guild(guild_id) is None:
             raise web.HTTPNotFound(text="Server not found")
         return web.json_response(await self.bot.request_log.page(guild_id, before))
+
+    async def server_details(self, request):
+        try:
+            guild_id = int(request.match_info["guild_id"])
+            if not 0 < guild_id < 2**64:
+                raise ValueError()
+        except ValueError:
+            raise web.HTTPBadRequest(text="Invalid server ID")
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text="Server not found")
+        info = cached_server_info(guild)
+        await self._fill_owner(info, guild)
+        info.update(await self._member_preview(guild))
+        return web.json_response(info)
+
+    async def _fill_owner(self, info, guild):
+        if not info['owner_name'] and guild.owner_id:
+            async with self._owner_lock:
+                now = time.monotonic()
+                entry = self._owner_names.get(guild.id)
+                if entry is None or now >= entry[0]:
+                    owner = self.bot.get_user(guild.owner_id)
+                    if owner is None:
+                        try:
+                            owner = await asyncio.wait_for(self.bot.fetch_user(guild.owner_id), timeout=3)
+                        except (discord.HTTPException, TimeoutError):
+                            owner = None
+                    self._owner_names = {gid: row for gid, row in self._owner_names.items() if row[0] > now}
+                    entry = (now + 300, owner)
+                    self._owner_names[guild.id] = entry
+                if entry[1]:
+                    info.update(owner_name=entry[1].display_name, owner_username=entry[1].name)
+
+    async def server_summary(self, request):
+        try:
+            guild_id = int(request.match_info['guild_id'])
+            if not 0 < guild_id < 2**64:
+                raise ValueError()
+        except ValueError:
+            raise web.HTTPBadRequest(text='Invalid server ID')
+        guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            raise web.HTTPNotFound(text='Server not found')
+        info = {'id': str(guild.id), 'name': guild.name, 'owner_id': str(guild.owner_id),
+                'owner_name': guild.owner.display_name if guild.owner else None,
+                'icon_url': str(guild.icon.url) if guild.icon else None}
+        await self._fill_owner(info, guild)
+        return web.json_response(info)
+
+    async def _member_preview(self, guild):
+        members = guild.members
+        if len(members) >= min(guild.member_count or 50, 50):
+            return {'member_preview': cached_member_preview(members)}
+        async with self._member_lock:
+            now = time.monotonic()
+            entry = self._member_previews.get(guild.id)
+            if entry and now < entry[0]:
+                return entry[1]
+            try:
+                async with asyncio.timeout(5):
+                    # Exactly one bounded REST page, never chunk the whole server.
+                    fetched = [member async for member in guild.fetch_members(limit=50)]
+                result = {'member_preview': cached_member_preview(fetched)}
+            except (discord.HTTPException, discord.ClientException, TimeoutError):
+                result = {'member_preview': cached_member_preview(members),
+                          'member_preview_error': 'Could not load all 50 members. Check bot access and Server Members Intent.'}
+            self._member_previews = {gid: row for gid, row in self._member_previews.items() if row[0] > now}
+            self._member_previews[guild.id] = (now + 300, result)
+            return result
 
     async def operations(self, request):
         raw_guild_id = request.query.get("guild_id", "").strip()

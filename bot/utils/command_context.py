@@ -2,6 +2,8 @@
 
 import logging
 import time
+from bot.utils.command_timing import add_stage
+from bot.utils.command_timing import add_stage
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
@@ -22,6 +24,8 @@ class TimedContext(commands.Context):
             return await super().send(*args, **kwargs)
         finally:
             elapsed = (time.monotonic() - started) * 1000
+            add_stage('delivery_ms', elapsed)
+            add_stage('delivery_ms', elapsed)
             if elapsed >= 500:
                 logger.info("discord_delivery command=%s send_ms=%.0f",
                             getattr(self.command, "qualified_name", "unknown"), elapsed)

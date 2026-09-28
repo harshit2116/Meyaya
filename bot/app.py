@@ -34,6 +34,7 @@ from bot.services.usage import ChatLimitReached, UsageService, is_silence
 from bot.services.request_log import RequestLogService
 from bot.utils.command_context import TimedContext
 from bot.utils.loading import install_command_loading
+from bot.utils.command_timing import install_command_timing, timing_stage
 from bot.services.profile_aesthetic import ProfileAestheticService
 from bot.services.chat_blacklist import ChatBlacklistService
 from bot.services.ai_guard import AIGuard
@@ -119,8 +120,9 @@ class MeyayaBot(commands.Bot):
     async def db_session(self) -> AsyncSession:
         """Provide a managed async database session to commands and services."""
 
-        async with self.session_factory() as session:
-            yield session
+        with timing_stage('database_ms'):
+            async with self.session_factory() as session:
+                yield session
 
     async def setup_hook(self) -> None:
         """Load cogs and synchronize application commands."""
@@ -198,6 +200,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.moderation")
         await self.load_extension("bot.cogs.presence")
         install_command_loading(self)
+        install_command_timing(self)
         normalize_member_parameters(self)
         synced = await self.tree.sync()
         logger.info("Synced %s global slash commands", len(synced))
@@ -267,6 +270,8 @@ class MeyayaBot(commands.Bot):
             message = "I could not understand one of those arguments. Check `/help` for the format."
         elif isinstance(original, commands.CheckFailure):
             message = "You cannot use that command here."
+        elif isinstance(original, SQLAlchemyError):
+            message = "The database is temporarily unavailable. Please try again shortly."
         else:
             logger.error(
                 "Unhandled command error command=%s",
@@ -302,6 +307,8 @@ class MeyayaBot(commands.Bot):
             message = "I could not understand those options. Open `/help` and try once more."
         elif isinstance(original, discord.app_commands.CheckFailure):
             message = "You cannot use that command here."
+        elif isinstance(original, SQLAlchemyError):
+            message = "The database is temporarily unavailable. Please try again shortly."
         else:
             logger.error(
                 "Unhandled slash-command error command=%s",
@@ -345,7 +352,9 @@ class MeyayaBot(commands.Bot):
         if guild_id is None:
             raise ChatLimitReached("Meyaya chat commands are only available inside a server.")
         reserve_started = time.monotonic()
-        day = await self.usage.reserve(guild_id) if guild_id is not None else None
+        with timing_stage('database_ms'), timing_stage('quota_ms'):
+            async with asyncio.timeout(8):
+                day = await self.usage.reserve(guild_id) if guild_id is not None else None
         reserve_ms = (time.monotonic() - reserve_started) * 1000
         if reserve_ms >= 250:
             logger.info("chat_quota reserve_ms=%.0f", reserve_ms)
@@ -358,7 +367,11 @@ class MeyayaBot(commands.Bot):
             return result
         finally:
             if day is not None and not charged:
-                await self.usage.refund(guild_id, day)
+                try:
+                    async with asyncio.timeout(8):
+                        await self.usage.refund(guild_id, day)
+                except (SQLAlchemyError, TimeoutError):
+                    logger.warning('Chat allowance refund unavailable; review usage counters')
 
     async def get_context(self, origin, /, *, cls=TimedContext):
         return await super().get_context(origin, cls=cls)
@@ -399,8 +412,9 @@ class MeyayaBot(commands.Bot):
 
     async def _count_command(self, guild_id):
         try:
-            await self.usage.command_completed(guild_id)
-        except SQLAlchemyError:
+            async with asyncio.timeout(3):
+                await self.usage.command_completed(guild_id)
+        except (SQLAlchemyError, TimeoutError):
             logger.warning("Could not record command usage")
 
     def build_interaction_service(self, session: AsyncSession) -> InteractionService:

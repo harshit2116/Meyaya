@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from bot.utils.image_work import image_work, BoundedImageGate
+from bot.utils.command_timing import timing_stage
 from collections import OrderedDict
 from dataclasses import dataclass, replace
 from hashlib import blake2s
@@ -105,7 +106,8 @@ class ProfileAestheticService:
 
                     metadata = [asyncio.create_task(fresh_member()), asyncio.create_task(fresh_user())]
                     try:
-                        member, fetched = await asyncio.gather(*metadata)
+                        with timing_stage('discord_metadata_ms'):
+                            member, fetched = await asyncio.gather(*metadata)
                         logger.info("profile_metadata fetch_ms=%.0f", (time.monotonic() - started) * 1000)
                         return await self._inspect(member, refresh=True, fetched_user=fetched, animated=animated, prefetched_assets=prefetch)
                     finally:
@@ -130,7 +132,8 @@ class ProfileAestheticService:
             fetched = cached_user[1]
         else:
             try:
-                fetched = await self.bot.fetch_user(member.id)
+                with timing_stage('discord_metadata_ms'):
+                    fetched = await self.bot.fetch_user(member.id)
             except discord.HTTPException:
                 if refresh:
                     raise
@@ -244,7 +247,8 @@ class ProfileAestheticService:
         if cached is not None:
             self._asset_cache.move_to_end(url)
             return cached[1]
-        data = await self._fetch_asset(url)
+        with timing_stage('asset_fetch_ms'):
+            data = await self._fetch_asset(url)
         budget = 2 * 1024 * 1024
         if data and len(data) <= budget:
             # Recheck after awaiting: avatar and banner can share a URL.

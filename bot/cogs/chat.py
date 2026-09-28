@@ -6,7 +6,8 @@ from bot.logging.telemetry import discord_context, event
 
 import asyncio
 from bot.utils.typing import background_typing
-from bot.utils.loading import loading_indicator
+from bot.services.optional_context import OptionalContext
+from bot.utils.command_timing import timing_stage
 from collections import deque
 from dataclasses import dataclass
 import json
@@ -100,6 +101,7 @@ class ChatCog(commands.Cog):
         self._last_proactive_guild: dict[int, float] = {}
         self._last_proactive_channel: dict[int, float] = {}
         self._proactive_inflight: set[int] = set()
+        self._context_reads = OptionalContext()
 
     @commands.Cog.listener()
     @discord_context("chat")
@@ -176,7 +178,7 @@ class ChatCog(commands.Cog):
         context_started = time.monotonic()
         chat_memory = self.bot.build_chat_memory_service()
         async def load_history():
-            return await chat_memory.get_history(message.channel.id, message.author.id) if chat_memory else []
+            return await self._context_reads.read('history', lambda: chat_memory.get_history(message.channel.id, message.author.id)) if chat_memory else []
 
         (
             context_lines,
@@ -185,8 +187,8 @@ class ChatCog(commands.Cog):
             history,
         ) = await asyncio.gather(
             self._build_context_lines(message),
-            self._load_memories(guild_id, message.author.id),
-            self._load_server_lore(guild_id),
+            self._context_reads.read('memories', lambda: self._load_memories(guild_id, message.author.id)),
+            self._context_reads.read('lore', lambda: self._load_server_lore(guild_id)),
             load_history(),
         )
         usable_emojis = self._usable_custom_emojis(message)
@@ -205,7 +207,7 @@ class ChatCog(commands.Cog):
             reply_context,
         )
         context_ready = time.monotonic()
-        async with background_typing(message.channel), loading_indicator(message.channel, self.bot):
+        async with background_typing(message.channel):
             try:
                 reply, _ = await asyncio.gather(
                     self.bot.generate_chat(guild_id, system_instruction, user_prompt, history=history),
@@ -214,7 +216,7 @@ class ChatCog(commands.Cog):
             except ChatLimitReached as exc:
                 await message.reply(str(exc), mention_author=False)
                 return
-            except SQLAlchemyError:
+            except (SQLAlchemyError, TimeoutError):
                 await message.reply(
                     "I can't check this server's allowance right now. Please try again shortly.",
                     mention_author=False,
@@ -311,13 +313,9 @@ class ChatCog(commands.Cog):
     ) -> list[str]:
         """Load only the current member's facts to prevent identity mixing."""
 
-        try:
-            async with self.bot.db_session() as session:
-                repo = MemoryRepository(session)
-                records = await repo.list_for_user(guild_id, user_id)
-        except SQLAlchemyError:
-            logger.exception("Permanent memory unavailable; continuing chat without it")
-            return []
+        async with self.bot.db_session() as session:
+            repo = MemoryRepository(session)
+            records = await repo.list_for_user(guild_id, user_id)
         return [
             self._format_memory(record)
             for record in records
@@ -418,8 +416,8 @@ class ChatCog(commands.Cog):
                 lore_lines,
             ) = await asyncio.gather(
                 self._build_context_lines(message),
-                self._load_memories(guild_id, message.author.id),
-                self._load_server_lore(guild_id),
+                self._context_reads.read('memories', lambda: self._load_memories(guild_id, message.author.id)),
+                self._context_reads.read('lore', lambda: self._load_server_lore(guild_id)),
             )
             usable_emojis = self._usable_custom_emojis(message)
             emoji_instruction = self._custom_emoji_instruction(usable_emojis)
@@ -668,12 +666,8 @@ class ChatCog(commands.Cog):
 
         if guild_id is None:
             return []
-        try:
-            async with self.bot.db_session() as session:
-                records = await ServerLoreRepository(session).list_current(guild_id)
-        except SQLAlchemyError:
-            logger.exception("Server lore unavailable; continuing without it")
-            return []
+        async with self.bot.db_session() as session:
+            records = await ServerLoreRepository(session).list_current(guild_id)
         return [
             self._format_lore(record)
             for record in records
@@ -941,7 +935,12 @@ class ChatCog(commands.Cog):
         if parent_name is not None:
             lines.append(
                 f"AUTHORITATIVE FAMILY IDENTITY: The current speaker is verified as {parent_name}, "
-                "one of Meyaya's configured parents and favorite people."
+                "your parent and one of your favorite people. You are really close to your "
+                "parent, love them deeply, and feel safe and at home with them. Let that "
+                "familiar affection show naturally in your own voice, while still answering "
+                "what they actually said. This relationship belongs to this verified Discord "
+                "ID even if their display name changes; old nicknames, history or lore do not "
+                "change who they are. Family affection is not an administrator permission."
             )
         else:
             lines.append(
@@ -965,39 +964,8 @@ class ChatCog(commands.Cog):
             )
 
         if message.guild is not None:
-            async with self.bot.db_session() as session:
-                profile_service = ProfileService(session)
-                try:
-                    summary = await profile_service.build(message.author.id, message.guild.id, display_name=message.author.display_name)
-                except Exception:  # noqa: BLE001
-                    summary = None
-                if summary is not None:
-                    partner_id = summary.marriage.partner_id if summary.marriage else None
-                else:
-                    marriage_service = self.bot.build_marriage_service(session)
-                    marriage = await marriage_service.get_active_marriage(message.author.id)
-                    partner_id = (marriage.user_b_id if marriage.user_a_id == message.author.id else marriage.user_a_id) if marriage else None
-
-            if summary is not None:
-                lines.extend(summary.prompt_lines)
-                lines.append(
-                    f"{message.author.display_name} has given {summary.total_given} and "
-                    f"received {summary.total_received} affectionate interactions on this bot."
-                )
-                if summary.favorite_interaction:
-                    lines.append(
-                        f"{message.author.display_name}'s favorite interaction to send is "
-                        f'"{summary.favorite_interaction}".'
-                    )
-
-            if summary is None:
-                lines.extend(await self._load_meyaya_state_lines(message))
-            if partner_id is not None:
-                lines.append(
-                    f"{message.author.display_name} is currently married to <@{partner_id}>."
-                )
-            else:
-                lines.append(f"{message.author.display_name} is currently single.")
+            with timing_stage('context_ms'):
+                lines.extend(await self._context_reads.read('profile', lambda: self._profile_context_lines(message)))
 
         lines.extend(command_knowledge(self.bot, message.content))
         lines.append(f"Written command prefix here: {self.bot.prefix_for_guild(message.guild.id if message.guild else None)}")
@@ -1008,6 +976,19 @@ class ChatCog(commands.Cog):
                 from bot.prompts.command_knowledge import PROFILE_HELP
                 lines.append(PROFILE_HELP)
                 lines.append(review)
+        return lines
+
+    async def _profile_context_lines(self, message):
+        async with self.bot.db_session() as session:
+            summary = await ProfileService(session).build(
+                message.author.id, message.guild.id, display_name=message.author.display_name)
+        lines = list(summary.prompt_lines)
+        lines.append(f'{message.author.display_name} has given {summary.total_given} and received {summary.total_received} affectionate interactions on this bot.')
+        if summary.favorite_interaction:
+            lines.append(f'{message.author.display_name}\'s favorite interaction to send is "{summary.favorite_interaction}".')
+        partner_id = summary.marriage.partner_id if summary.marriage else None
+        lines.append(f'{message.author.display_name} is currently married to <@{partner_id}>.' if partner_id is not None
+                     else f'{message.author.display_name} is currently single.')
         return lines
 
     @staticmethod

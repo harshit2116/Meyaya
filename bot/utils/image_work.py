@@ -8,6 +8,7 @@ from functools import partial
 from weakref import WeakKeyDictionary
 
 from discord.ext import commands
+from bot.utils.command_timing import add_stage
 
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="meyaya-image")
 _slots = WeakKeyDictionary()
@@ -59,6 +60,7 @@ async def image_work(function, *args, **kwargs):
     queued = monotonic()
     await slot.acquire()
     wait = monotonic() - queued
+    add_stage('image_queue_ms', wait * 1000)
     if wait >= 0.5:
         logging.getLogger(__name__).info("image_queue function=%s wait_ms=%.0f", getattr(function, "__name__", "image"), wait * 1000)
     try:
@@ -74,4 +76,8 @@ async def image_work(function, *args, **kwargs):
         if not completed.cancelled():
             completed.exception()
     future.add_done_callback(finished)
-    return await asyncio.shield(future)
+    started = monotonic()
+    try:
+        return await asyncio.shield(future)
+    finally:
+        add_stage('render_ms', (monotonic() - started) * 1000)

@@ -33,11 +33,16 @@
       <form id="login-form"><label for="token">Owner access token</label><div class="row"><input id="token" type="password" required autocomplete="off" placeholder="Paste DASHBOARD_TOKEN"><button>Unlock</button></div></form>
     </section>
     <div id="workspace" hidden>
-      <section class="stats">
+      <section id="global-stats" class="stats">
         <article><span>Connected servers</span><strong id="total">0</strong></article>
         <article><span>Meyaya replies today</span><strong id="chats">0</strong></article>
         <article><span>Commands today</span><strong id="commands">0</strong></article>
         <article><span>Daily reset</span><strong class="small">00:00 UTC</strong></article>
+      </section>
+      <section id="view-server" class="view" hidden>
+        <div class="toolbar"><div id="server-heading" class="server-heading"></div><button id="server-refresh" class="quiet" type="button">Refresh server</button></div>
+        <p id="server-state" class="result-state" role="status"></p>
+        <div class="server-layout"><section id="server-detail-content" class="panel server-detail-panel"></section><section id="server-controls" class="panel server-detail-panel"></section></div>
       </section>
       <section id="view-overview" class="view">
         <div class="toolbar"><div><h2>Your little universe</h2><p>Live operations and per-server controls.</p></div><div class="row"><input id="search" aria-label="Find a server" placeholder="Find a server"><button id="refresh" class="quiet">Refresh</button></div></div>
@@ -55,6 +60,7 @@
         <p id="operations-state" class="result-state" role="status"></p>
         <p id="safety-state" class="result-state" role="status"></p>
         <section id="operations-summary" class="stats operations-summary"></section>
+        <section class="panel operations-panel"><h3>Command speed</h3><p class="details">Callback time including response delivery; excludes argument parsing and checks. Stage times can overlap and do not add up to the total. Latest 2,000 callbacks from this process.</p><div id="operations-commands" class="operation-list"></div></section>
         <div class="operations-columns">
           <section class="panel operations-panel"><h3>Usage by feature</h3><div id="operations-features" class="operation-list"></div></section>
           <section class="panel operations-panel"><h3>Usage by model</h3><div id="operations-models" class="operation-list"></div></section>

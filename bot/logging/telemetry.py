@@ -21,8 +21,20 @@ class OperationalTelemetry:
     def __init__(self, capacity: int = 2_000) -> None:
         self.started_at = datetime.now(UTC)
         self._requests: deque[dict] = deque(maxlen=capacity)
+        self._commands: deque[dict] = deque(maxlen=capacity)
 
     def record(self, payload: dict) -> None:
+        if payload.get('event') == 'command_timing':
+            self._commands.append({
+                'timestamp': payload.get('timestamp'), 'guild_id': payload.get('guild_id'),
+                'command': str(payload.get('command') or 'unknown')[:80],
+                'status': str(payload.get('status') or 'unknown')[:32],
+                'invocation': str(payload.get('invocation') or 'unknown')[:16],
+                'total_ms': self._number(payload.get('total_ms')), 'work_ms': self._number(payload.get('work_ms')),
+                'stages': {key: self._number(value) for key, value in (payload.get('stages') or {}).items()
+                           if key in {'database_ms', 'context_ms', 'quota_ms', 'ai_ms', 'discord_metadata_ms', 'asset_fetch_ms', 'render_ms', 'image_queue_ms', 'delivery_ms'}},
+            })
+            return
         if payload.get("event") != "llm_request":
             return
         self._requests.append(
@@ -79,7 +91,26 @@ class OperationalTelemetry:
             "features": self._groups(records, "feature"),
             "models": self._groups(records, "model"),
             "recent": [self._public(item) for item in reversed(records[-30:])],
+            "commands": self.command_snapshot(guild_id),
         }
+
+    def command_snapshot(self, guild_id=None):
+        records = [row for row in self._commands if guild_id is None or row['guild_id'] == guild_id]
+        groups = {}
+        for row in records:
+            groups.setdefault(row['command'], []).append(row)
+        result = []
+        for name, rows in groups.items():
+            times = sorted(row['total_ms'] for row in rows if row['total_ms'] is not None)
+            stage_names = {key for row in rows for key in row['stages']}
+            result.append({'command': name, 'calls': len(rows),
+                           'failures': sum(row['status'] == 'error' for row in rows),
+                           'cancelled': sum(row['status'] == 'cancelled' for row in rows),
+                           'average_ms': round(sum(times) / len(times), 1) if times else None,
+                           'p95_ms': self._percentile(times, .95),
+                           'stages': {key: round(sum(row['stages'].get(key) or 0 for row in rows) / len(rows), 1) for key in stage_names}})
+        return {'groups': sorted(result, key=lambda row: row['average_ms'] or 0, reverse=True),
+                'recent': list(reversed(records[-30:]))}
 
     def guild_summary(self, guild_id: int) -> dict:
         return self.guild_summaries((guild_id,))[guild_id]
@@ -276,6 +307,8 @@ def observe(operation: str):
                 metrics["fallback_reason"] = metrics["fallback_reason"] or type(exc).__name__
                 raise
             finally:
+                from bot.utils.command_timing import add_stage
+                add_stage('ai_ms', (time.perf_counter() - started) * 1000)
                 event(
                     "llm_request",
                     operation=operation,

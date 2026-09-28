@@ -11,6 +11,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 IDENTITY_PATH = Path(__file__).resolve().parents[1] / "private" / "meyaya_identity.json"
+AYAYA_USER_ID = 715925710849572904
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,17 +30,22 @@ class PrivateIdentity:
 
 @lru_cache(maxsize=1)
 def get_private_identity() -> PrivateIdentity:
-    """Read private identity data, falling back safely when not deployed."""
+    """Read extra identities; Ayaya's verified identity is deployment-independent."""
 
     try:
         payload = json.loads(IDENTITY_PATH.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Identity configuration must be an object")
         parents = {
             int(item["user_id"]): str(item["name"])
             for item in payload.get("parents", [])
             if item.get("user_id") and item.get("name")
         }
         favorites = frozenset(int(value) for value in payload.get("favorite_user_ids", []))
-        return PrivateIdentity(parents=parents, favorite_user_ids=favorites)
-    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
         logger.warning("Private Meyaya identity configuration is unavailable")
-        return PrivateIdentity(parents={}, favorite_user_ids=frozenset())
+        parents, favorites = {}, frozenset()
+    # This canonical relationship is an owner-defined ID mapping, not a memory
+    # or a display-name match. Private overrides cannot accidentally erase it.
+    parents[AYAYA_USER_ID] = "Ayaya"
+    return PrivateIdentity(parents=parents, favorite_user_ids=favorites | {AYAYA_USER_ID})
