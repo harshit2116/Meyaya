@@ -9,7 +9,7 @@ from collections import OrderedDict
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from bot.services.card_renderer import font, label
-from bot.services.profile_scoring import category_available, select_improvement_priority, get_rule_based_recommendation
+from bot.services.profile_scoring import category_available, build_improvement_summary, get_rule_based_recommendation
 from bot.services.profile_aesthetic import (
     ProfileVisual,
     profilecheck_points,
@@ -307,14 +307,7 @@ def profilecheck_feedback(visual: ProfileVisual) -> tuple[str, str, str]:
     _, grade, _ = next(
         band for band in PROFILECHECK_COMMENTS if visual.overall_score >= band[0]
     )
-    rows = profilecheck_points(visual)
-    weakest_field, name, score = select_improvement_priority(visual)
-    comment = f"{name} is your lowest category at {score}/100."
-    if visual.comparison_available is False:
-        comment = f"No backdrop or decoration to compare. {name}: {score}/100."
-    if all(earned == budget for _, _, budget, earned in rows):
-        return grade, "All categories earned their full weighted points.", "Best upgrade: maintain this balance when changing your profile."
-    return grade, comment, get_rule_based_recommendation(visual)
+    return grade, build_improvement_summary(visual), get_rule_based_recommendation(visual)
 
 
 def profilecheck_card(visual: ProfileVisual) -> bytes:
@@ -376,7 +369,7 @@ def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True) -
     _panel(draw, (58, 742, 942, 852), fill=(48, 35, 55, 255))
     draw.text((80, 754), grade, font=font(14), fill="#efb8d5")
     label(draw, (80, 779, 840, 27), verdict, 18, "white")
-    label(draw, (80, 815, 840, 26), tip, 16, "#d7cadf")
+    label(draw, (80, 807, 840, 44), tip, 16, "#d7cadf")
     return image
 
 

@@ -33,6 +33,7 @@ from bot.utils.command_parameters import normalize_member_parameters
 from bot.services.usage import ChatLimitReached, UsageService, is_silence
 from bot.services.request_log import RequestLogService
 from bot.utils.command_context import TimedContext
+from bot.utils.loading import install_command_loading
 from bot.services.profile_aesthetic import ProfileAestheticService
 from bot.services.chat_blacklist import ChatBlacklistService
 from bot.services.ai_guard import AIGuard
@@ -196,6 +197,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.admin")
         await self.load_extension("bot.cogs.moderation")
         await self.load_extension("bot.cogs.presence")
+        install_command_loading(self)
         normalize_member_parameters(self)
         synced = await self.tree.sync()
         logger.info("Synced %s global slash commands", len(synced))

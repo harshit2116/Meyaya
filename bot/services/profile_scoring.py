@@ -86,34 +86,87 @@ def select_improvement_priority(visual, weights=None):
 
 IMPROVEMENT_MESSAGES = {
     "avatar_score": {
-        "low": "Strengthen the subject's light/dark contrast so it reads at icon size.",
-        "medium": "Separate the subject from its background with a little more contrast.",
-        "high": "Keep the focal contrast clear when previewing your avatar at icon size.",
+        "low": "Make your PFP easier to see at small size. Increase the difference between the main subject and the background.",
+        "medium": "Add a little more contrast around the main part of your PFP so it stands out better when small.",
+        "high": "Your PFP is already clear. Just make sure the important details still show when it is displayed small.",
     },
     "styling_score": {
-        "low": "Bring the avatar, backdrop and decoration into one consistent palette.",
-        "medium": "Repeat one avatar accent across the backdrop and decoration.",
-        "high": "Fine-tune the least matching accent across your profile elements.",
+        "low": "Bring your {items} closer together by repeating the same main colors.",
+        "medium": "Use one shared color across your {items}.",
+        "high": "Most of your profile already matches. Fine-tune your {item} to match your PFP even better.",
     },
     "harmony_score": {
-        "low": "Simplify competing colours and choose one dominant palette.",
-        "medium": "Reduce the strongest colour mismatch while keeping one accent.",
-        "high": "Keep your accents consistent and refine the remaining colour contrast.",
+        "low": "Use fewer competing colors across your {items}. Stick to 2–3 main colors.",
+        "medium": "Try repeating one main color between your PFP and {item} so they work better together.",
+        "high": "Your colors already work well. Keep your {items} close to the same palette when updating them.",
     },
     "originality_score": {
-        "low": "Keep recognisable focal detail without crowding the small avatar.",
-        "medium": "Balance the focal detail with quieter areas around it.",
-        "high": "Keep defining details readable when the avatar is displayed small.",
+        "low": "Your PFP has too much competing detail or not enough focus. Keep one clear main subject and simplify the area around it.",
+        "medium": "Give the main part of your PFP a little more breathing room so it stands out better.",
+        "high": "The detail level is already strong. Avoid adding anything that makes the PFP harder to read when small.",
     },
 }
 
 
-def get_rule_based_recommendation(visual):
-    field, _, _ = select_improvement_priority(visual)
-    score = max(0, min(100, getattr(visual, field)))
-    level = "low" if score < 60 else "medium" if score < 80 else "high"
-    message = IMPROVEMENT_MESSAGES[field][level]
+def get_score_band(score):
+    return "low" if score < 60 else "medium" if score < 80 else "high"
+
+
+def get_available_profile_items(visual):
+    """Reuse detected equipment; don't claim effects/frames the API can't detect."""
+    detected = detect_profile_elements(visual)
+    items = []
+    if visual.banner or visual.banner_available:
+        items.append("Banner")
+    elif detected["banner"]:
+        items.append("Profile color")
+    if detected["decoration"]:
+        items.append("Avatar Decoration")
+    if detected["nameplate"]:
+        items.append("Nameplate")
+    return items
+
+
+def _join_items(items):
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def get_best_profile_item_for_advice(items):
+    # Prefer assets actually measured for colour matching; nameplates are metadata.
+    return next((item for item in ("Banner", "Avatar Decoration", "Profile color", "Nameplate") if item in items), None)
+
+
+def build_improvement_message(field, score, items):
+    level = get_score_band(score)
+    item = get_best_profile_item_for_advice(items)
+    if field in ("styling_score", "harmony_score") and item is None:
+        return "Best upgrade: Use fewer competing colors in your PFP and keep one clear main subject."
+    message = IMPROVEMENT_MESSAGES[field][level].format(
+        items=_join_items(["PFP", *items]), item=item)
     return "Best upgrade: " + message
+
+
+def build_missing_comparison_message(visual):
+    if not get_available_profile_items(visual):
+        return "You only have a PFP right now, so there is no Banner or Avatar Decoration to compare it with."
+    return "There are not enough profile items to compare yet."
+
+
+def build_improvement_summary(visual):
+    _, name, score = select_improvement_priority(visual)
+    if score == 100:
+        return "Every available category is 100/100."
+    if visual.comparison_available is False:
+        return build_missing_comparison_message(visual)
+    return f"{name} needs the most work — {score}/100."
+
+
+def get_rule_based_recommendation(visual):
+    field, _, score = select_improvement_priority(visual)
+    items = get_available_profile_items(visual)
+    if score == 100:
+        return "Best upgrade: Nothing major needs changing. Keep this balance when you update your " + _join_items(["PFP", *items]) + "."
+    return build_improvement_message(field, score, items)
 
 
 def finalize_profile_score(visual):

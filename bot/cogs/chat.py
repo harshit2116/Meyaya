@@ -6,6 +6,7 @@ from bot.logging.telemetry import discord_context, event
 
 import asyncio
 from bot.utils.typing import background_typing
+from bot.utils.loading import loading_indicator
 from collections import deque
 from dataclasses import dataclass
 import json
@@ -204,7 +205,7 @@ class ChatCog(commands.Cog):
             reply_context,
         )
         context_ready = time.monotonic()
-        async with background_typing(message.channel):
+        async with background_typing(message.channel), loading_indicator(message.channel, self.bot):
             try:
                 reply, _ = await asyncio.gather(
                     self.bot.generate_chat(guild_id, system_instruction, user_prompt, history=history),

@@ -8,7 +8,15 @@ logger = logging.getLogger(__name__)
 
 
 class TimedContext(commands.Context):
+    async def defer(self, *, ephemeral=False):
+        if self.interaction is not None and self.interaction.response.is_done():
+            return
+        return await super().defer(ephemeral=ephemeral)
+
     async def send(self, *args, **kwargs):
+        loader = getattr(self, "_meyaya_loader", None)
+        if loader is not None:
+            await loader.stop()
         started = time.monotonic()
         try:
             return await super().send(*args, **kwargs)

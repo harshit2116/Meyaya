@@ -1,0 +1,126 @@
+"""Per-invocation delayed loading stickers, with best-effort cleanup."""
+
+import asyncio
+from contextlib import asynccontextmanager, suppress
+from functools import wraps
+import logging
+import time
+
+logger = logging.getLogger(__name__)
+LOADING_DELAY = 2.0
+STICKER_NAME = "meyaya_loading"
+SLOW_COMMANDS = frozenset({
+    "profile", "profilecheck", "aura", "palette", "callingcard", "duostyle",
+    "fortune", "tarot", "fate", "guardian", "ship", "bestiescore", "rate",
+    "rank", "roast", "compliment", "room", "warninglabel", "roleplay",
+    "checkclaim", "argumenttimeline", "mostlikely",
+})
+
+
+def resolve_loading_sticker(bot, guild):
+    cache = getattr(bot, "_loading_sticker_cache", None)
+    if cache is None:
+        cache = bot._loading_sticker_cache = {}
+    key = getattr(guild, "id", None)
+    cached = cache.get(key)
+    if cached and time.monotonic() - cached[0] < 60:
+        return cached[1]
+    sticker = next((item for item in (*getattr(guild, "stickers", ()), *getattr(bot, "stickers", ()))
+                    if item.name.casefold() == STICKER_NAME), None)
+    if len(cache) >= 128:
+        cache.pop(next(iter(cache)))
+    cache[key] = (time.monotonic(), sticker)
+    if sticker is None:
+        logger.debug("loading sticker not found")
+    return sticker
+
+
+class LoadingIndicator:
+    def __init__(self, channel, bot, *, delay=LOADING_DELAY):
+        self.channel, self.bot, self.delay = channel, bot, delay
+        self.message = None
+        self.task = None
+        self.closed = False
+        self.sending = False
+
+    def start(self):
+        self.task = asyncio.create_task(self._show(), name="meyaya-loading")
+        return self
+
+    async def _show(self):
+        try:
+            await asyncio.sleep(self.delay)
+            if self.closed:
+                return
+            self.sending = True
+            sticker = resolve_loading_sticker(self.bot, getattr(self.channel, "guild", None))
+            if sticker is not None:
+                try:
+                    self.message = await self.channel.send(stickers=[sticker])
+                except Exception as exc:
+                    logger.debug("loading sticker could not be sent: %s", type(exc).__name__)
+            if self.message is None and not self.closed:
+                self.message = await self.channel.send("🌸 Meyaya is working on it...")
+            if self.closed:
+                await self._remove()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.debug("loading indicator failed: %s", type(exc).__name__)
+
+    async def _remove(self):
+        message, self.message = self.message, None
+        if message is not None:
+            try:
+                await asyncio.wait_for(message.delete(), timeout=2)
+            except Exception as exc:
+                logger.debug("loading message cleanup failed: %s", type(exc).__name__)
+
+    async def stop(self):
+        self.closed = True
+        if self.task is not None and not self.task.done() and not self.sending:
+            self.task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self.task
+        # Do not cancel an in-flight POST: it could create an orphan message.
+        # _show cleans up its own response if delivery finishes after stop.
+        await self._remove()
+
+
+@asynccontextmanager
+async def loading_indicator(channel, bot, *, delay=LOADING_DELAY):
+    loader = LoadingIndicator(channel, bot, delay=delay).start()
+    try:
+        yield loader
+    finally:
+        await loader.stop()
+
+
+def install_command_loading(bot):
+    """Wrap selected callbacks once, preserving their signatures and checks."""
+    for command in bot.walk_commands():
+        if command.name not in SLOW_COMMANDS or getattr(command.callback, "_meyaya_loading", False):
+            continue
+        callback = command.callback
+
+        def wrap(callback, command):
+            @wraps(callback)
+            async def run(*args, **kwargs):
+                ctx = args[1] if command.cog is not None else args[0]
+                interaction = getattr(ctx, "interaction", None)
+                if interaction is not None and not interaction.response.is_done():
+                    await ctx.defer()
+                async with loading_indicator(ctx.channel, bot) as loader:
+                    ctx._meyaya_loader = loader
+                    try:
+                        return await callback(*args, **kwargs)
+                    finally:
+                        ctx._meyaya_loader = None
+            run._meyaya_loading = True
+            return run
+
+        command.callback = wrap(callback, command)
+        app_command = getattr(command, "app_command", None)
+        if app_command is not None:
+            # Hybrid slash dispatch owns a reference separate from text dispatch.
+            app_command._callback = command.callback
