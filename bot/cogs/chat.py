@@ -6,7 +6,6 @@ from bot.logging.telemetry import discord_context, event
 
 import asyncio
 from bot.utils.typing import background_typing
-from bot.utils.loading import loading_indicator
 from bot.utils.application_emojis import application_emojis
 from bot.services.optional_context import OptionalContext
 from bot.utils.command_timing import timing_stage
@@ -176,10 +175,9 @@ class ChatCog(commands.Cog):
             )
             return
 
-        async with loading_indicator(message.channel, self.bot, emoji_only=True) as loader:
-            await self._respond_to_message(message, user_text, reply_context, loader)
+        await self._respond_to_message(message, user_text, reply_context)
 
-    async def _respond_to_message(self, message, user_text, reply_context, loader):
+    async def _respond_to_message(self, message, user_text, reply_context):
         guild_id = message.guild.id if message.guild else None
         context_started = time.monotonic()
         chat_memory = self.bot.build_chat_memory_service()
@@ -230,7 +228,6 @@ class ChatCog(commands.Cog):
                 return
 
         generation_ready = time.monotonic()
-        await loader.stop()
         if generation_ready - context_started >= 2:
             logger.info("slow_chat context_ms=%.0f generation_and_quota_ms=%.0f",
                         (context_ready - context_started) * 1000,
@@ -253,6 +250,8 @@ class ChatCog(commands.Cog):
             rendered_reply = self._render_custom_emojis(reply.text, usable_emojis)
             for chunk in self._chunk_text(rendered_reply):
                 await message.reply(chunk)
+            # Review only the visible text actually delivered, never control tags.
+            await self.bot.request_log.record_message(message, response=rendered_reply)
             await self._run_self_action(message, reply.actions)
 
         if chat_memory is not None and not command_ran:

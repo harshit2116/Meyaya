@@ -39,7 +39,7 @@ const known = value => value === null || value === undefined ? "Unavailable" : S
 const channelTypes = {0: "Text", 2: "Voice", 4: "Category", 5: "Announcements", 10: "Announcement thread", 11: "Thread", 12: "Private thread", 13: "Stage", 15: "Forum", 16: "Media"};
 
 function renderServerDetails(target, data) {
-  target.replaceChildren();
+    target.replaceChildren();
   const facts = element("div", undefined, "metrics server-facts");
   const channelName = id => id ? `${data.channels?.find(c => c.id === id)?.name || "Channel"} (${id})` : "Not set";
   for (const [label, value] of [
@@ -54,11 +54,12 @@ function renderServerDetails(target, data) {
   if (data.description) target.append(element("p", data.description, "details"));
   target.append(facts);
   const memberSection = element("section", undefined, "server-members");
-  memberSection.append(element("h4", `Members (${data.member_preview?.length ?? 0} shown · up to 50)`));
+  const humans = (data.member_preview || []).filter(member => !member.bot).slice(0, 50);
+  memberSection.append(element("h4", `Members (${humans.length} shown · up to 50 · bots excluded)`));
   if (data.member_preview_error) memberSection.append(element("p", data.member_preview_error, "details"));
   const memberList = element("div", undefined, "inventory-list");
   if (data.member_preview?.length === 0 && !data.member_preview_error) memberList.append(element("p", "No members returned.", "details"));
-  for (const member of data.member_preview || []) {
+  for (const member of humans) {
     const row = element("article", undefined, "member-row");
     row.append(element("strong", `${member.name}${member.bot ? " · Bot" : ""}`));
     row.append(element("p", `@${member.username} · ${member.id}`, "details"));
@@ -105,6 +106,7 @@ function lock() {
   $("servers").replaceChildren(); $("memory-items").replaceChildren(); $("nickname-items").replaceChildren();
   $("operations-summary").replaceChildren(); $("operations-features").replaceChildren(); $("operations-models").replaceChildren(); $("operations-recent").replaceChildren();
   $("operations-commands").replaceChildren(); $("server-detail-content").replaceChildren(); $("server-controls").replaceChildren(); $("server-heading").replaceChildren();
+  $("server-command-usage").replaceChildren();
   $("workspace").hidden = true; $("navigation").hidden = true; $("login").hidden = false;
   $("connection").textContent = "Locked";
 }
@@ -215,7 +217,9 @@ function renderServers() {
   for (const server of visible) {
     const card = element("button", undefined, "server-tile"); card.type = "button";
     const icon = serverIcon(server), owner = element("p", `Owner · ${server.owner_name || "Loading…"}`, "server-owner");
-    card.append(icon, element("h3", server.name), owner, element("span", server.id, "id"), element("span", "Open server ↗", "tile-link"));
+    const activity = element("div", undefined, "server-tile-activity");
+    activity.append(metric("AI chats today", known(server.today_chats)), metric("Commands today", known(server.today_commands)));
+    card.append(icon, element("h3", server.name), owner, activity, element("span", server.id, "id"), element("span", "Open server ↗", "tile-link"));
     card.setAttribute("aria-label", `Open ${server.name} in a new window`);
     card.addEventListener("click", () => openServerWindow(server)); $("servers").append(card);
     if (!server.owner_name) api(`/api/servers/${server.id}/summary`).then(data => {
@@ -234,6 +238,7 @@ async function showServer(guildId) {
   $("page-title").textContent = server.name;
   $("server-heading").replaceChildren(serverIcon(server), element("div", `Owner · ${server.owner_name || "Loading…"}`));
   renderServerControls($("server-controls"), server);
+  loadServerCommands(guildId);
   $("server-state").textContent = "Loading server details…";
   try {
     const data = await api(`/api/servers/${guildId}/details`);
@@ -242,6 +247,27 @@ async function showServer(guildId) {
     $("server-heading").replaceChildren(serverIcon({...server, icon_url: data.icon_url || server.icon_url}), element("div", `Owner · ${data.owner_name || "Unavailable"}`));
     $("server-state").textContent = "";
   } catch (error) { $("server-state").textContent = error.message; }
+}
+
+async function loadServerCommands(guildId) {
+  const target = $("server-command-usage"); target.dataset.guildId = guildId;
+  target.replaceChildren(element("h3", "Command usage"), element("p", "Loading command counts…", "details"));
+  try {
+    const data = await api(`/api/servers/${guildId}/commands`);
+    if (!token || target.dataset.guildId !== guildId) return;
+    target.replaceChildren(element("h3", "Command usage"), element("p", data.scope, "details"));
+    if (data.unclassified_total) target.append(element("p", `${data.unclassified_total.toLocaleString()} earlier completions have no recorded command name.`, "details"));
+    if (!data.items.length) { target.append(element("p", "No named command usage recorded yet.", "details")); return; }
+    const table = element("table", undefined, "command-usage-table"), heading = element("tr"), head = element("thead"), body = element("tbody");
+    for (const label of ["Command", "Today", "Last 7 days", "Total recorded"]) { const cell = element("th", label); cell.scope = "col"; heading.append(cell); }
+    head.append(heading);
+    for (const item of data.items) {
+      const row = element("tr"); row.append(element("td", item.command));
+      for (const field of ["today", "week", "total"]) row.append(element("td", Number(item[field]).toLocaleString()));
+      body.append(row);
+    }
+    table.append(head, body); const scroll = element("div", undefined, "command-usage-scroll"); scroll.append(table); target.append(scroll);
+  } catch (error) { if (token && target.dataset.guildId === guildId) target.replaceChildren(element("h3", "Command usage"), element("p", error.message, "details")); }
 }
 
 async function refresh() {
@@ -272,7 +298,8 @@ async function loadRequests(older) {
     if (!older) $("request-items").replaceChildren();
     for (const item of data.items) {
       const entry = element("article", undefined, "request-entry");
-      entry.append(element("h3", `${item.user_name} - ${item.kind}`), element("p", `${new Date(item.created_at).toLocaleString()} - User ${item.user_id} - Channel ${item.channel_id}`, "details"), element("pre", item.content, "request-content"));
+      entry.append(element("h3", `${item.user_name} - ${item.kind}`), element("p", `${new Date(item.created_at).toLocaleString()} - User ${item.user_id} - Channel ${item.channel_id}`, "details"), element("h4", "User request"), element("pre", item.content, "request-content"), element("h4", "Meyaya's response"));
+      entry.append(item.response === null || item.response === undefined ? element("p", "Reply not recorded.", "details") : element("pre", item.response, "request-content response-content"));
       const link = element("a", item.kind === "slash" ? "Open channel in Discord" : "Open message in Discord"); link.href = item.url; link.target = "_blank"; link.rel = "noopener noreferrer"; entry.append(link); $("request-items").append(entry);
     }
     requestCursor = data.next_cursor; $("request-more").hidden = !requestCursor;

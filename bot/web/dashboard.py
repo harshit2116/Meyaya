@@ -134,6 +134,7 @@ class Dashboard:
         self.app.router.add_get("/api/servers", self.servers)
         self.app.router.add_get("/api/servers/{guild_id}/details", self.server_details)
         self.app.router.add_get("/api/servers/{guild_id}/summary", self.server_summary)
+        self.app.router.add_get("/api/servers/{guild_id}/commands", self.server_commands)
         self.app.router.add_get("/api/servers/{guild_id}/requests", self.requests)
         self.app.router.add_get("/api/memories", self.memories)
         self.app.router.add_get("/api/nicknames", self.nicknames)
@@ -345,9 +346,20 @@ class Dashboard:
         await self._fill_owner(info, guild)
         return web.json_response(info)
 
+    async def server_commands(self, request):
+        try:
+            guild_id = int(request.match_info['guild_id'])
+            if not 0 < guild_id < 2**64:
+                raise ValueError()
+        except ValueError:
+            raise web.HTTPBadRequest(text='Invalid server ID')
+        if self.bot.get_guild(guild_id) is None or (hasattr(self.bot, '_guild_names') and guild_id not in self.bot._guild_names):
+            raise web.HTTPNotFound(text='Server not found')
+        return web.json_response(await self.bot.usage.command_report(guild_id))
+
     async def _member_preview(self, guild):
         members = guild.members
-        if len(members) >= min(guild.member_count or 50, 50):
+        if sum(not member.bot for member in members) >= 50 or (guild.member_count is not None and len(members) >= guild.member_count):
             return {'member_preview': cached_member_preview(members)}
         async with self._member_lock:
             now = time.monotonic()
@@ -356,8 +368,8 @@ class Dashboard:
                 return entry[1]
             try:
                 async with asyncio.timeout(5):
-                    # Exactly one bounded REST page, never chunk the whole server.
-                    fetched = [member async for member in guild.fetch_members(limit=50)]
+                    # One bounded page; filter bots before selecting 50 humans.
+                    fetched = [member async for member in guild.fetch_members(limit=200)]
                 result = {'member_preview': cached_member_preview(fetched)}
             except (discord.HTTPException, discord.ClientException, TimeoutError):
                 result = {'member_preview': cached_member_preview(members),

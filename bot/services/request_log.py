@@ -1,4 +1,4 @@
-"""Capture submitted requests, never model prompts, history or ambient chat."""
+"""Capture explicit AI requests and delivered replies, never prompts or ambient chat."""
 
 import asyncio
 import json
@@ -43,7 +43,8 @@ class RequestLogService:
         self._write_slot = asyncio.Semaphore(1)
 
     async def record(
-        self, *, event_id, guild_id, channel_id, user_id, user_name, kind, content, message_id=None
+        self, *, event_id, guild_id, channel_id, user_id, user_name, kind, content, message_id=None,
+        response=None
     ):
         if guild_id is None or channel_id is None:
             return
@@ -53,11 +54,12 @@ class RequestLogService:
             else content[: MAX_CONTENT - 20] + "\n[content truncated]"
         )
         started = time.monotonic()
+        visible_response = (response if response is None or len(response) <= MAX_CONTENT
+                            else response[:MAX_CONTENT - 20] + '\n[content truncated]')
         try:
             async with asyncio.timeout(3):
                 async with self.sessions() as session:
-                    await session.execute(
-                        insert(RequestLog)
+                    statement = (insert(RequestLog)
                         .values(
                             event_id=event_id,
                             guild_id=guild_id,
@@ -67,9 +69,13 @@ class RequestLogService:
                             kind=kind,
                             content=bounded,
                             message_id=message_id,
-                        )
-                        .on_conflict_do_nothing(index_elements=[RequestLog.event_id])
-                    )
+                            response=visible_response,
+                        ))
+                    statement = (statement.on_conflict_do_nothing(index_elements=[RequestLog.event_id])
+                                 if response is None else statement.on_conflict_do_update(
+                                     index_elements=[RequestLog.event_id],
+                                     set_={'response': statement.excluded.response}))
+                    await session.execute(statement)
                     await session.commit()
         except (SQLAlchemyError, TimeoutError):
             now = time.monotonic()
@@ -83,7 +89,7 @@ class RequestLogService:
             if elapsed >= 500:
                 logger.info("request_log write_ms=%.0f", elapsed)
 
-    async def record_message(self, message, kind="chat"):
+    async def record_message(self, message, kind="chat", *, response=None):
         if message.guild is None or message.author.bot:
             return
         if self._closing or kind != "chat":
@@ -104,6 +110,7 @@ class RequestLogService:
             kind=kind,
             content=(message.content or "[No text supplied]")[:MAX_CONTENT],
             message_id=message.id,
+            response=response[:MAX_CONTENT] if response is not None else None,
         ), name="chat-request-log")
         self._pending.add(task)
         task.add_done_callback(self._record_done)
@@ -147,6 +154,7 @@ class RequestLogService:
                 "channel_id": str(row.channel_id),
                 "kind": row.kind,
                 "content": row.content,
+                "response": row.response,
                 "created_at": row.created_at.isoformat(),
                 "url": f"https://discord.com/channels/{row.guild_id}/{row.channel_id}"
                 + (f"/{row.message_id}" if row.message_id else ""),

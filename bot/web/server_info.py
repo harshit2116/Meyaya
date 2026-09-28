@@ -1,5 +1,6 @@
 """Read-only server metadata; never enumerate the full member roster."""
 from datetime import UTC, datetime
+from itertools import islice
 
 
 def snowflake_date(value):
@@ -78,7 +79,7 @@ def rest_member_preview(rows, roles):
         'username': row['user']['username'], 'bot': bool(row['user'].get('bot')),
         'joined_at': row.get('joined_at'),
         'roles': [role_names.get(str(role), str(role)) for role in row.get('roles', [])],
-    } for row in rows[:50]]
+    } for row in islice((row for row in rows if not row['user'].get('bot')), 50)]
 
 
 def cached_member_preview(members):
@@ -86,4 +87,4 @@ def cached_member_preview(members):
         'id': str(member.id), 'name': member.display_name, 'username': member.name,
         'bot': member.bot, 'joined_at': member.joined_at.isoformat() if member.joined_at else None,
         'roles': [role.name for role in member.roles if role.id != member.guild.id],
-    } for member in members[:50]]
+    } for member in islice((member for member in members if not member.bot), 50)]

@@ -386,7 +386,7 @@ class MeyayaBot(commands.Bot):
             logger.info("slow_command command=%s message_to_completion_ms=%.0f", ctx.command.qualified_name, elapsed * 1000)
         # Hybrid commands also emit app-command completion; count them only there.
         if ctx.guild is not None and ctx.interaction is None:
-            await self._count_command(ctx.guild.id)
+            await self._count_command(ctx.guild.id, ctx.command.qualified_name)
 
     async def on_command(self, ctx):
         # Review logs are AI-chat only; command counts are recorded on completion.
@@ -411,12 +411,12 @@ class MeyayaBot(commands.Bot):
 
     async def on_app_command_completion(self, interaction, command):
         if interaction.guild_id is not None:
-            await self._count_command(interaction.guild_id)
+            await self._count_command(interaction.guild_id, command.qualified_name)
 
-    async def _count_command(self, guild_id):
+    async def _count_command(self, guild_id, command_name):
         try:
             async with asyncio.timeout(3):
-                await self.usage.command_completed(guild_id)
+                await self.usage.command_completed(guild_id, command_name)
         except (SQLAlchemyError, TimeoutError):
             logger.warning("Could not record command usage")
 

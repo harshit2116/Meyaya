@@ -2,8 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 import re
-from sqlalchemy import select, update, func, case
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import select, update, func, case, cast, Integer, true
+from sqlalchemy.dialects.postgresql import insert, array
 from bot.models.usage import GuildUsage
 from bot.models.guild_settings import GuildSettings
 
@@ -54,18 +54,45 @@ class UsageService:
             )
             await session.commit()
 
-    async def command_completed(self, guild_id):
+    async def command_completed(self, guild_id, command_name=None):
+        name = str(command_name)[:100] if command_name else None
         async with self.sessions() as session:
-            statement = insert(GuildUsage).values(
-                guild_id=guild_id, day=datetime.now(UTC).date(), commands=1
-            )
+            values = dict(guild_id=guild_id, day=datetime.now(UTC).date(), commands=1)
+            changes = {"commands": GuildUsage.commands + 1}
+            if name:
+                values['command_counts'] = {name: 1}
+                changes['command_counts'] = func.jsonb_set(
+                    GuildUsage.command_counts, array([name]),
+                    func.to_jsonb(func.coalesce(cast(GuildUsage.command_counts[name].astext, Integer), 0) + 1), True)
+            statement = insert(GuildUsage).values(**values)
             await session.execute(
                 statement.on_conflict_do_update(
                     index_elements=[GuildUsage.guild_id, GuildUsage.day],
-                    set_={"commands": GuildUsage.commands + 1},
+                    set_=changes,
                 )
             )
             await session.commit()
+
+    async def command_report(self, guild_id):
+        today = datetime.now(UTC).date()
+        # Expand only this guild's compact daily maps; aggregate inside Postgres.
+        daily = select(GuildUsage.day, GuildUsage.command_counts).where(
+            GuildUsage.guild_id == guild_id).subquery('daily')
+        entries = func.jsonb_each_text(daily.c.command_counts).table_valued('key', 'value').lateral()
+        count = cast(entries.c.value, Integer)
+        statement = select(entries.c.key.label('command'),
+            func.sum(case((daily.c.day == today, count), else_=0)).label('today'),
+            func.sum(case((daily.c.day >= today - timedelta(days=6), count), else_=0)).label('week'),
+            func.sum(count).label('total')).select_from(daily.join(entries, true())).group_by(entries.c.key)
+        async with self.sessions() as session:
+            rows = (await session.execute(statement)).mappings().all()
+            total = await session.scalar(select(func.coalesce(func.sum(GuildUsage.commands), 0)).where(
+                GuildUsage.guild_id == guild_id))
+        items = sorted((dict(row) for row in rows), key=lambda row: (-row['total'], row['command']))
+        tracked = sum(row['total'] for row in items)
+        return {'items': items, 'tracked_total': tracked, 'total': total,
+                'unclassified_total': max(0, total - tracked), 'day': today.isoformat(),
+                'scope': 'Successful command completions. Named counts start with this update; daily reset is midnight UTC.'}
 
     async def report(self):
         today = datetime.now(UTC).date()

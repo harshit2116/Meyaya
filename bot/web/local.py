@@ -140,7 +140,7 @@ class LocalBackend:
                     data = await get(f'guilds/{guild_id}', required=True, params={'with_counts': 'true'})
                     channels = None if summary else await get(f'guilds/{guild_id}/channels')
                     owner = await get(f'users/{data["owner_id"]}') if data.get('owner_id') else None
-                    members = None if summary else await get(f'guilds/{guild_id}/members', params={'limit': '50'})
+                    members = None if summary else await get(f'guilds/{guild_id}/members', params={'limit': '200'})
                 details = rest_server_info(data, channels, owner)
                 details['member_preview'] = rest_member_preview(members, data.get('roles')) if members is not None else None
                 if members is None and not summary:

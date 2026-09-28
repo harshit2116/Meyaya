@@ -8,7 +8,7 @@ import time
 from bot.utils.application_emojis import loading_emoji
 
 logger = logging.getLogger(__name__)
-LOADING_DELAY = 2.0
+LOADING_DELAY = 0.5
 STICKER_NAME = "meyaya_loading"
 SLOW_COMMANDS = frozenset({
     "profile", "profilecheck", "aura", "palette", "callingcard", "duostyle",
@@ -16,6 +16,9 @@ SLOW_COMMANDS = frozenset({
     "rank", "roast", "compliment", "room", "warninglabel", "roleplay",
     "checkclaim", "argumenttimeline", "mostlikely",
 })
+# Match callbacks that intentionally defer privately. The first defer fixes
+# response visibility, so a later callback cannot change a public defer.
+PRIVATE_SLASH_COMMANDS = frozenset({"roleplay", "argumenttimeline"})
 
 
 def resolve_loading_sticker(bot, guild):
@@ -121,7 +124,7 @@ def install_command_loading(bot):
                 ctx = args[1] if command.cog is not None else args[0]
                 interaction = getattr(ctx, "interaction", None)
                 if interaction is not None and not interaction.response.is_done():
-                    await ctx.defer()
+                    await ctx.defer(ephemeral=command.name in PRIVATE_SLASH_COMMANDS)
                 async with loading_indicator(ctx.channel, bot) as loader:
                     ctx._meyaya_loader = loader
                     try:

@@ -137,9 +137,14 @@ class ProfileCog(commands.Cog):
         visual_task = asyncio.create_task(
             self.bot.build_profile_aesthetic_service().inspect(target)
         )
-        async with self.bot.db_session() as session:
-            summary = await ProfileService(session).build(target.id, ctx.guild.id)
-        visual = await visual_task
+        try:
+            async with self.bot.db_session() as session:
+                summary = await ProfileService(session).build(target.id, ctx.guild.id)
+            visual = await visual_task
+        except BaseException:
+            visual_task.cancel()
+            await asyncio.gather(visual_task, return_exceptions=True)
+            raise
         await ctx.send(
             embed=build_profile_embed(target, summary, visual),
             view=ProfileReviewView(self.bot, target),
