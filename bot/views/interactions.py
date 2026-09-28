@@ -51,6 +51,7 @@ class InteractionResponseView(discord.ui.View):
     async def _send_back(self, interaction: discord.Interaction) -> None:
         """Trigger the same interaction in reverse."""
 
+        await interaction.response.defer()
         async with self.bot.db_session() as session:
             service = self.bot.build_interaction_service(session)
             result = await service.perform(
@@ -71,7 +72,7 @@ class InteractionResponseView(discord.ui.View):
             gif_url=result.gif_url,
         )
 
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
         if interaction.message is not None:
             try:
                 await interaction.message.edit(view=None)

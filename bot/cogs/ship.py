@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import io
 import logging
 import time
+from weakref import WeakValueDictionary
 
 import discord
 from discord import app_commands
@@ -18,7 +19,7 @@ from discord.ext import commands
 
 from bot.app import MeyayaBot
 from bot.services.ship import ShipService
-from bot.services.ship_card import render_ship_card
+from bot.services.ship_card import render_ship_card, valid_avatar
 from bot.utils.embeds import build_ship_embed
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ class ShipCog(commands.Cog):
         self.service = ShipService()
         self._avatar_cache: dict[object, ByteCacheEntry] = {}
         self._card_cache: dict[object, ByteCacheEntry] = {}
-        self._avatar_locks = [asyncio.Lock() for _ in range(16)]
+        self._avatar_locks = WeakValueDictionary()
 
     @commands.hybrid_command(
         name="ship",
@@ -157,7 +158,11 @@ class ShipCog(commands.Cog):
 
     async def _get_avatar_bytes(self, asset: discord.Asset) -> bytes:
         key = str(asset.url)
-        async with self._avatar_locks[hash(key) % len(self._avatar_locks)]:
+        cached = self._get_cached(self._avatar_cache, key)
+        if cached is not None:
+            return cached
+        lock = self._avatar_locks.setdefault(key, asyncio.Lock())
+        async with lock:
             return await self._download_avatar(asset, key)
 
     async def _download_avatar(self, asset, key) -> bytes:
@@ -186,6 +191,9 @@ class ShipCog(commands.Cog):
             logger.warning("ship_avatar_unavailable; rendering initials instead", exc_info=False)
             # Keep the heart card and the other member's photo. Never cache
             # missing artwork: the next command must retry the real avatar.
+            return b""
+        if not await image_work(valid_avatar, data):
+            logger.warning("ship_avatar_invalid; rendering initials instead")
             return b""
         self._put_cached(self._avatar_cache, key, data)
         return data

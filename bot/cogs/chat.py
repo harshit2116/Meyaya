@@ -16,6 +16,7 @@ import time
 
 import discord
 from discord.ext import commands
+from discord.ext.commands.view import StringView
 from sqlalchemy.exc import SQLAlchemyError
 
 from bot.app import MeyayaBot
@@ -814,7 +815,7 @@ class ChatCog(commands.Cog):
                 return False
             try:
                 context = await self.bot.get_context(message)
-                await context.invoke(command)
+                await self._invoke_checked_command(context, command)
                 return True
             except Exception:
                 logger.exception(
@@ -839,7 +840,7 @@ class ChatCog(commands.Cog):
                 return False
             try:
                 context = await self.bot.get_context(message)
-                await context.invoke(command, member=iq_target)
+                await self._invoke_checked_command(context, command, iq_target)
                 return True
             except Exception:
                 logger.exception(
@@ -863,51 +864,15 @@ class ChatCog(commands.Cog):
             return False
 
         try:
-            if request.name == "marry":
-                marriage_cog = self.bot.get_cog("MarriageCog")
-                proposal_builder = getattr(marriage_cog, "_build_proposal", None)
-                if proposal_builder is None:
-                    return False
-                content, embed, view = await proposal_builder(message.author, target)
-                sent = await message.reply(content=content, embed=embed, view=view)
-                if view is not None:
-                    view.message = sent
-                return True
-
             definition = INTERACTION_DEFINITIONS_BY_NAME.get(request.name)
-            if definition is None:
+            if request.name != "marry" and definition is None:
                 logger.warning("Rejected non-allowlisted natural command=%s", request.name)
                 return False
-
-            async with self.bot.db_session() as session:
-                result = await self.bot.build_interaction_service(session).perform(
-                    message.author.id,
-                    target.id,
-                    definition,
-                    guild_id=message.guild.id,
-                    actor_name=message.author.display_name,
-                )
-
-            embed = build_interaction_embed(
-                title=result.title,
-                description=result.message.format(
-                    actor=message.author.mention,
-                    target=target.mention,
-                ),
-                color=definition.color,
-                gif_url=result.gif_url,
-            )
-            view = (
-                InteractionResponseView(
-                    bot=self.bot,
-                    definition=definition,
-                    actor_id=message.author.id,
-                    target_id=target.id,
-                )
-                if definition.button_label
-                else None
-            )
-            await message.reply(embed=embed, view=view)
+            command = self.bot.get_command(request.name)
+            if command is None:
+                return False
+            context = await self.bot.get_context(message)
+            await self._invoke_checked_command(context, command, target)
             return True
         except Exception:
             logger.exception(
@@ -917,6 +882,14 @@ class ChatCog(commands.Cog):
                 target.id,
             )
             return False
+
+    async def _invoke_checked_command(self, context, command, target=None):
+        # Context.invoke calls callbacks directly and bypasses checks/cooldowns.
+        # Supply only the already-validated member ID to normal argument parsing.
+        context.command = command
+        context.invoked_with = command.name
+        context.view = StringView(str(target.id) if target is not None else "")
+        await self.bot.invoke(context)
 
     @staticmethod
     def _natural_command_matches_message(content: str, command_name: str) -> bool:

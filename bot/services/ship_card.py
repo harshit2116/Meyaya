@@ -8,6 +8,18 @@ from PIL import Image, ImageDraw, ImageOps
 from bot.services.card_renderer import font
 
 
+def valid_avatar(data: bytes) -> bool:
+    """Reject broken CDN responses before they enter the ten-minute cache."""
+    try:
+        with Image.open(BytesIO(data)) as source:
+            if source.width * source.height > 4_000_000:
+                return False
+            source.load()
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def centered(draw, text, x, y, width, size, color):
     text = " ".join(text.split())
     while size > 16 and draw.textlength(text, font=font(size)) > width:

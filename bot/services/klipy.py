@@ -7,6 +7,7 @@ import asyncio
 from dataclasses import dataclass
 from random import SystemRandom
 import time
+from weakref import WeakValueDictionary
 
 import aiohttp
 from redis.asyncio import Redis
@@ -81,6 +82,7 @@ class KlipyService:
         self.cache = cache
         self._search_cache: dict[str, tuple[float, tuple[str, ...]]] = {}
         self._last_url_by_query: dict[str, str] = {}
+        self._search_locks = WeakValueDictionary()
 
     async def random_anime_gif(self, query: str) -> GifResult:
         """Return an action-relevant anime GIF or no GIF at all."""
@@ -92,6 +94,17 @@ class KlipyService:
         return await self._search_gifs(normalized_query, strict_action=True)
 
     async def _search_gifs(self, query: str, *, strict_action: bool = False) -> GifResult:
+        cache_key = f"{query.casefold()}|{int(strict_action)}"
+        cached_urls = self._get_cached_search(cache_key)
+        if cached_urls and self.api_key:
+            return GifResult(url=self._choose_cached_url(cache_key, cached_urls))
+        # Only one cold search per query; each waiting caller still chooses
+        # its own result once the first request has populated the cache.
+        lock = self._search_locks.setdefault(cache_key, asyncio.Lock())
+        async with lock:
+            return await self._search_gifs_once(query, strict_action=strict_action)
+
+    async def _search_gifs_once(self, query: str, *, strict_action: bool = False) -> GifResult:
         """Search Klipy for a query and return a random GIF from the result set."""
 
         if not self.api_key:

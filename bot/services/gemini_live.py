@@ -11,12 +11,23 @@ from typing import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
-try:
-    from google import genai
-    from google.genai import types
-except Exception:  # pragma: no cover - optional dependency at runtime
-    genai = None
-    types = None
+genai = None
+types = None
+
+
+def _load_sdk() -> None:
+    """Keep the voice-only SDK out of the text bot's startup footprint."""
+    global genai, types
+    if genai is not None and types is not None:
+        return
+    try:
+        from google import genai as sdk
+        from google.genai import types as sdk_types
+    except ImportError as exc:
+        raise RuntimeError(
+            "google-genai SDK is not installed. Install dependency `google-genai` to use voice chat."
+        ) from exc
+    genai, types = sdk, sdk_types
 
 AudioCallback = Callable[[bytes], Awaitable[None]]
 InterruptCallback = Callable[[], Awaitable[None]]
@@ -108,18 +119,17 @@ class GeminiLiveSession:
         if not self.api_key:
             raise RuntimeError("GEMINI_API_KEY is not configured")
         if genai is None or types is None:
-            raise RuntimeError(
-                "google-genai SDK is not installed. Install dependency `google-genai` to use voice chat."
-            )
+            await asyncio.to_thread(_load_sdk)
 
         self._loop = asyncio.get_running_loop()
         self._client = genai.Client(api_key=self.api_key)
         self._running = True
         try:
             await self._open_connection()
-        except Exception:
+        except BaseException:
             self._running = False
-            self._client = None
+            await self._close_client()
+            self._loop = None
             raise
 
         self._receiver_task = asyncio.create_task(
@@ -171,6 +181,20 @@ class GeminiLiveSession:
                 # A failed socket commonly raises again while its context exits.
                 logger.debug("Error closing failed Gemini socket", exc_info=True)
 
+    async def _close_client(self) -> None:
+        client, self._client = self._client, None
+        if client is None:
+            return
+        try:
+            await client.aio.aclose()
+        except Exception:
+            logger.debug("Error closing Gemini async client", exc_info=True)
+        finally:
+            try:
+                await asyncio.to_thread(client.close)
+            except Exception:
+                logger.debug("Error closing Gemini sync client", exc_info=True)
+
     async def stop(self) -> None:
         if not self._running:
             return
@@ -192,9 +216,11 @@ class GeminiLiveSession:
 
         self._sender_task = None
         self._receiver_task = None
-        await self._close_connection()
-        self._client = None
-        self._loop = None
+        try:
+            await self._close_connection()
+        finally:
+            await self._close_client()
+            self._loop = None
         logger.info("Gemini Live session closed")
 
     def _wake_sender(self) -> None:

@@ -67,5 +67,11 @@ async def image_work(function, *args, **kwargs):
         slot.release()
         raise
     # Cancellation cannot stop Pillow. Release only when the actual work finishes.
-    future.add_done_callback(lambda _: slot.release())
+    def finished(completed):
+        slot.release()
+        # The original caller may have been cancelled while Pillow was running.
+        # Retrieve failures in that case too; awaiting callers still receive them.
+        if not completed.cancelled():
+            completed.exception()
+    future.add_done_callback(finished)
     return await asyncio.shield(future)

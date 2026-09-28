@@ -17,6 +17,14 @@ and live voice conversations.
 
 Hosting on HeavenCloud with 512 MB? Follow [the HeavenCloud setup](docs/heavencloud.md).
 
+For the 0.5-core / 512MB RAM / 2GB storage plan, install production dependencies
+with `python -m pip install --no-cache-dir --prefer-binary -r requirements.txt`,
+then use `python start.py` as the startup command. Install only when dependencies
+change, not on every restart. Keep PostgreSQL and Redis external, run one bot
+process, and run the dashboard on your laptop. Do not upload local virtual
+environments or development dependencies. Voice loads its SDK on first use;
+the first voice join therefore has some extra startup work.
+
 For persistent Redis and container deployment, see [the deployment guide](docs/deployment.md).
 For server usage, daily chat limits, and the owner web dashboard, see [owner operations](docs/owner-dashboard.md).
 See [moderation controls](docs/moderation.md) and [Docker deployment](docs/deployment.md) for the new rules and hosting setup.

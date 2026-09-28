@@ -25,6 +25,22 @@ class CelestialCog(commands.Cog):
             kind, ctx.guild.id if ctx.guild else 0, member.id, question=question[:300]
         )
         key = (result, member.display_name, str(member.display_avatar.url))
+        png = await self._card_bytes(key, result, member)
+        lines = [f"**{discord.utils.escape_markdown(member.display_name)} - {result.title}**"]
+        lines.extend(f"**{k}:** {v}" for k, v in result.fields)
+        lines.extend(f"**{p}: {title}** - {meaning}" for p, title, meaning in result.panels)
+        await ctx.send(
+            None if kind in {"fortune", "fate"} else "\n".join(lines),
+            file=discord.File(BytesIO(png), filename=f"{kind}.png"),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    async def _card_bytes(self, key, result, member):
+        # A ready card needs neither a download nor the render queue.
+        png = self.cache.get(key)
+        if png is not None:
+            self.cache.move_to_end(key)
+            return png
         async with self.render_slots:
             png = self.cache.get(key)
             if png is None:
@@ -44,24 +60,15 @@ class CelestialCog(commands.Cog):
                         while len(self.avatar_cache) > 32 or sum(len(v[1]) for v in self.avatar_cache.values()) > 1024 * 1024:
                             self.avatar_cache.popitem(last=False)
                 png = await image_work(render_card, result, member.display_name, avatar)
-                self.cache[key] = png
-                while len(self.cache) > 8 or sum(map(len, self.cache.values())) > 4 * 1024 * 1024:
-                    self.cache.popitem(last=False)
+                # Retry a failed avatar fetch next time instead of retaining
+                # a missing portrait for the rest of this daily draw.
+                if avatar:
+                    self.cache[key] = png
+                    while len(self.cache) > 8 or sum(map(len, self.cache.values())) > 4 * 1024 * 1024:
+                        self.cache.popitem(last=False)
             else:
                 self.cache.move_to_end(key)
-        lines = [f"**{discord.utils.escape_markdown(member.display_name)} - {result.title}**"]
-        lines.extend(f"**{k}:** {v}" for k, v in result.fields)
-        lines.extend(f"**{p}: {title}** - {meaning}" for p, title, meaning in result.panels)
-        if kind == "guardian":
-            from bot.services.card_renderer import GUARDIANS
-
-            icon = GUARDIANS.get(result.title, "owl")
-
-        await ctx.send(
-            None if kind in {"fortune", "fate"} else "\n".join(lines),
-            file=discord.File(BytesIO(png), filename=f"{kind}.png"),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        return png
 
     @commands.hybrid_command(description="Reveal today's fortune and ask an optional question.")
     @commands.cooldown(1, 5, commands.BucketType.member)

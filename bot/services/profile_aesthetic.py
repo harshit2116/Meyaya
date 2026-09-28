@@ -61,13 +61,17 @@ class ProfileAestheticService:
         self._asset_cache_bytes = 0
         # Overlap two network inspections, but keep CPU/Pillow work serialized.
         self._inspect_slots = BoundedImageGate(concurrency=2)
+        self._inspect_admission = BoundedImageGate(concurrency=4)
         self._asset_locks = WeakValueDictionary()
-        # Fixed-size locks coalesce repeated requests without an unbounded lock table.
-        self._member_locks = [asyncio.Lock() for _ in range(32)]
+        self._member_locks = WeakValueDictionary()
 
     async def inspect(self, member: discord.Member, *, refresh: bool = False, animated: bool = False) -> ProfileVisual:
-        async with self._inspect_slots:
-            async with self._member_locks[member.id % len(self._member_locks)]:
+        # Bound all waiting callers, but do not let a duplicate member request
+        # occupy a network slot while it waits for that member's first request.
+        async with self._inspect_admission:
+            key = (getattr(getattr(member, "guild", None), "id", None), member.id)
+            lock = self._member_locks.setdefault(key, asyncio.Lock())
+            async with lock, self._inspect_slots:
                 if refresh:
                     # Server avatars/banners and global profile data can change
                     # independently of the gateway's cached Member object.
