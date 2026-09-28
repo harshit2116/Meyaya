@@ -17,11 +17,11 @@ from weakref import WeakValueDictionary
 import aiohttp
 import discord
 from PIL import Image, ImageEnhance, ImageStat
+from bot.services.profile_scoring import finalize_profile_score, profilecheck_points
 
 MAX_ASSET_BYTES = 6 * 1024 * 1024
 CACHE_TTL_SECONDS = 30 * 60
 logger = logging.getLogger(__name__)
-
 
 @dataclass(frozen=True, slots=True)
 class ProfileVisual:
@@ -425,6 +425,10 @@ class ProfileAestheticService:
 
 
 def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
+    return finalize_profile_score(calculate_category_scores(visual))
+
+
+def calculate_category_scores(visual: ProfileVisual) -> ProfileVisual:
     """Review visible assets without identity randomness or accessory-count scores."""
     service = ProfileAestheticService
     avatar = service._open(visual.avatar)
@@ -433,7 +437,8 @@ def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
     if banner is None and not visual.banner_available and visual.accent_color is not None:
         banner = Image.new("RGB", (32, 32), visual.accent_color)
     if avatar is None:
-        return visual
+        return replace(visual, avatar_score=0, styling_score=0, harmony_score=0,
+                       originality_score=0, comparison_available=False)
     def actual_colors(image):
         small = image.convert("RGB")
         if small.width * small.height > 9216:
@@ -477,9 +482,9 @@ def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
     detail = service._clamp(round(35 + min(1, entropy / 6) * 50 - max(0, entropy - 7) * 15))
     harmony = round(sum(matches) / len(matches)) if matches else 0
     styling = round(sum(matches) / len(matches) * .5 + min(matches) * .5) if matches else 0
-    overall = round(avatar_score * .35 + styling * .20 + harmony * .30 + detail * .15) if matches else round((avatar_score * .35 + detail * .15) / .50)
-    return replace(visual, avatar_score=avatar_score, styling_score=styling, harmony_score=harmony,
-                   originality_score=detail, overall_score=overall, comparison_available=bool(matches))
+    reviewed = replace(visual, avatar_score=avatar_score, styling_score=styling, harmony_score=harmony,
+                       originality_score=detail, comparison_available=bool(matches))
+    return reviewed
 
 
 def profile_affinity(visual: ProfileVisual) -> str:

@@ -9,8 +9,10 @@ from collections import OrderedDict
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from bot.services.card_renderer import font, label
+from bot.services.profile_scoring import category_available, select_improvement_priority, get_rule_based_recommendation
 from bot.services.profile_aesthetic import (
     ProfileVisual,
+    profilecheck_points,
     profile_affinity,
     profile_class,
     style_compatibility,
@@ -128,13 +130,17 @@ def _panel(draw: ImageDraw.ImageDraw, box, fill=(17, 14, 26, 188), outline=(255,
     draw.rounded_rectangle(box, radius=20, fill=fill, outline=outline, width=2)
 
 
-def _score_bar(draw, x, y, width, name, value, color):
+def _score_bar(draw, x, y, width, name, value, color, *, points_text=None):
     draw.text((x, y), name.upper(), font=font(15), fill="#d8cfe0")
-    draw.text((x + width - 37, y - 2), str(value), font=font(18), fill="white")
+    if points_text is not None:
+        draw.text((x + width, y - 2), points_text, anchor="ra", font=font(18), fill="white")
+    else:
+        draw.text((x + width - 37, y - 2), str(value), font=font(18), fill="white")
     draw.rounded_rectangle((x, y + 29, x + width, y + 40), radius=6, fill="#2a2533")
-    draw.rounded_rectangle(
-        (x, y + 29, x + max(10, width * value / 100), y + 40), radius=6, fill=color
-    )
+    if value > 0:
+        draw.rounded_rectangle(
+            (x, y + 29, x + max(10, width * value / 100), y + 40), radius=6, fill=color
+        )
 
 
 def _centered_text(
@@ -298,32 +304,17 @@ PROFILECHECK_COMMENTS = (
 def profilecheck_feedback(visual: ProfileVisual) -> tuple[str, str, str]:
     """Return stable, score-specific criticism and one useful improvement target."""
 
-    _, grade, comments = next(
+    _, grade, _ = next(
         band for band in PROFILECHECK_COMMENTS if visual.overall_score >= band[0]
     )
-    seed = int(visual.asset_fingerprint[-8:], 16) + visual.overall_score
-    comment = comments[seed % len(comments)]
-    scores = {
-        "avatar": visual.avatar_score,
-        "styling": visual.styling_score,
-        "color harmony": visual.harmony_score,
-        "detail": visual.originality_score,
-    }
+    rows = profilecheck_points(visual)
+    weakest_field, name, score = select_improvement_priority(visual)
+    comment = f"{name} is your lowest category at {score}/100."
     if visual.comparison_available is False:
-        scores.pop("styling")
-        scores.pop("color harmony")
-    weakest = min(scores, key=scores.get)
-    tips = {
-        "avatar": "Best upgrade: brighten the subject slightly so it reads at icon size.",
-        "styling": "Best upgrade: simplify competing details so the avatar remains the focal point.",
-        "color harmony": "Best upgrade: repeat one avatar accent color in the banner or decoration." if visual.has_banner or visual.has_decoration else "Best upgrade: use a clearer balance of light and dark in your avatar.",
-        "detail": "Best upgrade: preview your avatar at icon size and keep its defining details readable.",
-    }
-    if min(scores.values()) >= 80:
-        return grade, comment, "Best upgrade: keep this balance; preview any changes at small icon size."
-    if visual.comparison_available is False:
-        comment = "An avatar-led look, with the score focused on readability and detail."
-    return grade, comment, tips[weakest]
+        comment = f"No backdrop or decoration to compare. {name}: {score}/100."
+    if all(earned == budget for _, _, budget, earned in rows):
+        return grade, "All categories earned their full weighted points.", "Best upgrade: maintain this balance when changing your profile."
+    return grade, comment, get_rule_based_recommendation(visual)
 
 
 def profilecheck_card(visual: ProfileVisual) -> bytes:
@@ -354,19 +345,13 @@ def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True) -
         _avatar(image, visual, (62, 355, 270, 270))
     draw = ImageDraw.Draw(image, "RGBA")
     _panel(draw, (368, 354, 940, 635), fill=(10, 8, 18, 155))
-    scores = (
-        ("Readability", visual.avatar_score),
-        ("Cohesion", visual.styling_score),
-        ("Color harmony", visual.harmony_score),
-        ("Detail balance", visual.originality_score),
-    )
-    for index, (name, value) in enumerate(scores):
+    for index, (field, name, weight, earned) in enumerate(profilecheck_points(visual)):
         bar_color = _readable_accent(visual.palette[index % 3], '#2a2533', minimum=3)
-        if visual.comparison_available is False and index in (1, 2):
-            draw.text((402, 387 + index * 57), name.upper(), font=font(15), fill="#cfc7d7")
-            draw.text((882, 387 + index * 57), "—", font=font(18), fill="#cfc7d7")
+        if category_available(visual, field):
+            _score_bar(draw, 402, 387 + index * 57, 495, name, getattr(visual, field), bar_color,
+                       points_text=f"{getattr(visual, field)} / 100")
         else:
-            _score_bar(draw, 402, 387 + index * 57, 495, name, value, bar_color)
+            draw.text((402, 387 + index * 57), name.upper(), font=font(15), fill="#cfc7d7")
     elements = [
         name
         for enabled, name in (
