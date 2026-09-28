@@ -47,6 +47,7 @@ class ProfileVisual:
     asset_fingerprint: str
     animated_banner: bool = False
     banner_available: bool = False
+    comparison_available: bool | None = None
 
 
 class ProfileAestheticService:
@@ -76,13 +77,47 @@ class ProfileAestheticService:
                     # Server avatars/banners and global profile data can change
                     # independently of the gateway's cached Member object.
                     started = time.monotonic()
-                    member, fetched = await asyncio.gather(
-                        member.guild.fetch_member(member.id), self.bot.fetch_user(member.id))
-                    logger.info("profile_metadata fetch_ms=%.0f", (time.monotonic() - started) * 1000)
-                    return await self._inspect(member, refresh=True, fetched_user=fetched, animated=animated)
+                    prefetch = {}
+
+                    async def fresh_member():
+                        fresh = await member.guild.fetch_member(member.id)
+                        logger.info("profile_metadata member_ms=%.0f", (time.monotonic() - started) * 1000)
+                        # These freshly fetched server assets take precedence
+                        # over global assets. Download them while fetch_user runs.
+                        for asset, size in (
+                            (getattr(fresh, "guild_avatar", None), 512),
+                            (getattr(fresh, "guild_banner", None), 1024),
+                            (getattr(fresh, "avatar_decoration", None), 512),
+                        ):
+                            if asset is not None:
+                                asset = asset.with_size(size).with_static_format("png")
+                                if not animated:
+                                    asset = asset.with_format("png")
+                                url = str(asset)
+                                if url not in prefetch:
+                                    prefetch[url] = asyncio.create_task(self._download(url))
+                        return fresh
+
+                    async def fresh_user():
+                        user = await self.bot.fetch_user(member.id)
+                        logger.info("profile_metadata user_ms=%.0f", (time.monotonic() - started) * 1000)
+                        return user
+
+                    metadata = [asyncio.create_task(fresh_member()), asyncio.create_task(fresh_user())]
+                    try:
+                        member, fetched = await asyncio.gather(*metadata)
+                        logger.info("profile_metadata fetch_ms=%.0f", (time.monotonic() - started) * 1000)
+                        return await self._inspect(member, refresh=True, fetched_user=fetched, animated=animated, prefetched_assets=prefetch)
+                    finally:
+                        # A failed/cancelled inspection must not leave HTTP work
+                        # running outside the bounded inspection admission gate.
+                        for task in (*metadata, *prefetch.values()):
+                            if not task.done():
+                                task.cancel()
+                        await asyncio.gather(*metadata, *prefetch.values(), return_exceptions=True)
                 return await self._inspect(member, refresh=refresh, animated=animated)
 
-    async def _inspect(self, member: discord.Member, *, refresh: bool = False, fetched_user=None, animated: bool = False) -> ProfileVisual:
+    async def _inspect(self, member: discord.Member, *, refresh: bool = False, fetched_user=None, animated: bool = False, prefetched_assets=None) -> ProfileVisual:
         now = time.monotonic()
         cached_user = self._user_cache.get(member.id)
         if fetched_user is not None:
@@ -148,11 +183,10 @@ class ProfileAestheticService:
             return cached[1]
 
         started = time.monotonic()
-        avatar, banner, decoration = await asyncio.gather(
-            self._download(urls[0]),
-            self._download(urls[1]),
-            self._download(urls[2]),
-        )
+        avatar, banner, decoration = await asyncio.gather(*(
+            prefetched_assets[url] if prefetched_assets and url in prefetched_assets else self._download(url)
+            for url in urls
+        ))
         downloaded = time.monotonic()
         visual = await image_work(
             self._analyze,
@@ -400,7 +434,16 @@ def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
         banner = Image.new("RGB", (32, 32), visual.accent_color)
     if avatar is None:
         return visual
-    avatar_palette = service._palette([avatar])
+    def actual_colors(image):
+        small = image.convert("RGB")
+        if small.width * small.height > 9216:
+            small.thumbnail((96, 96))
+        quantized = small.quantize(colors=8).convert("RGB")
+        counts = sorted(quantized.getcolors(9216) or [], reverse=True)
+        total = sum(count for count, _ in counts)
+        return [(count / total, color) for count, color in counts if count / total >= .03]
+
+    avatar_palette = actual_colors(avatar)
     matches = []
     for asset in (banner, decoration):
         if asset is None:
@@ -414,10 +457,10 @@ def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
                 continue
             asset = Image.new("RGB", (len(pixels), 1))
             asset.putdata(pixels)
-        other = service._palette([asset])
-        # Compare each prominent asset color to its nearest avatar color.
-        distance = sum(min(service._distance(service._rgb(color), service._rgb(base))
-                           for base in avatar_palette[:3]) for color in other[:3]) / 3
+        other = actual_colors(asset)
+        # Use real, frequency-weighted colors, never the padded display palette.
+        distance = sum(weight * min(service._distance(color, base)
+                           for _, base in avatar_palette) for weight, color in other) / sum(weight for weight, _ in other)
         match = service._clamp(round(96 - distance * 0.35))
         # Solid neutral backdrops coordinate by contrast, not hue matching.
         stat = ImageStat.Stat(asset.convert("RGB"))
@@ -425,13 +468,18 @@ def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
             contrast_gap = abs(sum(stat.mean)/3 - sum(ImageStat.Stat(avatar).mean)/3)
             match = max(match, min(92, round(68 + contrast_gap * .12)))
         matches.append(match)
-    harmony = round(sum(matches) / len(matches)) if matches else visual.harmony_score
-    contrast = min(100, sum(ImageStat.Stat(avatar.resize((96, 96))).stddev) / 3 * 1.6)
-    detail = service._clamp(round(25 + min(1, avatar.convert('L').entropy() / 7.5) * 55 + contrast * .15))
-    styling = service._clamp(round(visual.avatar_score * .4 + harmony * .6))
-    overall = round(visual.avatar_score * .35 + styling * .20 + harmony * .30 + detail * .15)
-    return replace(visual, styling_score=styling, harmony_score=harmony,
-                   originality_score=detail, overall_score=overall)
+    # Grayscale readability treats monochrome and colorful artwork equally.
+    gray = avatar.resize((96, 96)).convert("L")
+    contrast = ImageStat.Stat(gray).stddev[0]
+    avatar_score = service._clamp(round(35 + min(1, contrast / 55) * 50))
+    entropy = gray.entropy()
+    # Reward a useful amount of detail without awarding maximum points to noise.
+    detail = service._clamp(round(35 + min(1, entropy / 6) * 50 - max(0, entropy - 7) * 15))
+    harmony = round(sum(matches) / len(matches)) if matches else 0
+    styling = round(sum(matches) / len(matches) * .5 + min(matches) * .5) if matches else 0
+    overall = round(avatar_score * .35 + styling * .20 + harmony * .30 + detail * .15) if matches else round((avatar_score * .35 + detail * .15) / .50)
+    return replace(visual, avatar_score=avatar_score, styling_score=styling, harmony_score=harmony,
+                   originality_score=detail, overall_score=overall, comparison_available=bool(matches))
 
 
 def profile_affinity(visual: ProfileVisual) -> str:

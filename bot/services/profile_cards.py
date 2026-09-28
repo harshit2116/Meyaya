@@ -309,13 +309,20 @@ def profilecheck_feedback(visual: ProfileVisual) -> tuple[str, str, str]:
         "color harmony": visual.harmony_score,
         "detail": visual.originality_score,
     }
+    if visual.comparison_available is False:
+        scores.pop("styling")
+        scores.pop("color harmony")
     weakest = min(scores, key=scores.get)
     tips = {
-        "avatar": "Best upgrade: use a clearer avatar with stronger contrast and composition.",
+        "avatar": "Best upgrade: brighten the subject slightly so it reads at icon size.",
         "styling": "Best upgrade: simplify competing details so the avatar remains the focal point.",
         "color harmony": "Best upgrade: repeat one avatar accent color in the banner or decoration." if visual.has_banner or visual.has_decoration else "Best upgrade: use a clearer balance of light and dark in your avatar.",
-        "detail": "Best upgrade: choose artwork with a clear subject that stays readable at small sizes.",
+        "detail": "Best upgrade: preview your avatar at icon size and keep its defining details readable.",
     }
+    if min(scores.values()) >= 80:
+        return grade, comment, "Best upgrade: keep this balance; preview any changes at small icon size."
+    if visual.comparison_available is False:
+        comment = "An avatar-led look, with the score focused on readability and detail."
     return grade, comment, tips[weakest]
 
 
@@ -340,27 +347,26 @@ def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True) -
         image.paste(banner, (60, 155), mask)
     elif visual.accent_color is not None and not visual.banner_available:
         _panel(draw, (60, 155, 940, 319), fill=(*_rgb(visual.accent_color), 255))
-        text_color = _readable_accent("#ffffff", visual.accent_color)
-        if sum(_rgb(visual.accent_color)) > 540:
-            text_color = "#15121d"
-        draw.text((500, 220), f"SOLID BANNER / {visual.accent_color.upper()}", anchor="mm", font=font(20), fill=text_color)
     else:
         _panel(draw, (60, 155, 940, 319), fill=(38, 30, 48, 255))
-        draw.text((500, 220), 'BANNER NOT AVAILABLE TO BOT', anchor='mm', font=font(20), fill=accent)
     # Render the review below the banner with room for the full decoration.
     if include_avatar:
         _avatar(image, visual, (62, 355, 270, 270))
     draw = ImageDraw.Draw(image, "RGBA")
     _panel(draw, (368, 354, 940, 635), fill=(10, 8, 18, 155))
     scores = (
-        ("Avatar", visual.avatar_score),
+        ("Readability", visual.avatar_score),
         ("Cohesion", visual.styling_score),
         ("Color harmony", visual.harmony_score),
-        ("Visual detail", visual.originality_score),
+        ("Detail balance", visual.originality_score),
     )
     for index, (name, value) in enumerate(scores):
         bar_color = _readable_accent(visual.palette[index % 3], '#2a2533', minimum=3)
-        _score_bar(draw, 402, 387 + index * 57, 495, name, value, bar_color)
+        if visual.comparison_available is False and index in (1, 2):
+            draw.text((402, 387 + index * 57), name.upper(), font=font(15), fill="#cfc7d7")
+            draw.text((882, 387 + index * 57), "—", font=font(18), fill="#cfc7d7")
+        else:
+            _score_bar(draw, 402, 387 + index * 57, 495, name, value, bar_color)
     elements = [
         name
         for enabled, name in (
