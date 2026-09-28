@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+import asyncio
 
 from bot.logging.telemetry import current_model_context, event
 from bot.services.llm import ChatMessage, GroundedReply, LLMProvider
@@ -102,6 +103,20 @@ class ModelRouter(LLMProvider):
         *,
         max_output_tokens: int | None = None,
         timeout_seconds: int | None = None,
+    ) -> str | None:
+        # One wall-clock budget for primary attempts, backoff and model fallback.
+        try:
+            async with asyncio.timeout(timeout_seconds if timeout_seconds is not None else 20):
+                return await self._generate_text_routed(
+                    system_instruction, user_message, history,
+                    max_output_tokens=max_output_tokens, timeout_seconds=timeout_seconds)
+        except TimeoutError:
+            event("llm_route_deadline", timeout_seconds=timeout_seconds if timeout_seconds is not None else 20)
+            return None
+
+    async def _generate_text_routed(
+        self, system_instruction, user_message, history=None, *,
+        max_output_tokens=None, timeout_seconds=None,
     ) -> str | None:
         tier, provider = self.selected_provider()
         result = await self._safe_text(

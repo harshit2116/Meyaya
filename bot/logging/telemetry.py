@@ -32,7 +32,7 @@ class OperationalTelemetry:
                 'invocation': str(payload.get('invocation') or 'unknown')[:16],
                 'total_ms': self._number(payload.get('total_ms')), 'work_ms': self._number(payload.get('work_ms')),
                 'stages': {key: self._number(value) for key, value in (payload.get('stages') or {}).items()
-                           if key in {'database_ms', 'context_ms', 'quota_ms', 'ai_ms', 'discord_metadata_ms', 'asset_fetch_ms', 'render_ms', 'image_queue_ms', 'delivery_ms'}},
+                           if key in {'database_ms', 'context_ms', 'quota_ms', 'ai_ms', 'discord_metadata_ms', 'asset_fetch_ms', 'render_ms', 'image_queue_ms', 'delivery_ms', 'loading_cleanup_ms'}},
             })
             return
         if payload.get("event") != "llm_request":

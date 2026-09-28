@@ -371,7 +371,7 @@ function renderOperationGroup(target, items) {
 function renderCommandTimings(data) {
   $("operations-commands").replaceChildren();
   if (!data?.groups?.length) { $("operations-commands").append(element("p", "No command callbacks recorded yet.", "details")); return; }
-  const labels = {database_ms: "DB session", context_ms: "Optional context", quota_ms: "Quota", ai_ms: "AI", discord_metadata_ms: "Discord metadata", asset_fetch_ms: "Asset downloads", render_ms: "Rendering", image_queue_ms: "Image queue", delivery_ms: "Discord delivery"};
+  const labels = {database_ms: "DB session", context_ms: "Optional context", quota_ms: "Quota", ai_ms: "AI", discord_metadata_ms: "Discord metadata", asset_fetch_ms: "Asset downloads", render_ms: "Rendering", image_queue_ms: "Image queue", delivery_ms: "Discord API call (includes waits)", loading_cleanup_ms: "Loading cleanup"};
   for (const item of data.groups) {
     const row = element("article", undefined, "operation-row");
     row.append(element("h4", item.command), element("p", `${item.calls} calls · ${item.failures} errors · ${item.cancelled} cancelled · ${item.average_ms} ms average · ${item.p95_ms} ms P95`, "details"));

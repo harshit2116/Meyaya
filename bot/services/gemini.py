@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import json
 import re
+import time
+from dataclasses import dataclass
 
 import aiohttp
 
@@ -32,6 +35,14 @@ MAX_OUTPUT_TOKENS = 400
 MAX_REPLY_WORDS = 220  # safety net only, keeps us well under Discord's 2000 char limit
 RETRYABLE_STATUS_CODES = {502, 503, 504}
 MAX_REQUEST_ATTEMPTS = 2
+PROVIDER_COOLDOWN_SECONDS = 30
+
+
+@dataclass
+class GeminiAvailability:
+    failures: int = 0
+    retry_at: float = 0
+    probing: bool = False
 
 
 class GeminiService(LLMProvider):
@@ -47,6 +58,7 @@ class GeminiService(LLMProvider):
         *,
         thinking_budget: int | None = 0,
         thinking_level: str | None = None,
+        availability: GeminiAvailability | None = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
@@ -54,6 +66,50 @@ class GeminiService(LLMProvider):
         self.thinking_budget = thinking_budget
         self.thinking_level = thinking_level
         self.default_timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
+        self.availability = availability if availability is not None else GeminiAvailability()
+
+    def _transient_failure(self):
+        state = self.availability
+        state.failures += 1
+        if state.failures >= 2:
+            state.retry_at = time.monotonic() + PROVIDER_COOLDOWN_SECONDS
+
+    async def _error_details(self, response):
+        # Never log arbitrary provider text: it can echo prompts or credentials.
+        # Only emit known status values and locally classified message categories.
+        try:
+            async with asyncio.timeout(1):
+                raw = bytearray()
+                while len(raw) <= 4096:
+                    chunk = await response.content.read(4097 - len(raw))
+                    if not chunk:
+                        break
+                    raw.extend(chunk)
+            if len(raw) > 4096:
+                return {"error_category": "oversized_error"}
+            data = json.loads(raw)
+            error = data.get("error", {}) if isinstance(data, dict) else {}
+            if not isinstance(error, dict):
+                return {}
+            status = error.get("status")
+            statuses = {"UNAVAILABLE", "RESOURCE_EXHAUSTED", "INVALID_ARGUMENT",
+                        "PERMISSION_DENIED", "UNAUTHENTICATED", "NOT_FOUND", "INTERNAL",
+                        "FAILED_PRECONDITION", "DEADLINE_EXCEEDED"}
+            message = str(error.get("message", "")).casefold()
+            category = "unspecified"
+            for phrase, label in (("policy checks", "policy_checks_unavailable"),
+                                  ("high demand", "high_demand"),
+                                  ("overload", "overloaded"),
+                                  ("quota", "quota"),
+                                  ("api key", "api_key"),
+                                  ("not found", "not_found")):
+                if phrase in message:
+                    category = label
+                    break
+            return {"provider_status": status if isinstance(status, str) and status in statuses else "UNKNOWN",
+                    "error_category": category}
+        except (ValueError, aiohttp.ClientError, TimeoutError):
+            return {}
 
     @observe("generate_text")
     async def generate_text(
@@ -64,6 +120,36 @@ class GeminiService(LLMProvider):
         *,
         max_output_tokens: int | None = None,
         timeout_seconds: int | None = None,
+    ) -> str | None:
+        state = self.availability
+        if state.retry_at > time.monotonic() or state.probing:
+            request_failure("provider_cooldown")
+            return None
+        probe = bool(state.retry_at)
+        if probe:
+            state.probing = True
+        try:
+            result = await self._generate_text(
+                system_instruction, user_message, history,
+                max_output_tokens=max_output_tokens, timeout_seconds=timeout_seconds)
+            if result and result.strip():
+                state.failures = 0
+                state.retry_at = 0
+            elif probe:
+                # A failed recovery probe must not unleash concurrent retries.
+                state.retry_at = time.monotonic() + PROVIDER_COOLDOWN_SECONDS
+            return result
+        except asyncio.CancelledError:
+            if probe:
+                state.retry_at = time.monotonic() + PROVIDER_COOLDOWN_SECONDS
+            raise
+        finally:
+            if probe:
+                state.probing = False
+
+    async def _generate_text(
+        self, system_instruction, user_message, history=None, *,
+        max_output_tokens=None, timeout_seconds=None,
     ) -> str | None:
         """Ask Gemini for a reply, optionally continuing a prior conversation."""
 
@@ -119,7 +205,8 @@ class GeminiService(LLMProvider):
                         list(payload.keys()),
                     )
                     if response.status >= 400:
-                        request_failure(f"http_{response.status}", attempt=attempt)
+                        request_failure(f"http_{response.status}", attempt=attempt,
+                                        **await self._error_details(response))
                     if response.status == 429:
                         logger.warning("Gemini rate limit hit.")
                         return None
@@ -132,7 +219,8 @@ class GeminiService(LLMProvider):
                         await asyncio.sleep(0.5 * attempt)
                         continue
                     if response.status != 200:
-                        body = await response.text()
+                        if response.status in RETRYABLE_STATUS_CODES:
+                            self._transient_failure()
                         logger.error(
                             "Gemini request failed status=%s",
                             response.status,
@@ -150,6 +238,7 @@ class GeminiService(LLMProvider):
                 if isinstance(exc, TimeoutError):
                     # Let the router try a different model rather than spending
                     # another full timeout on the same unavailable endpoint.
+                    self._transient_failure()
                     return None
                 if attempt < MAX_REQUEST_ATTEMPTS:
                     logger.warning(
@@ -160,6 +249,7 @@ class GeminiService(LLMProvider):
                     await asyncio.sleep(0.5 * attempt)
                     continue
                 logger.error("Gemini request failed after retry: %s", type(exc).__name__)
+                self._transient_failure()
                 return None
 
         if data is None:

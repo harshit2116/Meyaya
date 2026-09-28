@@ -7,7 +7,7 @@ import time
 from bot.logging.telemetry import event
 
 _active = ContextVar('command_timing', default=None)
-STAGES = ('database_ms', 'context_ms', 'quota_ms', 'ai_ms', 'discord_metadata_ms', 'asset_fetch_ms', 'render_ms', 'image_queue_ms', 'delivery_ms')
+STAGES = ('database_ms', 'context_ms', 'quota_ms', 'ai_ms', 'discord_metadata_ms', 'asset_fetch_ms', 'render_ms', 'image_queue_ms', 'delivery_ms', 'loading_cleanup_ms')
 
 
 def add_stage(name, elapsed_ms):

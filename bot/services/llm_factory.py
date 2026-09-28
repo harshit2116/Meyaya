@@ -3,7 +3,7 @@
 import aiohttp
 
 from bot.config.settings import Settings
-from bot.services.gemini import GeminiService
+from bot.services.gemini import GeminiService, GeminiAvailability
 from bot.services.llm import LLMProvider
 from bot.services.model_router import ModelRouter, ModelTier
 
@@ -54,5 +54,9 @@ def create_llm_provider(
             if settings.gemini_fallback_model
             else None
         )
+        # FAST and BALANCED often use the same model; share bounded cooldown state.
+        availability = {}
+        for service in (*providers.values(), *((fallback,) if fallback else ())):
+            service.availability = availability.setdefault(service.model, GeminiAvailability())
         return ModelRouter(providers, guard=guard, fallback=fallback)
     raise ValueError(f"Unsupported LLM_PROVIDER: {provider!r}. Available: gemini")
