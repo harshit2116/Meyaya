@@ -30,6 +30,7 @@ dependencies = [
     "redis>=5.0",
     "sqlalchemy[asyncio]>=2.0",
     "structlog>=24.1",
+    "tzdata>=2024.1",
     "asyncpg>=0.29",
     # Alembic uses a synchronous engine after translating the async application URL.
     "psycopg[binary]>=3.2",

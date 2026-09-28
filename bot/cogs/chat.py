@@ -25,6 +25,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from bot.app import MeyayaBot
 from bot.services.usage import ChatLimitReached, is_silence
 from bot.services.autoresponder import reply_policy
+from bot.services.ai_guard import AILimitReached
 from bot.prompts.composer import build_system_instruction
 from bot.data.private_identity import AYAYA_USER_ID, get_private_identity
 from bot.data.interactions import INTERACTION_DEFINITIONS_BY_NAME
@@ -103,6 +104,8 @@ class ChatCog(commands.Cog):
         self._last_proactive_channel: dict[int, float] = {}
         self._proactive_inflight: set[int] = set()
         self._context_reads = OptionalContext()
+        self._busy_notices = {}
+        self._active_chats = 0
 
     @commands.Cog.listener()
     @discord_context("chat")
@@ -175,7 +178,25 @@ class ChatCog(commands.Cog):
             )
             return
 
-        await self._respond_to_message(message, user_text, reply_context)
+        settings = getattr(self.bot, 'settings', None)
+        capacity = getattr(settings, 'ai_max_concurrent', 2) + getattr(settings, 'ai_queue_size', 4)
+        if self._active_chats >= capacity:
+            await self._busy_notice(message, "I'm catching up with a few replies. Please try again shortly.")
+            return
+        self._active_chats += 1
+        try:
+            await self._respond_to_message(message, user_text, reply_context)
+        finally:
+            self._active_chats -= 1
+
+    async def _busy_notice(self, message, text):
+        now = time.monotonic()
+        key = message.channel.id
+        if now - self._busy_notices.get(key, float('-inf')) >= 15:
+            if len(self._busy_notices) >= 128:
+                self._busy_notices.pop(next(iter(self._busy_notices)))
+            self._busy_notices[key] = now
+            await message.reply(text, mention_author=False)
 
     async def _respond_to_message(self, message, user_text, reply_context):
         guild_id = message.guild.id if message.guild else None
@@ -220,6 +241,10 @@ class ChatCog(commands.Cog):
             except ChatLimitReached as exc:
                 await message.reply(str(exc), mention_author=False)
                 return
+            except AILimitReached as exc:
+                # Avoid filling a busy channel with repeated overload notices.
+                await self._busy_notice(message, str(exc))
+                return
             except (SQLAlchemyError, TimeoutError):
                 await message.reply(
                     "I can't check this server's allowance right now. Please try again shortly.",
@@ -237,7 +262,7 @@ class ChatCog(commands.Cog):
         if reply is None:
             if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):
                 return
-            await message.reply("Chat is temporarily busy, unavailable, or at its safety limit. Please try again later.", mention_author=False)
+            await message.reply("My AI service isn't available right now. Please try again shortly.", mention_author=False)
             return
 
         if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):

@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     llm_provider: str = Field(default="gemini", alias="LLM_PROVIDER")
     ai_enabled: bool = Field(default=True, alias="AI_ENABLED")
     ai_max_concurrent: int = Field(default=2, ge=1, le=10, alias="AI_MAX_CONCURRENT")
+    ai_queue_size: int = Field(default=4, ge=0, le=20, alias="AI_QUEUE_SIZE")
+    ai_queue_wait_seconds: float = Field(default=6, ge=0, le=15, alias="AI_QUEUE_WAIT_SECONDS")
+    gemini_quota_namespace: str = Field(default="meyaya", min_length=1, max_length=80, alias="GEMINI_QUOTA_NAMESPACE")
+    gemini_pacing_wait_seconds: float = Field(default=6, ge=0, le=15, alias="GEMINI_PACING_WAIT_SECONDS")
+    # Conservative project-specific defaults from the owner's observed limits.
+    # Override with the actual limits shown in AI Studio, especially on paid tiers.
+    gemini_model_limits: dict[str, dict[str, int]] = Field(default_factory=lambda: {
+        "gemini-3.5-flash-lite": {"rpm": 15, "rpd": 500},
+        "gemini-3.5-flash": {"rpm": 5, "rpd": 20},
+        "gemini-2.5-flash": {"rpm": 5, "rpd": 20},
+    }, alias="GEMINI_MODEL_LIMITS")
     ai_user_cooldown_seconds: int = Field(default=5, ge=0, le=300, alias="AI_USER_COOLDOWN_SECONDS")
     ai_max_input_chars: int = Field(default=32000, ge=1000, le=100000, alias="AI_MAX_INPUT_CHARS")
     ai_max_output_tokens: int = Field(default=2048, ge=100, le=8192, alias="AI_MAX_OUTPUT_TOKENS")
@@ -73,6 +84,18 @@ class Settings(BaseSettings):
         if value in {None, ""}:
             return None
         return int(value)
+
+    @field_validator("gemini_model_limits")
+    @classmethod
+    def validate_model_limits(cls, value):
+        if len(value) > 20:
+            raise ValueError("GEMINI_MODEL_LIMITS supports at most 20 models")
+        for model, limits in value.items():
+            if not model or len(model) > 120 or set(limits) != {"rpm", "rpd"}:
+                raise ValueError("Each model needs rpm and rpd limits")
+            if not 1 <= limits['rpm'] <= 10000 or not 0 <= limits['rpd'] <= 10000000:
+                raise ValueError("rpm must be positive; rpd=0 disables the local daily cap")
+        return value
 
     @field_validator("monitor_channel_ids", mode="before")
     @classmethod

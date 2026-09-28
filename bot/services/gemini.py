@@ -11,7 +11,8 @@ from dataclasses import dataclass
 
 import aiohttp
 
-from bot.logging.telemetry import observe, record_response, request_failure
+from bot.logging.telemetry import observe, record_response, request_failure, current_model_context
+from bot.services.model_quota import quota_day
 
 from bot.services.llm import (
     ChatMessage,
@@ -67,6 +68,29 @@ class GeminiService(LLMProvider):
         self.thinking_level = thinking_level
         self.default_timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
         self.availability = availability if availability is not None else GeminiAvailability()
+        self.quota = None
+
+    async def _attempt_slot(self):
+        if self.availability.retry_at > time.monotonic():
+            request_failure('provider_cooldown')
+            return False
+        if self.quota is not None:
+            optional = current_model_context().get('feature') in {
+                'rate', 'fun', 'roast', 'compliment', 'proactive', 'monitor', 'moderation'}
+            reason = await self.quota.acquire(optional=optional)
+            if reason:
+                request_failure(reason)
+                return False
+        return True
+
+    async def _rate_backoff(self, details):
+        seconds = details.get('retry_after_seconds') or 60
+        if details.get('quota_scope', 'unknown') == 'unknown':
+            seconds = max(60, seconds)
+        if details.get('quota_scope') == 'daily':
+            seconds = max(seconds, quota_day()[1])
+        if self.quota is not None:
+            await self.quota.block(seconds)
 
     def _transient_failure(self):
         state = self.availability
@@ -106,8 +130,29 @@ class GeminiService(LLMProvider):
                 if phrase in message:
                     category = label
                     break
-            return {"provider_status": status if isinstance(status, str) and status in statuses else "UNKNOWN",
-                    "error_category": category}
+            result = {"provider_status": status if isinstance(status, str) and status in statuses else "UNKNOWN",
+                      "error_category": category}
+            retry = self._retry_after_seconds(getattr(response, 'headers', {}).get('Retry-After'))
+            scope = 'unknown'
+            for detail in error.get('details', []) if isinstance(error.get('details'), list) else []:
+                if not isinstance(detail, dict):
+                    continue
+                delay = detail.get('retryDelay')
+                if isinstance(delay, str) and re.fullmatch(r'\d+(?:\.\d+)?s', delay):
+                    retry = max(retry or 0, self._retry_after_seconds(delay[:-1]) or 0)
+                violations = detail.get('violations', [])
+                for violation in violations if isinstance(violations, list) else []:
+                    if not isinstance(violation, dict):
+                        continue
+                    identifier = str(violation.get('quotaId', '')) + str(violation.get('quotaMetric', ''))
+                    if 'perday' in identifier.casefold() or 'per_day' in identifier.casefold():
+                        scope = 'daily'
+                    elif scope != 'daily' and ('perminute' in identifier.casefold() or 'per_minute' in identifier.casefold()):
+                        scope = 'minute'
+            if getattr(response, 'status', None) == 429:
+                result['quota_scope'] = scope
+                result['retry_after_seconds'] = min(retry or 60, 172800)
+            return result
         except (ValueError, aiohttp.ClientError, TimeoutError):
             return {}
 
@@ -190,6 +235,8 @@ class GeminiService(LLMProvider):
         )
         data: dict | None = None
         for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
+            if not await self._attempt_slot():
+                return None
             try:
                 async with self.http_session.post(
                     url,
@@ -205,9 +252,11 @@ class GeminiService(LLMProvider):
                         list(payload.keys()),
                     )
                     if response.status >= 400:
+                        details = await self._error_details(response)
                         request_failure(f"http_{response.status}", attempt=attempt,
-                                        **await self._error_details(response))
+                                        **details)
                     if response.status == 429:
+                        await self._rate_backoff(details)
                         logger.warning("Gemini rate limit hit.")
                         return None
                     if response.status in RETRYABLE_STATUS_CODES and attempt < MAX_REQUEST_ATTEMPTS:
@@ -361,6 +410,8 @@ class GeminiService(LLMProvider):
         """Post one grounded request and retain safe quota diagnostics."""
 
         for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
+            if not await self._attempt_slot():
+                return None, 429, None
             try:
                 async with self.http_session.post(
                     url,
@@ -370,9 +421,11 @@ class GeminiService(LLMProvider):
                 ) as response:
                     retry_after = self._retry_after_seconds(response.headers.get("Retry-After"))
                     if response.status >= 400:
-                        request_failure(f"http_{response.status}", attempt=attempt)
+                        details = await self._error_details(response)
+                        request_failure(f"http_{response.status}", attempt=attempt, **details)
                     if response.status == 429:
-                        body = await response.text()
+                        await self._rate_backoff(details)
+                        retry_after = details.get('retry_after_seconds', retry_after)
                         logger.warning(
                             "Gemini %s grounding rate limit hit retry_after=%s detail=%s",
                             endpoint_name,
@@ -384,7 +437,6 @@ class GeminiService(LLMProvider):
                         await asyncio.sleep(0.5 * attempt)
                         continue
                     if response.status != 200:
-                        body = await response.text()
                         logger.error(
                             "Gemini %s grounded request failed status=%s detail=%s",
                             endpoint_name,
@@ -422,7 +474,7 @@ class GeminiService(LLMProvider):
             return None
         try:
             return max(1, int(float(raw_value)))
-        except ValueError:
+        except (ValueError, TypeError, OverflowError):
             return None
 
     @staticmethod

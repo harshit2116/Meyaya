@@ -170,7 +170,7 @@ class MeyayaBot(commands.Bot):
             self.redis,
         )
         self._chat_memory_service = ChatMemoryService(self.redis)
-        self._llm_provider = create_llm_provider(self.settings, self.http_session, self.ai_guard)
+        self._llm_provider = create_llm_provider(self.settings, self.http_session, self.ai_guard, redis=self.redis)
         self._profile_aesthetic_service = ProfileAestheticService(self)
         await self._load_guild_prefixes()
         self._dashboard_settings_refresh = asyncio.create_task(self._refresh_dashboard_settings())
