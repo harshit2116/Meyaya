@@ -85,26 +85,12 @@ class InteractionsCog(commands.Cog):
                     guild_id=interaction.guild.id,
                     actor_name=interaction.user.display_name,
                 )
-                await interaction.followup.send(
-                    embed=build_interaction_embed(
-                        title=result.title,
-                        description=result.message.format(
-                            actor=interaction.user.mention, target=chosen_target.mention
-                        ),
-                        color=definition.color,
-                        gif_url=result.gif_url,
-                    ),
-                    view=(
-                        InteractionResponseView(
-                            bot=bot,
-                            definition=definition,
-                            actor_id=interaction.user.id,
-                            target_id=chosen_target.id,
-                        )
-                        if definition.button_label
-                        else None
-                    ),
+                embed, view = self._build_interaction_render(
+                    bot, definition, interaction.user, chosen_target, result
                 )
+                # Webhook.send rejects view=None; omit it for buttonless reactions.
+                kwargs = {"view": view} if view is not None else {}
+                await interaction.followup.send(embed=embed, **kwargs)
 
         return app_commands.Command(
             name=definition.name,

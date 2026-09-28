@@ -86,29 +86,22 @@ def build_help_embed(
                     for p in slash.parameters)
                 embed.set_field_at(0, name="Ways to ask", value=(
                     f"`/{command.name} {slash_usage}`\n"
-                    f"`{command_prefix} {command.name} {registered.signature}`\n"
-                    "Angle brackets are required; square brackets are optional. Replace them with your values."
+                    f"`{command_prefix} {command.name} {registered.signature}`"
                 )[:1024], inline=False)
                 if slash.default_permissions:
                     permissions.update("Member: " + key.replace("_", " ").title()
                                        for key, enabled in slash.default_permissions if enabled)
             for check in registered.checks:
                 name = getattr(check, "__qualname__", "")
-                if "guild_only" in name:
-                    restrictions.add("Server only")
                 if "owner" in name:
                     restrictions.add("Bot owner only")
                 values = inspect.getclosurevars(check).nonlocals if inspect.isfunction(check) else {}
                 for key, enabled in values.get("perms", {}).items():
                     if enabled:
                         permissions.add(("Bot: " if "bot_has" in name else "Member: ") + key.replace("_", " ").title())
-            cooldown = registered._buckets._cooldown
-            cooldown_text = f"{cooldown.rate} use(s) per {cooldown.per:g} seconds ({registered._buckets.type.name})." if cooldown else "No fixed command cooldown."
-            if command.name in {"argumenttimeline", "checkclaim"}:
-                cooldown_text = "One completed review per member per server each 60 seconds; one review at a time."
             restrictions.update(permissions)
-            embed.add_field(name="Permissions", value="\n".join(sorted(restrictions)) or "No additional Discord permission check.", inline=False)
-            embed.add_field(name="Cooldown", value=cooldown_text + " Shared usage limits and feature checks may also apply.", inline=False)
+            if restrictions:
+                embed.add_field(name="Permissions", value="\n".join(sorted(restrictions)), inline=False)
         return embed
 
     if category is not None and category in CATEGORY_DESCRIPTIONS:
