@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from bot.models.moderation import ModerationSettings, ChannelLock
 from bot.services.moderation import (
     INVITE,
-    LINK,
+    probation_blocked_link,
     SpamWindow,
     LockdownService,
     on_probation,
@@ -98,11 +98,11 @@ class ModerationCog(commands.Cog):
                 and on_probation(message.author.joined_at)
                 and (
                     message.attachments
-                    or LINK.search(message.content)
+                    or probation_blocked_link(message.content)
                     or INVITE.search(message.content)
                 )
             ):
-                reason = "For your first 3 days in this server, please use text without links or attachments."
+                reason = "For your first 3 days in this server, links and attachments aren't allowed, except Klipy links."
             elif settings["anti_invite"]:
                 for code in INVITE.findall(message.content)[:5]:
                     cached = self._invites.get(code)

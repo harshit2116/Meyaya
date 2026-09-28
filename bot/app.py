@@ -34,6 +34,7 @@ from bot.services.usage import ChatLimitReached, UsageService, is_silence
 from bot.services.request_log import RequestLogService
 from bot.utils.command_context import TimedContext
 from bot.utils.loading import install_command_loading
+from bot.utils.application_emojis import load_application_emojis
 from bot.utils.command_timing import install_command_timing, timing_stage
 from bot.services.profile_aesthetic import ProfileAestheticService
 from bot.services.chat_blacklist import ChatBlacklistService
@@ -87,6 +88,7 @@ class MeyayaBot(commands.Bot):
             chunk_guilds_at_startup=settings.discord_chunk_on_startup,
         )
         self.settings = settings
+        self.meyaya_application_emojis = ()
         self.started_at = time.monotonic()
         self._guild_prefixes: dict[int, str] = {}
         self._guild_autoresponders: dict[int, bool] = {}
@@ -199,6 +201,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.admin")
         await self.load_extension("bot.cogs.moderation")
         await self.load_extension("bot.cogs.presence")
+        await load_application_emojis(self)
         install_command_loading(self)
         install_command_timing(self)
         normalize_member_parameters(self)

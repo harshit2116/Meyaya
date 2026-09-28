@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager, suppress
 from functools import wraps
 import logging
 import time
+from bot.utils.application_emojis import loading_emoji
 
 logger = logging.getLogger(__name__)
 LOADING_DELAY = 2.0
@@ -36,8 +37,9 @@ def resolve_loading_sticker(bot, guild):
 
 
 class LoadingIndicator:
-    def __init__(self, channel, bot, *, delay=LOADING_DELAY):
+    def __init__(self, channel, bot, *, delay=LOADING_DELAY, emoji_only=False):
         self.channel, self.bot, self.delay = channel, bot, delay
+        self.emoji_only = emoji_only
         self.message = None
         self.task = None
         self.closed = False
@@ -53,6 +55,16 @@ class LoadingIndicator:
             if self.closed:
                 return
             self.sending = True
+            emoji = loading_emoji(self.bot)
+            if emoji is not None:
+                try:
+                    self.message = await self.channel.send(str(emoji))
+                except Exception as exc:
+                    logger.debug("loading emoji could not be sent: %s", type(exc).__name__)
+            if self.message is not None or self.emoji_only:
+                if self.closed:
+                    await self._remove()
+                return
             sticker = resolve_loading_sticker(self.bot, getattr(self.channel, "guild", None))
             if sticker is not None:
                 try:
@@ -88,8 +100,8 @@ class LoadingIndicator:
 
 
 @asynccontextmanager
-async def loading_indicator(channel, bot, *, delay=LOADING_DELAY):
-    loader = LoadingIndicator(channel, bot, delay=delay).start()
+async def loading_indicator(channel, bot, *, delay=LOADING_DELAY, emoji_only=False):
+    loader = LoadingIndicator(channel, bot, delay=delay, emoji_only=emoji_only).start()
     try:
         yield loader
     finally:

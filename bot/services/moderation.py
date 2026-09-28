@@ -6,6 +6,7 @@ from collections import deque
 import hashlib
 import re
 import time
+from urllib.parse import urlsplit
 from weakref import WeakValueDictionary
 import discord
 from sqlalchemy import select
@@ -28,6 +29,22 @@ LOCK_FIELDS = (
 
 def on_probation(joined_at, now=None):
     return joined_at is not None and (now or datetime.now(UTC)) - joined_at < timedelta(days=3)
+
+
+def probation_blocked_link(content):
+    """Allow only Klipy hosts; one allowed URL never exempts other links."""
+    for match in LINK.finditer(content):
+        token = re.split(r'[\s<>"\']', content[match.start():], maxsplit=1)[0]
+        token = token.rstrip('.,;:!?)]}')
+        try:
+            parsed = urlsplit(token if token.lower().startswith(('http://', 'https://'))
+                              else 'https://' + token)
+            host = (parsed.hostname or '').lower()
+            if host != 'klipy.com' and not host.endswith('.klipy.com'):
+                return True
+        except ValueError:
+            return True
+    return False
 
 
 class SpamWindow:
