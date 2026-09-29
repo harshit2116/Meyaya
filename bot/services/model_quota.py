@@ -139,3 +139,22 @@ class ModelQuota:
                         1, self.prefix + ':blocked', until, int(seconds) + 2)
             except (RedisError, TimeoutError):
                 self.redis_retry_at = time.monotonic() + 60
+
+    async def snapshot(self):
+        """Read-only budget view; opening the dashboard must not reserve quota."""
+        day, reset_seconds = quota_day()
+        daily = self.daily if self.day == day else 0
+        blocked = self.blocked_until
+        source = 'process-local'
+        if self.redis is not None and time.monotonic() >= self.redis_retry_at:
+            try:
+                async with asyncio.timeout(1):
+                    values = await self.redis.mget(self.prefix + ':day:' + day, self.prefix + ':blocked')
+                daily, blocked = max(daily, int(values[0] or 0)), max(blocked, float(values[1] or 0))
+                source = 'redis'
+            except (RedisError, TimeoutError, ValueError, TypeError):
+                pass
+        return {'daily_used': daily, 'daily_limit': self.rpd or None, 'rpm_limit': self.rpm,
+                'daily_percent': round(daily * 100 / self.rpd, 1) if self.rpd else None,
+                'blocked_seconds': round(max(0, blocked - time.time()), 1),
+                'reset_in_seconds': round(reset_seconds), 'source': source}

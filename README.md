@@ -4,6 +4,13 @@ Meyaya is a Discord character bot built with Python. She supports social reactio
 profiles, marriage, multiplayer games, court cases, Gemini chat and memory, English-only monitoring,
 and live voice conversations.
 
+## Deferred remote-dashboard integration
+
+The secure laptop-to-HeavenCloud dashboard connection is archived for later in
+[feature_archive/remote-dashboard](feature_archive/remote-dashboard/README.md).
+Its API, proxy, tunnel launcher and live-stream hooks are not active. The existing
+dashboard, Meyaya Health and error-ID features remain available.
+
 ## Requirements
 
 - Python 3.12
@@ -70,6 +77,15 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
 - Stable daily IQ, smartest, dumbest, and clown results
 - Profiles combining Discord, social, mood, relationship, and marriage data
 - Ship, fortune, rate, bestie score, most likely, and 8-ball commands
+- Reddit-style mock posts: `uwu reddit <post>` or `/reddit post:<text>`.
+  Uses the server name, requesting member's username/avatar and a short Gemini comment
+  from Meyaya. `uwu reddit <post> | <comment>` (or the slash `comment` field) bypasses AI.
+  If AI is unavailable, the card is sent without a comment. `rate` is entirely local.
+- Duck animation: `uwu duck [@member]` or `/duck`. Defaults to the requester;
+  overlays the member's avatar and name on the bundled duck-ejection GIF without AI.
+  Rendering uses the shared image worker, 47 sampled frames preserving the full
+  timeline, a bounded queue and a 10-second member cooldown. Template and source note:
+  `bot/assets/duck/`; renderer: `bot/services/duck_card.py`.
 - Consent-based marriage, vows, anniversaries, and confirmed divorce
 - Anonymous multiplayer games judged by Gemini
 - Entertainment-only court cases with registered witnesses, fair follow-ups, and explained verdicts
@@ -160,6 +176,18 @@ command cog from there.
 # Chat channel settings
 
 Server managers can use `uwu chatbind channel #chat` to limit Meyaya's conversational replies to one text channel, `uwu chatbind server` to allow chat across the server, or `uwu chatbind status` to see the setting. The same options are available through `/chatbind`. Automatic replies follow this setting; threads are excluded when bound to a channel. Other commands retain their usual access. The default is the entire server.
+## Meyaya Health (hosted owner dashboard)
+
+Use `uwu owner`, unlock the private dashboard, then open **Meyaya Health**. It combines gateway status, PostgreSQL/Redis check latency, observed Gemini text/Live outcomes, configured per-model attempt budgets, AI active/waiting slots, process RSS/container memory, scheduler lag, CPU throttling, guild count, and distinct request actors seen since startup.
+
+The page refreshes every 30 seconds while visible. Dependency and quota checks are cached/coalesced; PostgreSQL uses the existing pool with read-only `SELECT 1`, Redis uses `PING`, and Gemini status uses real outcomes rather than quota-consuming probes. Unknown means no recent outcome, not an outage. Shared-model routes share budgets. Budgets are Meyaya's configured limits, not Google's live entitlement.
+
+Unexpected command failures and unavailable AI chat replies include an `MY-XXXXXXXX` error ID. Search it in Health to view safe command/server/stage/timing/provider metadata and traceback locations. Latest 30 incidents are shown, 500 retained in memory; exact searches also check the existing rotating `logs/telemetry.jsonl` backups across restarts. No raw exception messages, SQL parameters, prompts, or credentials are included.
+
+429/503/DB counters cover observed attempts in rolling minute buckets for up to 24 hours of the current process; they reset on restart. RAM is process RSS, not total container usage; throttling is throttled time/sample interval, not CPU utilization. Unsupported metrics display unavailable. No schema migration or new service is needed.
+
+Implementation: `bot/logging/health.py`, `bot/services/owner_health.py`, `bot/utils/host_metrics.py`, `bot/services/model_quota.py`, `bot/utils/command_timing.py`, and `bot/web/`. All health/error API routes use the existing owner session protection. A standalone local dashboard has no hosted process telemetry.
+
 # Local owner dashboard
 
 Run `python dashboard.py` from the repository in your VS Code terminal. Use the same private `DATABASE_URL` as the hosted bot. This starts only the dashboard at `http://127.0.0.1:8080`, never a second Discord connection. No login/token is required in this local-only mode. Anyone using your laptop can access it while running; do not expose or tunnel it. Loopback, Host, Origin and cross-site protections remain enabled. Use `python dashboard.py --port 8081` if the port is busy. Stop with Ctrl+C.

@@ -7,6 +7,7 @@ import asyncio
 from dataclasses import dataclass
 from random import SystemRandom
 import time
+from urllib.parse import urlsplit
 from weakref import WeakValueDictionary
 
 import aiohttp
@@ -134,13 +135,16 @@ class KlipyService:
                     payload.get("result") if isinstance(payload, dict) else None,
                 )
                 if response.status != 200:
+                    logger.warning("KLIPY media unavailable status=%s query=%s", response.status, query)
                     return GifResult(url=None)
-        except Exception:
-            logger.exception("KLIPY search failed for query=%s", query)
+        except Exception as error:
+            # The API key is part of the endpoint path; exception URLs can expose it.
+            logger.warning("KLIPY search failed query=%s error=%s", query, type(error).__name__)
             return GifResult(url=None)
 
         items = self._extract_items(payload)
         if not items:
+            logger.warning("KLIPY media unavailable reason=empty_results query=%s", query)
             return GifResult(url=None)
 
         # Build (item, url) pairs and prefer items not recently used.
@@ -295,36 +299,61 @@ class KlipyService:
                     gif_data = size_data.get("gif")
                     if isinstance(gif_data, dict):
                         url = gif_data.get("url")
-                        if isinstance(url, str) and url:
-                            return url
+                        if self._valid_media_url(url):
+                            return url.strip()
+
+        media_formats = payload.get("media_formats")
+        if isinstance(media_formats, dict):
+            for name in ("mediumgif", "tinygif", "gif", "nanogif"):
+                media = media_formats.get(name)
+                if isinstance(media, dict):
+                    url = media.get("url")
+                    if self._valid_media_url(url):
+                        return url.strip()
 
         images = payload.get("images")
         if isinstance(images, dict):
             original = images.get("original")
             if isinstance(original, dict):
                 url = original.get("url")
-                if isinstance(url, str) and url:
-                    return url
+                if self._valid_media_url(url):
+                    return url.strip()
 
             fixed = images.get("fixed_height")
             if isinstance(fixed, dict):
                 url = fixed.get("url")
-                if isinstance(url, str) and url:
-                    return url
+                if self._valid_media_url(url):
+                    return url.strip()
 
         url = payload.get("image_original_url")
-        if isinstance(url, str) and url:
-            return url
+        if self._valid_media_url(url):
+            return url.strip()
 
         url = payload.get("image_url")
-        if isinstance(url, str) and url:
-            return url
+        if self._valid_media_url(url):
+            return url.strip()
 
         fallback_url = payload.get("url")
-        if isinstance(fallback_url, str) and fallback_url:
-            return fallback_url
+        # A top-level URL is often a share page, not an embeddable image.
+        if self._valid_media_url(fallback_url, require_extension=True):
+            return fallback_url.strip()
 
         return None
+
+    @staticmethod
+    def _valid_media_url(value, *, require_extension=False):
+        if not isinstance(value, str) or not value.strip():
+            return False
+        try:
+            url = urlsplit(value.strip())
+        except ValueError:
+            return False
+        if url.scheme not in {"https", "http"} or not url.hostname or url.username or url.password:
+            return False
+        # Known share sites are HTML even when the post title ends with '.gif'.
+        if url.hostname.lower() in {"klipy.com", "www.klipy.com", "tenor.com", "www.tenor.com", "giphy.com", "www.giphy.com"}:
+            return False
+        return not require_extension or url.path.lower().endswith((".gif", ".webp", ".png", ".jpg", ".jpeg"))
 
     def _rank_action_candidates(
         self,

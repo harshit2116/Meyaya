@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from bot.logging.telemetry import discord_context, event
+from bot.logging.telemetry import discord_context, event, current_model_diagnostic
+from bot.logging.health import health, ProviderUnavailable
 
 import asyncio
 from bot.utils.typing import background_typing
@@ -245,9 +246,12 @@ class ChatCog(commands.Cog):
                 # Avoid filling a busy channel with repeated overload notices.
                 await self._busy_notice(message, str(exc))
                 return
-            except (SQLAlchemyError, TimeoutError):
+            except (SQLAlchemyError, TimeoutError) as error:
+                error_id = health.capture(error, command='chat', guild_id=guild_id,
+                                          channel_id=message.channel.id, stage='quota', invocation='chat')
                 await message.reply(
-                    "I can't check this server's allowance right now. Please try again shortly.",
+                    "I can't check this server's allowance right now. Please try again shortly."
+                    f"\nError ID: `{error_id}`",
                     mention_author=False,
                 )
                 return
@@ -262,7 +266,12 @@ class ChatCog(commands.Cog):
         if reply is None:
             if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):
                 return
-            await message.reply("My AI service isn't available right now. Please try again shortly.", mention_author=False)
+            error_id = health.capture(ProviderUnavailable(), command='chat', guild_id=guild_id,
+                                      channel_id=message.channel.id, stage='ai_generation', invocation='chat',
+                                      latency_ms=round((generation_ready - context_ready) * 1000, 2),
+                                      **current_model_diagnostic())
+            await message.reply("My AI service isn't available right now. Please try again shortly."
+                                f"\nError ID: `{error_id}`", mention_author=False)
             return
 
         if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):

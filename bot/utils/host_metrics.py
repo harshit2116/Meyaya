@@ -4,6 +4,19 @@ import logging
 from pathlib import Path
 import sys
 from time import monotonic
+import time
+from bot.logging.health import health
+
+
+def memory_limit_mb():
+    for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            value = int(Path(path).read_text().strip())
+            if 0 < value < 2 ** 60:
+                return round(value / 1024 ** 2, 1)
+        except (OSError, ValueError):
+            pass
+    return None
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +40,9 @@ class HostMetrics:
 
     def record(self, wake_lag):
         if not sys.platform.startswith("linux"):
+            health.host = {'observed_at': time.time(), 'rss_mb': None,
+                           'memory_limit_mb': None, 'wake_lag_ms': round(wake_lag * 1000, 1),
+                           'throttle_percent': None}
             return
         current = cpu_counters()
         rss = None
@@ -38,6 +54,15 @@ class HostMetrics:
         except (OSError, ValueError):
             pass
         now = monotonic()
+        throttle_percent = None
+        if current is not None and self.previous is not None:
+            when, previous = self.previous
+            interval = now - when
+            if interval > 0:
+                throttle_percent = round(max(0, current[1] - previous[1]) / (interval * 1000) * 100, 2)
+        health.host = {'observed_at': time.time(), 'rss_mb': round(rss, 1) if rss is not None else None,
+                       'memory_limit_mb': memory_limit_mb(), 'wake_lag_ms': round(wake_lag * 1000, 1),
+                       'throttle_percent': throttle_percent}
         if current is not None and self.previous is not None:
             when, previous = self.previous
             logger.info("host_performance interval_s=%.1f rss_mb=%s wake_lag_ms=%.0f throttled_periods=%d throttled_ms=%.0f",

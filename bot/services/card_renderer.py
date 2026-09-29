@@ -139,6 +139,20 @@ def tile(draw, box, title, value, accent, fill="#222339", size=26, text_color="#
     label(draw, (x + 16, y + 43, w - 32, h - 51), value, size, text_color)
 
 
+def render_mostlikely(scenario, winner_name):
+    """A lightweight wide party card; all rendering stays in the image worker."""
+    image = Image.new("RGB", (720, 320), "#191321")
+    draw = ImageDraw.Draw(image)
+    accent = "#f294bc"
+    draw.rounded_rectangle((10, 10, 709, 309), radius=22, outline=accent, width=2)
+    label(draw, (30, 28, 660, 28), "MEYAYA / MOST LIKELY", 19, accent)
+    tile(draw, (30, 72, 660, 130), "The scenario", scenario, accent, size=26)
+    tile(draw, (30, 210, 660, 88), "Meyaya's pick", winner_name, accent, size=22)
+    output = BytesIO()
+    image.save(output, format="PNG", compress_level=1)
+    return output.getvalue()
+
+
 def tarot(image, d, r):
     accent = "#dbbd7a"
     label(d, (36, 123, 990, 45), "THREE THREADS OF YOUR STORY", 32, accent)

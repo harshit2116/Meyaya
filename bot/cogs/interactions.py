@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from typing import cast
+import logging
+from urllib.parse import urlsplit
 
 import discord
 from discord import app_commands
@@ -15,6 +17,18 @@ from bot.services.interactions import InteractionDefinition, InteractionResult
 from bot.utils.embeds import build_interaction_embed, meyaya_embed
 from bot.views.interactions import InteractionResponseView
 from bot.views.help import HelpView, build_help_embed
+
+logger = logging.getLogger(__name__)
+
+
+def log_reaction_media(command, invocation, gif_url):
+    """Report image selection without logging keys, URL queries, or member text."""
+    try:
+        host = urlsplit(gif_url).hostname if gif_url else None
+    except ValueError:
+        host = "invalid"
+    logger.info("reaction_media command=%s invocation=%s gif_present=%s media_host=%s",
+                command, invocation, bool(gif_url), host)
 
 
 class InteractionsCog(commands.Cog):
@@ -90,6 +104,7 @@ class InteractionsCog(commands.Cog):
                 )
                 # Webhook.send rejects view=None; omit it for buttonless reactions.
                 kwargs = {"view": view} if view is not None else {}
+                log_reaction_media(definition.name, "slash", result.gif_url)
                 await interaction.followup.send(embed=embed, **kwargs)
 
         return app_commands.Command(
@@ -121,6 +136,7 @@ class InteractionsCog(commands.Cog):
                 embed, view = self._build_interaction_render(
                     bot, definition, ctx.author, chosen_target, result
                 )
+                log_reaction_media(definition.name, "prefix", result.gif_url)
                 await ctx.send(embed=embed, view=view)
 
         return commands.Command(

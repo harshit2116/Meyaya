@@ -23,7 +23,7 @@ FAST_FEATURES = frozenset(
         "monitor",
         "moderation",
         "proactive",
-        "rate",
+        "reddit",
         "fun",
         "roast",
         "compliment",

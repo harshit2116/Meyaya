@@ -13,6 +13,7 @@ from uuid import uuid4
 logger = logging.getLogger("meyaya.telemetry")
 _context: ContextVar[dict | None] = ContextVar("llm_context", default=None)
 _metrics: ContextVar[dict | None] = ContextVar("llm_metrics", default=None)
+_diagnostic: ContextVar[dict | None] = ContextVar("llm_diagnostic", default=None)
 
 
 class OperationalTelemetry:
@@ -24,6 +25,8 @@ class OperationalTelemetry:
         self._commands: deque[dict] = deque(maxlen=capacity)
 
     def record(self, payload: dict) -> None:
+        from bot.logging.health import health
+        health.record(payload)
         if payload.get('event') == 'command_timing':
             self._commands.append({
                 'timestamp': payload.get('timestamp'), 'guild_id': payload.get('guild_id'),
@@ -228,6 +231,9 @@ def event(name: str, **fields) -> None:
         **fields,
     }
     operations.record(payload)
+    if name in {"llm_route", "llm_request"}:
+        from bot.utils.command_timing import note_model
+        note_model(payload.get("provider"), payload.get("model"))
     logger.info(json.dumps(payload, default=str))
 
 
@@ -238,16 +244,22 @@ def model_context(
     token = _context.set(
         {"feature": feature, "guild_id": guild_id, "channel_id": channel_id, "user_id": user_id}
     )
+    diagnostic_token = _diagnostic.set({})
     try:
         yield
     finally:
         _context.reset(token)
+        _diagnostic.reset(diagnostic_token)
 
 
 def current_model_context() -> dict:
     """Return a copy of the active request context for model routing."""
 
     return dict(_context.get() or {})
+
+
+def current_model_diagnostic() -> dict:
+    return dict(_diagnostic.get() or {})
 
 
 def record_response(payload: dict) -> None:
@@ -309,6 +321,13 @@ def observe(operation: str):
             finally:
                 from bot.utils.command_timing import add_stage
                 add_stage('ai_ms', (time.perf_counter() - started) * 1000)
+                diagnostic = _diagnostic.get()
+                if diagnostic is not None:
+                    # Shared only within this request's child tasks, so an AI
+                    # gather can report its actual last model to the caller.
+                    diagnostic.update(provider=getattr(self, 'provider_name', type(self).__name__),
+                                      model=self.model, request_id=metrics['request_id'],
+                                      reason=metrics['fallback_reason'])
                 event(
                     "llm_request",
                     operation=operation,

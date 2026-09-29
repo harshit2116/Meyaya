@@ -14,6 +14,7 @@
     <nav id="navigation" hidden>
       <button class="nav active" data-view="overview">◈ Server overview</button>
       <button class="nav" data-view="operations">⌁ Response activity</button>
+      <button class="nav" data-view="health">♡ Meyaya Health</button>
       <button class="nav" data-view="memories">🧠 Memory vault</button>
       <button class="nav" data-view="nicknames">✿ Nicknames</button>
       <button class="nav" data-view="blacklist">Chat blacklist</button>
@@ -54,6 +55,20 @@
         <div class="toolbar"><div><h2>Permanent memory vault</h2><p>Inspect active, conflicted, and superseded Memory System v2 records.</p></div><button id="memory-refresh" class="quiet">Refresh</button></div>
         <div class="filterbar"><select id="memory-guild" aria-label="Filter memories by server"></select><select id="memory-status" aria-label="Filter memories by status"><option value="all">All states</option><option value="active">Active</option><option value="conflicted">Conflicted</option><option value="superseded">Superseded</option></select><input id="memory-query" placeholder="Search member, relation, or memory"></div>
         <p id="memory-state" class="result-state" role="status"></p><div id="memory-items" class="record-list"></div><button id="memory-more" hidden>Load more memories</button>
+      </section>
+      <section id="view-health" class="view" hidden>
+        <div class="toolbar"><div><h2>Meyaya Health</h2><p>Existing telemetry, dependency checks, and searchable error IDs.</p></div><button id="health-refresh" class="quiet" type="button">Refresh health</button></div>
+        <p id="health-state" class="result-state" role="status"></p>
+        <section id="health-summary" class="stats operations-summary"></section>
+        <div class="operations-columns">
+          <section class="panel operations-panel"><h3>Connections &amp; models</h3><div id="health-services" class="operation-list"></div></section>
+          <section class="panel operations-panel"><h3>Errors — last 24h</h3><p class="details">Observed attempts, including library retries. Window starts at this process's startup if less than 24 hours ago.</p><div id="health-counts" class="operation-list"></div></section>
+        </div>
+        <section class="panel operations-panel"><h3>Find an error</h3>
+          <form id="error-search" class="row"><input id="error-id" aria-label="Error ID" placeholder="MY-1234ABCD" maxlength="11"><button type="submit">Search</button></form>
+          <p id="error-state" class="result-state" role="status"></p><div id="health-errors" class="operation-list"></div>
+          <p class="details">Latest 30 errors shown; 500 kept in memory. Exact ID searches also check the existing rotating telemetry logs across restarts. Safe metadata only; no message text or credentials.</p>
+        </section>
       </section>
       <section id="view-operations" class="view" hidden>
         <div class="toolbar"><div><h2>Response activity</h2><p>Reliability and speed records without message content.</p></div><button id="operations-refresh" class="quiet">Refresh</button></div>

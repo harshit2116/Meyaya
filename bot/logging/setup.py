@@ -9,10 +9,22 @@ from pathlib import Path
 import structlog
 
 
+class DiscordRateLimitHandler(logging.Handler):
+    """Count discord.py's internally retried 429s without storing URLs."""
+    def emit(self, record):
+        message = record.getMessage().lower()
+        if 'rate limited' in message or ('429' in message and 'retry' in message):
+            from bot.logging.telemetry import event
+            event('discord_rate_limit')
+
+
 def configure_logging() -> None:
     """Configure stdlib logging and structlog."""
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    discord_http = logging.getLogger("discord.http")
+    if not any(isinstance(handler, DiscordRateLimitHandler) for handler in discord_http.handlers):
+        discord_http.addHandler(DiscordRateLimitHandler(level=logging.WARNING))
     telemetry = logging.getLogger("meyaya.telemetry")
     if not telemetry.handlers:
         try:

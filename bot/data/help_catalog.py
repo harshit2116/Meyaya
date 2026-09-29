@@ -106,7 +106,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
         "facepalm",
         "cry",
     ),
-    "Fun and Scores": ("ship", "bestiescore", "rate", "mostlikely", "8ball", "warninglabel"),
+    "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "mostlikely", "8ball", "warninglabel"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
     "Fantasy / Profile": ("summon", "guardian"),
@@ -368,6 +368,12 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "rate", "rate <thing>", "Give anything a random score and verdict.", "Fun and Scores"
     ),
+    HelpCommand(
+        "reddit", "reddit <post> [| custom comment]",
+        "Make a Reddit-style post in r/server-name, with your avatar and Meyaya's reply.",
+        "Fun and Scores",
+    ),
+    HelpCommand("duck", "duck [@member]", "Send your avatar, or a member's, into the depths with an animated duck card.", "Fun and Scores"),
     HelpCommand(
         "bestiescore",
         "bestiescore <member> [other]",

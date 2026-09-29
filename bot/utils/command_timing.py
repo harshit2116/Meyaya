@@ -10,6 +10,12 @@ _active = ContextVar('command_timing', default=None)
 STAGES = ('database_ms', 'context_ms', 'quota_ms', 'ai_ms', 'discord_metadata_ms', 'asset_fetch_ms', 'render_ms', 'image_queue_ms', 'delivery_ms', 'loading_cleanup_ms')
 
 
+def note_model(provider, model):
+    active = _active.get()
+    if active is not None and not active['closed']:
+        active.update(provider=provider, model=model)
+
+
 def add_stage(name, elapsed_ms):
     active = _active.get()
     if active is not None and name in STAGES and not active['closed']:
@@ -21,6 +27,11 @@ def timing_stage(name):
     started = time.perf_counter()
     try:
         yield
+    except Exception:
+        active = _active.get()
+        if active is not None:
+            active['failed_stage'] = name.removesuffix('_ms')
+        raise
     finally:
         add_stage(name, (time.perf_counter() - started) * 1000)
 
@@ -46,6 +57,17 @@ def install_command_timing(bot):
                 except BaseException as error:
                     if type(error).__name__ == 'CancelledError':
                         status = 'cancelled'
+                    elif isinstance(error, Exception):
+                        from discord.ext import commands
+                        from bot.logging.health import health
+                        if not isinstance(error, commands.CommandError):
+                            health.capture(error, command=command.qualified_name,
+                                           guild_id=getattr(getattr(ctx, 'guild', None), 'id', None),
+                                           channel_id=getattr(getattr(ctx, 'channel', None), 'id', None),
+                                           invocation='slash' if getattr(ctx, 'interaction', None) else 'prefix',
+                                           stage=state.get('failed_stage'),
+                                           latency_ms=round((time.perf_counter() - started) * 1000, 2),
+                                           stages=state['stages'], provider=state.get('provider'), model=state.get('model'))
                     raise
                 finally:
                     elapsed = (time.perf_counter() - started) * 1000
@@ -53,6 +75,7 @@ def install_command_timing(bot):
                     _active.reset(token)
                     event('command_timing', command=command.qualified_name,
                           guild_id=getattr(getattr(ctx, 'guild', None), 'id', None),
+                          user_id=getattr(getattr(ctx, 'author', None), 'id', None),
                           total_ms=round(elapsed, 2),
                           work_ms=round(max(0, elapsed - state['stages'].get('delivery_ms', 0)), 2),
                           status=status, stages={key: round(value, 2) for key, value in state['stages'].items()},

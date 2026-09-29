@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Meyaya - Control room</title>
+  <link rel="stylesheet" href="/dashboard.css">
+  <script src="/dashboard.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <a class="brand" href="/">m<span>✿</span>yaya</a>
+    <nav id="navigation" hidden>
+      <button class="nav active" data-view="overview">◈ Server overview</button>
+      <button class="nav" data-view="operations">⌁ Response activity</button>
+      <button class="nav" data-view="health">♡ Meyaya Health</button>
+      <button class="nav" data-view="memories">🧠 Memory vault</button>
+      <button class="nav" data-view="nicknames">✿ Nicknames</button>
+      <button class="nav" data-view="blacklist">Chat blacklist</button>
+    </nav>
+    <div class="aside-note">OWNER CONTROL ROOM<br><span>Private tools for Meyaya's little universe.</span></div>
+    <button id="logout" class="quiet">Lock dashboard</button>
+  </aside>
+  <main>
+    <header>
+      <div><p class="eyebrow">THE MEYAYA SYSTEM</p><h1 id="page-title">A little bird's-eye view.</h1><p class="subtitle" id="page-subtitle">Your servers, activity, memories, and relationships in one place.</p></div>
+      <span class="badge" id="connection">Locked</span>
+    </header>
+    <section id="login" class="panel login">
+      <p class="eyebrow">JUST FOR YOU</p><h2>Welcome to the control room.</h2>
+      <p>Sign in with your owner access token. The dashboard uses a temporary one-hour session, kept only in this tab's memory. Locking signs that session out.</p>
+      <p>For quick access, send <code>uwu owner</code> to Meyaya. She will DM you a private, one-use login link.</p>
+      <form id="login-form"><label for="token">Owner access token</label><div class="row"><input id="token" type="password" required autocomplete="off" placeholder="Paste DASHBOARD_TOKEN"><button>Unlock</button></div></form>
+    </section>
+    <div id="workspace" hidden>
+      <section id="global-stats" class="stats">
+        <article><span>Connected servers</span><strong id="total">0</strong></article>
+        <article><span>Meyaya replies today</span><strong id="chats">0</strong></article>
+        <article><span>Commands today</span><strong id="commands">0</strong></article>
+        <article><span>Daily reset</span><strong class="small">00:00 UTC</strong></article>
+      </section>
+      <section id="view-server" class="view" hidden>
+        <div class="toolbar"><div id="server-heading" class="server-heading"></div><button id="server-refresh" class="quiet" type="button">Refresh server</button></div>
+        <p id="server-state" class="result-state" role="status"></p>
+        <div class="server-layout"><section id="server-detail-content" class="panel server-detail-panel"></section><section id="server-controls" class="panel server-detail-panel"></section></div>
+        <section id="server-command-usage" class="panel operations-panel server-command-usage" aria-label="Server command usage"></section>
+      </section>
+      <section id="view-overview" class="view">
+        <section id="remote-overview" class="panel operations-panel" hidden>
+          <h2>Hosted Meyaya</h2><p id="remote-connection" role="status">Connecting to the laptop proxy…</p>
+          <div id="remote-status" class="metrics"></div>
+          <h3>Live activity</h3><p class="details">Metadata only. Reconnects automatically; latest 100 events retained.</p>
+          <div id="live-activity" class="operation-list"></div>
+        </section>
+        <div class="toolbar"><div><h2>Your little universe</h2><p>Live operations and per-server controls.</p></div><div class="row"><input id="search" aria-label="Find a server" placeholder="Find a server"><button id="refresh" class="quiet">Refresh</button></div></div>
+        <section id="servers" class="grid"></section><p id="empty" hidden>No servers match your search.</p>
+        <section id="request-panel" class="panel request-panel" hidden aria-labelledby="request-title"><div class="row"><h2 id="request-title">Server requests</h2><button id="request-close" class="quiet" type="button">Close</button></div><p>Explicit requests to Meyaya only. Seven-day retention.</p><div class="row"><button id="request-refresh" type="button" class="quiet">Refresh requests</button><span id="request-state" role="status"></span></div><div id="request-items"></div><button id="request-more" type="button" hidden>Load older requests</button></section>
+      </section>
+      <section id="view-memories" class="view" hidden>
+        <div class="toolbar"><div><h2>Permanent memory vault</h2><p>Inspect active, conflicted, and superseded Memory System v2 records.</p></div><button id="memory-refresh" class="quiet">Refresh</button></div>
+        <div class="filterbar"><select id="memory-guild" aria-label="Filter memories by server"></select><select id="memory-status" aria-label="Filter memories by status"><option value="all">All states</option><option value="active">Active</option><option value="conflicted">Conflicted</option><option value="superseded">Superseded</option></select><input id="memory-query" placeholder="Search member, relation, or memory"></div>
+        <p id="memory-state" class="result-state" role="status"></p><div id="memory-items" class="record-list"></div><button id="memory-more" hidden>Load more memories</button>
+      </section>
+      <section id="view-health" class="view" hidden>
+        <div class="toolbar"><div><h2>Meyaya Health</h2><p>Existing telemetry, dependency checks, and searchable error IDs.</p></div><button id="health-refresh" class="quiet" type="button">Refresh health</button></div>
+        <p id="health-state" class="result-state" role="status"></p>
+        <section id="health-summary" class="stats operations-summary"></section>
+        <section id="health-history" class="panel operations-panel" hidden><h3>Recent health trends</h3><p class="details">Up to 30 minutes; in-memory samples every 15 seconds. Each chart uses its own scale.</p><div id="health-trends" class="grid"></div></section>
+        <div class="operations-columns">
+          <section class="panel operations-panel"><h3>Connections &amp; models</h3><div id="health-services" class="operation-list"></div></section>
+          <section class="panel operations-panel"><h3>Errors — last 24h</h3><p class="details">Observed attempts, including library retries. Window starts at this process's startup if less than 24 hours ago.</p><div id="health-counts" class="operation-list"></div></section>
+        </div>
+        <section class="panel operations-panel"><h3>Find an error</h3>
+          <form id="error-search" class="row"><input id="error-id" aria-label="Error ID" placeholder="MY-1234ABCD" maxlength="11"><button type="submit">Search</button></form>
+          <p id="error-state" class="result-state" role="status"></p><div id="health-errors" class="operation-list"></div>
+          <p class="details">Latest 30 errors shown; 500 kept in memory. Exact ID searches also check the existing rotating telemetry logs across restarts. Safe metadata only; no message text or credentials.</p>
+        </section>
+      </section>
+      <section id="view-operations" class="view" hidden>
+        <div class="toolbar"><div><h2>Response activity</h2><p>Reliability and speed records without message content.</p></div><button id="operations-refresh" class="quiet">Refresh</button></div>
+        <div class="filterbar operations-filter"><select id="operations-guild" aria-label="Filter response activity by server"></select></div>
+        <p id="operations-state" class="result-state" role="status"></p>
+        <p id="safety-state" class="result-state" role="status"></p>
+        <section id="operations-summary" class="stats operations-summary"></section>
+        <section class="panel operations-panel"><h3>Command speed</h3><p class="details">Callback time including response delivery; excludes argument parsing and checks. Stage times can overlap and do not add up to the total. Latest 2,000 callbacks from this process.</p><div id="operations-commands" class="operation-list"></div></section>
+        <div class="operations-columns">
+          <section class="panel operations-panel"><h3>Usage by feature</h3><div id="operations-features" class="operation-list"></div></section>
+          <section class="panel operations-panel"><h3>Usage by model</h3><div id="operations-models" class="operation-list"></div></section>
+        </div>
+        <section class="panel operations-panel"><h3>Recent model outcomes</h3><p class="details">The latest 30 requests from this bot process, with no message content.</p><div id="operations-recent" class="operation-list"></div></section>
+      </section>
+      <section id="view-nicknames" class="view" hidden>
+        <div class="toolbar"><div><h2>Meyaya's nickname book</h2><p>Every nickname assigned by the relationship system, with the state that shaped it.</p></div><button id="nickname-refresh" class="quiet">Refresh</button></div>
+        <div class="filterbar"><select id="nickname-guild" aria-label="Filter nicknames by server"></select><input id="nickname-query" placeholder="Search member ID or nickname"></div>
+        <p id="nickname-state" class="result-state" role="status"></p><div id="nickname-items" class="nickname-grid"></div><button id="nickname-more" hidden>Load more nicknames</button>
+      </section>
+      <section id="view-blacklist" class="view" hidden>
+        <div class="toolbar"><div><h2>Chat access</h2><p>Server-specific restrictions. Latest 200 decisions; no offending message text is stored here.</p></div><button id="blacklist-refresh" class="quiet">Refresh</button></div>
+        <form id="blacklist-form" class="filterbar"><input id="blacklist-guild" placeholder="Server ID" required pattern="[0-9]+"><input id="blacklist-user" placeholder="Member ID" required pattern="[0-9]+"><input id="blacklist-reason" placeholder="Reason" maxlength="300" required><button>Block member</button></form>
+        <p id="blacklist-state" role="status"></p><div id="blacklist-items" class="record-list"></div>
+      </section>
+    </div>
+    <p id="notice" role="status" aria-live="polite"></p>
+    <footer>Owner-only dashboard - Permanent memories stay in PostgreSQL - Request logs expire after seven days</footer>
+  </main>
+</div>
+</body>
+</html>

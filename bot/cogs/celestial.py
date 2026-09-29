@@ -30,7 +30,7 @@ class CelestialCog(commands.Cog):
         lines.extend(f"**{k}:** {v}" for k, v in result.fields)
         lines.extend(f"**{p}: {title}** - {meaning}" for p, title, meaning in result.panels)
         await ctx.send(
-            None if kind in {"fortune", "fate"} else "\n".join(lines),
+            None if kind in {"fortune", "fate", "guardian"} else "\n".join(lines),
             file=discord.File(BytesIO(png), filename=f"{kind}.png"),
             allowed_mentions=discord.AllowedMentions.none(),
         )

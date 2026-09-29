@@ -2,6 +2,7 @@
 
 let token = "", servers = [], selectedServer = null, requestCursor = null;
 let requestVersion = 0, memoryOffset = null, nicknameOffset = null;
+let healthLoading = false, healthVersion = 0;
 const $ = id => document.getElementById(id);
 const notice = message => { $("notice").textContent = message; };
 const pageServerId = new URLSearchParams(location.search).get("server");
@@ -96,6 +97,9 @@ function renderServerDetails(target, data) {
 }
 
 function lock() {
+  healthVersion++;
+  for (const id of ["health-summary", "health-services", "health-counts", "health-errors"]) $(id).replaceChildren();
+  $("error-id").value = ""; $("error-state").textContent = ""; $("health-state").textContent = "";
   for (const child of serverWindows.values()) if (!child.closed) child.postMessage({type: "meyaya-lock"}, location.origin);
   serverWindows.clear();
   for (const timer of serverWindowTimers.values()) clearTimeout(timer);
@@ -119,6 +123,7 @@ function switchView(name, autoLoad = true) {
     overview: ["A little bird's-eye view.", "Your servers, activity, and operational controls."],
     server: ["Inside your server.", "Server details, members, and Meyaya settings."],
     operations: ["The engine room.", "Track model reliability, latency, token usage, and feature traffic."],
+    health: ["Meyaya Health.", "Connections, host resources, AI budgets, and error diagnostics."],
     memories: ["The memory vault.", "Search every permanent fact Meyaya currently stores."],
     nicknames: ["Her nickname book.", "See who Meyaya knows well enough to name."],
     blacklist: ["Chat access.", "Review automatic restrictions and restore access when needed."],
@@ -127,6 +132,7 @@ function switchView(name, autoLoad = true) {
   if (autoLoad && name === "memories" && !$("memory-items").children.length) loadMemories(false);
   if (autoLoad && name === "nicknames" && !$("nickname-items").children.length) loadNicknames(false);
   if (autoLoad && name === "operations" && !$("operations-summary").children.length) loadOperations();
+  if (autoLoad && name === "health") loadHealth();
   if (autoLoad && name === "blacklist") loadBlacklist();
 }
 
@@ -138,6 +144,88 @@ function populateGuildFilters() {
     if ([...select.options].some(option => option.value === selected)) select.value = selected;
   }
 }
+
+function renderHealthErrors(items) {
+  const target = $("health-errors"); target.replaceChildren();
+  if (!items.length) target.append(element("p", "No matching errors retained.", "details"));
+  for (const item of items) {
+    const row = element("details", undefined, "operation-row outcome-error");
+    row.append(element("summary", `${item.error_id} · ${item.command} · ${item.exception}`));
+    const facts = [["Time", new Date(item.timestamp).toLocaleString()], ["Server", item.guild_id ?? "DM / unknown"],
+      ["Channel", item.channel_id ?? "Unknown"], ["Invocation", item.invocation ?? "Unknown"],
+      ["Stage", item.stage], ["Latency", item.latency_ms == null ? "Not measured" : `${item.latency_ms} ms`],
+      ["Provider", item.provider ?? "None recorded"], ["Model", item.model ?? "None recorded"]];
+    if (item.request_id) facts.push(["AI request ID", item.request_id]);
+    if (item.reason) facts.push(["Reason", item.reason]);
+    for (const [label, value] of facts) row.append(element("p", `${label}: ${value}`, "operation-detail"));
+    for (const [stage, value] of Object.entries(item.stages || {})) row.append(element("p", `${stage}: ${value} ms`, "details"));
+    for (const frame of item.frames || []) row.append(element("p", `${frame.file}:${frame.line} · ${frame.function}`, "health-frame"));
+    target.append(row);
+  }
+}
+
+async function searchErrors(event) {
+  event?.preventDefault();
+  const version = ++healthVersion;
+  $("error-state").textContent = "Searching…";
+  try {
+    const id = $("error-id").value.trim().toUpperCase();
+    const data = await api(`/api/errors${id ? `?id=${encodeURIComponent(id)}` : ""}`);
+    if (version !== healthVersion) return;
+    renderHealthErrors(data.items);
+    $("error-state").textContent = id ? `${data.items.length} match(es) for ${id}` : "Latest errors from this process";
+  } catch (error) { if (version === healthVersion) $("error-state").textContent = error.message; }
+}
+
+async function loadHealth() {
+  if (healthLoading || !token) return;
+  healthLoading = true;
+  const version = healthVersion;
+  $("health-state").textContent = "Checking health…";
+  try {
+    const data = await api("/api/health");
+    if (version !== healthVersion) return;
+    const host = data.host, queue = data.queue;
+    const cards = [["AI running", `${queue.active} / ${queue.active_limit}`], ["AI waiting", `${queue.waiting} / ${queue.waiting_limit}`],
+      ["RAM (process RSS)", host.rss_mb == null ? "Unavailable" : `${host.rss_mb} / ${host.memory_limit_mb ?? "?"} MB`],
+      ["CPU throttled time / interval", host.throttle_percent == null ? "Unavailable" : `${host.throttle_percent}%`],
+      ["Scheduler lag", host.wake_lag_ms == null ? "Unavailable" : `${host.wake_lag_ms} ms`],
+      ["Connected servers", data.guilds], ["Users observed since startup", `${data.users_seen}${data.users_seen_capped ? "+" : ""}`],
+      ["Live voice sessions", queue.voice_active]];
+    $("health-summary").replaceChildren();
+    for (const [label, value] of cards) {
+      const card = element("article"); card.append(element("span", label), element("strong", String(value))); $("health-summary").append(card);
+    }
+    $("health-services").replaceChildren();
+    const symbols = {healthy: "🟢", degraded: "🟡", unavailable: "🔴", unknown: "⚪", disabled: "⚪"};
+    for (const service of [...data.dependencies, ...data.models]) {
+      const row = element("article", undefined, `operation-row health-${service.status}`);
+      row.append(element("h4", `${symbols[service.status] || "⚪"} ${service.name} · ${service.status}`));
+      if (service.model) row.append(element("p", service.model, "details"));
+      if (service.latency_ms != null) row.append(element("p", `${service.latency_ms} ms`, "operation-detail"));
+      if (service.reason) row.append(element("p", service.reason, "details"));
+      if (service.last_observation) row.append(element("p", `Last observed ${new Date(service.last_observation.observed_at * 1000).toLocaleString()}`, "details"));
+      if (service.quota) {
+        const q = service.quota;
+        row.append(element("p", `Daily attempts: ${q.daily_used} / ${q.daily_limit ?? "unlimited"}${q.daily_percent == null ? "" : ` (${q.daily_percent}%)`} · ${q.rpm_limit} RPM`, "operation-detail"));
+        row.append(element("p", `Budget source: ${q.source} · reset in ${Math.ceil(q.reset_in_seconds / 60)} min${q.blocked_seconds ? ` · blocked ${q.blocked_seconds}s` : ""}`, "details"));
+      }
+      $("health-services").append(row);
+    }
+    $("health-counts").replaceChildren();
+    const labels = {gemini_429: "Gemini 429", gemini_503: "Gemini 503", discord_429: "Discord 429", db_errors: "DB errors"};
+    for (const [key, count] of Object.entries(data.errors_24h)) $("health-counts").append(element("p", `${labels[key]}: ${count}`));
+    if (!$("error-id").value.trim()) renderHealthErrors(data.recent_errors);
+    $("health-state").textContent = `Updated ${new Date(data.generated_at).toLocaleTimeString()} · dependency probes cached 30s · models use real outcomes, not test calls · same model routes share one budget · telemetry since ${new Date(data.started_at).toLocaleString()}`;
+  } catch (error) { if (version === healthVersion) $("health-state").textContent = error.message; }
+  finally { healthLoading = false; }
+}
+
+$("health-refresh").addEventListener("click", loadHealth);
+$("error-search").addEventListener("submit", searchErrors);
+setInterval(() => {
+  if (token && !document.hidden && !$("view-health").hidden) loadHealth();
+}, 30000);
 
 function renderServerControls(target, server) {
     target.replaceChildren();

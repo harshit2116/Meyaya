@@ -39,6 +39,7 @@ from bot.utils.command_timing import install_command_timing, timing_stage
 from bot.services.profile_aesthetic import ProfileAestheticService
 from bot.services.chat_blacklist import ChatBlacklistService
 from bot.services.ai_guard import AIGuard
+from bot.logging.health import health
 
 logger = logging.getLogger(__name__)
 
@@ -274,14 +275,15 @@ class MeyayaBot(commands.Bot):
         elif isinstance(original, commands.CheckFailure):
             message = "You cannot use that command here."
         elif isinstance(original, SQLAlchemyError):
-            message = "The database is temporarily unavailable. Please try again shortly."
+            error_id = health.capture(original, command=getattr(ctx.command, 'qualified_name', 'unknown'),
+                                      guild_id=getattr(ctx.guild, 'id', None), invocation='slash' if ctx.interaction else 'prefix')
+            message = f"The database is temporarily unavailable. Please try again shortly.\nError ID: `{error_id}`"
         else:
-            logger.error(
-                "Unhandled command error command=%s",
-                ctx.command,
-                exc_info=(type(original), original, original.__traceback__),
-            )
-            message = "Something unexpected interrupted that command. Nothing was changed."
+            error_id = health.capture(original, command=getattr(ctx.command, 'qualified_name', 'unknown'),
+                                      guild_id=getattr(ctx.guild, 'id', None),
+                                      channel_id=getattr(ctx.channel, 'id', None),
+                                      invocation='slash' if ctx.interaction else 'prefix')
+            message = f"🌸 Something broke on my side.\nError ID: `{error_id}`"
         await ctx.send(
             embed=meyaya_embed("Tiny Hiccup", message, tone="danger", icon="💭"),
             ephemeral=ctx.interaction is not None,
@@ -311,14 +313,13 @@ class MeyayaBot(commands.Bot):
         elif isinstance(original, discord.app_commands.CheckFailure):
             message = "You cannot use that command here."
         elif isinstance(original, SQLAlchemyError):
-            message = "The database is temporarily unavailable. Please try again shortly."
+            error_id = health.capture(original, command=getattr(interaction.command, 'qualified_name', 'unknown'),
+                                      guild_id=interaction.guild_id, channel_id=interaction.channel_id, invocation='slash')
+            message = f"The database is temporarily unavailable. Please try again shortly.\nError ID: `{error_id}`"
         else:
-            logger.error(
-                "Unhandled slash-command error command=%s",
-                interaction.command,
-                exc_info=(type(original), original, original.__traceback__),
-            )
-            message = "Something unexpected interrupted that command. Nothing was changed."
+            error_id = health.capture(original, command=getattr(interaction.command, 'qualified_name', 'unknown'),
+                                      guild_id=interaction.guild_id, channel_id=interaction.channel_id, invocation='slash')
+            message = f"🌸 Something broke on my side.\nError ID: `{error_id}`"
         payload = {
             "embed": meyaya_embed("Tiny Hiccup", message, tone="danger", icon="💭"),
             "ephemeral": True,

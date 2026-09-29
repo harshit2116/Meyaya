@@ -20,6 +20,9 @@ from bot.models.memory import BotMemory, MemoryStatus
 from bot.models.meyaya_state import MeyayaUserState
 from bot.web.security import DashboardSecurity, SESSION_SECONDS
 from bot.web.server_info import cached_server_info, cached_member_preview
+from bot.services.owner_health import OwnerHealth
+from bot.logging.health import health as health_telemetry, find_retained_error
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +72,9 @@ async def server_report(bot):
 class Dashboard:
     def __init__(self, bot, *, local_no_auth=False):
         self.bot = bot
+        self.owner_health = OwnerHealth(bot)
+        self._error_search_lock = asyncio.Lock()
+        self._error_search_cache = {}
         if local_no_auth and (bot.settings.dashboard_host != "127.0.0.1" or bot.settings.dashboard_public_url):
             raise ValueError("Token-free mode is restricted to the local dashboard")
         self.runner = None
@@ -99,15 +105,17 @@ class Dashboard:
                 response = await handler(request)
             except web.HTTPException as error:
                 response = web.Response(status=error.status, headers=error.headers, body=error.body)
-            except SQLAlchemyError:
+            except SQLAlchemyError as error:
+                error_id = health_telemetry.capture(error, command='dashboard', stage='database')
                 logger.warning("Dashboard database operation unavailable")
                 response = web.json_response(
-                    {"error": "Database unavailable; please retry."}, status=503
+                    {"error": f"Database unavailable; please retry. Error ID: {error_id}"}, status=503
                 )
             except Exception as error:
                 # Never echo request bodies, credentials, or database errors.
                 logger.error("Dashboard request failed (%s)", type(error).__name__)
-                response = web.json_response({"error": "Request unavailable; please retry."}, status=500)
+                error_id = health_telemetry.capture(error, command='dashboard', stage='request')
+                response = web.json_response({"error": f"Request unavailable; please retry. Error ID: {error_id}"}, status=500)
             response.headers.update(
                 {
                     "Cache-Control": "no-store",
@@ -139,6 +147,8 @@ class Dashboard:
         self.app.router.add_get("/api/memories", self.memories)
         self.app.router.add_get("/api/nicknames", self.nicknames)
         self.app.router.add_get("/api/operations", self.operations)
+        self.app.router.add_get("/api/health", self.health)
+        self.app.router.add_get("/api/errors", self.errors)
         self.app.router.add_get("/api/safety", self.safety)
         self.app.router.add_patch("/api/servers/{guild_id}", self.update)
 
@@ -390,6 +400,31 @@ class Dashboard:
             if self.bot.get_guild(guild_id) is None:
                 raise web.HTTPNotFound(text="Server not found")
         return web.json_response(operational_telemetry.snapshot(guild_id))
+
+    async def health(self, request):
+        return web.json_response(await self.owner_health.snapshot())
+
+    async def errors(self, request):
+        error_id = request.query.get('id', '').strip().upper()
+        if error_id and not re.fullmatch(r'MY-[A-F0-9]{8}', error_id):
+            raise web.HTTPBadRequest(text='Invalid error ID')
+        items = health_telemetry.search(error_id)
+        if error_id and not items:
+            async with self._error_search_lock:
+                now = time.monotonic()
+                cached = self._error_search_cache.get(error_id)
+                if cached and cached[0] > now:
+                    items = cached[1]
+                else:
+                    item = await asyncio.to_thread(find_retained_error, error_id)
+                    items = [item] if item else []
+                    self._error_search_cache = {key: value for key, value in self._error_search_cache.items()
+                                                if value[0] > now}
+                    if len(self._error_search_cache) >= 32:
+                        self._error_search_cache.clear()
+                    self._error_search_cache[error_id] = (now + 30, items)
+        return web.json_response({'items': items, 'scope': 'process-and-retained-logs',
+                                  'capacity': health_telemetry.capacity})
 
     async def safety(self, request):
         settings = self.bot.settings

@@ -172,7 +172,7 @@ class LocalDashboard(Dashboard):
         @web.middleware
         async def refresh_catalog(request, handler):
             # This middleware runs after authentication; no public database query.
-            if request.path.startswith('/api/') and request.path not in {'/api/login', '/api/logout'}:
+            if request.path.startswith('/api/') and request.path not in {'/api/login', '/api/logout', '/api/health', '/api/errors'}:
                 await backend.refresh()
             return await handler(request)
         self.app.middlewares.append(refresh_catalog)
@@ -218,6 +218,9 @@ class LocalDashboard(Dashboard):
 
     async def operations(self, request):
         raise web.HTTPServiceUnavailable(text='Live process telemetry is only available on the hosted bot; database reports remain available locally.')
+
+    async def health(self, request):
+        raise web.HTTPServiceUnavailable(text='Meyaya Health is available on the hosted bot dashboard. This local dashboard is not the running bot; use the hosted owner link to inspect its health.')
 
     async def server_summary(self, request):
         try:
