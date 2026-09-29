@@ -53,6 +53,7 @@ class FunCog(commands.Cog):
         self.bot = bot
         self.reddit_slots = BoundedImageGate(capacity=4, concurrency=2)
         self.duck_slots = BoundedImageGate(capacity=3)
+        self._standalone_avatar_loader = None
 
     @commands.hybrid_command(
         name="mostlikely",
@@ -169,8 +170,8 @@ class FunCog(commands.Cog):
                 generated = asyncio.sleep(0, result=comment)
             comment, author_avatar, meyaya_avatar = await asyncio.gather(
                 generated,
-                self._reddit_avatar(ctx.author),
-                self._reddit_avatar(getattr(self.bot, "user", None)) if not custom or comment else asyncio.sleep(0, result=b""),
+                self._card_avatar(ctx.author),
+                self._card_avatar(getattr(self.bot, "user", None)) if not custom or comment else asyncio.sleep(0, result=b""),
             )
             comment = comment[:240]
             from bot.services.reddit_card import render_reddit
@@ -182,14 +183,34 @@ class FunCog(commands.Cog):
         await ctx.send(file=discord.File(BytesIO(png), filename="reddit.png"),
                        allowed_mentions=discord.AllowedMentions.none())
 
-    @staticmethod
-    async def _reddit_avatar(member) -> bytes:
+    async def _card_avatar(self, member) -> bytes:
         if member is None:
             return b""
         try:
             asset = member.display_avatar.with_size(128).with_format("png")
-            return await asyncio.wait_for(asset.read(), timeout=4)
-        except (discord.HTTPException, discord.ClientException, TimeoutError):
+            get_cog = getattr(self.bot, "get_cog", None)
+            ship = get_cog("ShipCog") if get_cog else None
+            if ship is not None:
+                # Share ship's independent CDN pool, eight-second deadline,
+                # bounded successful-image cache and coalesced downloads.
+                data = await ship._get_avatar_bytes(asset)
+                if not data:
+                    logger.warning("party_avatar_unavailable member_id=%s source=shared_cdn",
+                                   getattr(member, "id", None))
+                return data
+            # Supports standalone cog use without ShipCog. Use its same bounded
+            # downloader rather than falling back to Discord's API connector.
+            from bot.cogs.ship import ShipCog
+            if self._standalone_avatar_loader is None:
+                self._standalone_avatar_loader = ShipCog(self.bot)
+            data = await self._standalone_avatar_loader._get_avatar_bytes(asset)
+            if not data:
+                logger.warning("party_avatar_unavailable member_id=%s source=standalone_cdn",
+                               getattr(member, "id", None))
+            return data
+        except (discord.DiscordException, TimeoutError, OSError, ValueError) as error:
+            logger.warning("party_avatar_unavailable member_id=%s error=%s",
+                           getattr(member, "id", None), type(error).__name__)
             return b""
 
     @commands.hybrid_command(name="duck", description="Send a member's avatar into the depths in an animated duck card.")
@@ -200,7 +221,7 @@ class FunCog(commands.Cog):
         target = member or ctx.author
         await ctx.defer()
         async with self.duck_slots:
-            avatar = await self._reddit_avatar(target)
+            avatar = await self._card_avatar(target)
             from bot.services.duck_card import render_duck
             gif = await image_work(render_duck, target.display_name, avatar)
         await ctx.send(file=discord.File(BytesIO(gif), filename="duck.gif"),

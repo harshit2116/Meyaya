@@ -86,6 +86,9 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
   Rendering uses the shared image worker, 47 sampled frames preserving the full
   timeline, a bounded queue and a 10-second member cooldown. Template and source note:
   `bot/assets/duck/`; renderer: `bot/services/duck_card.py`.
+- Reddit and duck share ship's bounded CDN avatar downloader/cache. Failed downloads
+  retry on the next call and emit `party_avatar_unavailable` without leaking URLs.
+  Both use the existing loading indicator after 0.5 seconds, removed on completion.
 - Consent-based marriage, vows, anniversaries, and confirmed divorce
 - Anonymous multiplayer games judged by Gemini
 - Entertainment-only court cases with registered witnesses, fair follow-ups, and explained verdicts

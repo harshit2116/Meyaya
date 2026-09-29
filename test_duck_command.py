@@ -13,7 +13,8 @@ from bot.services.duck_card import render_duck, MAX_OUTPUT_BYTES
 
 
 def member(name="Ayaya"):
-    asset = NS(read=AsyncMock(return_value=b"corrupt avatar"))
+    asset = NS(url="https://cdn.discordapp.com/avatars/42/test.png?size=128",
+               read=AsyncMock(return_value=b"corrupt avatar"))
     asset.with_size = lambda _: asset
     asset.with_format = lambda _: asset
     return NS(id=42, display_name=name, display_avatar=asset)
@@ -78,3 +79,26 @@ async def test_failed_avatar_download_uses_initial_portrait(monkeypatch):
     await FunCog.duck.callback(FunCog(NS()), ctx)
     assert seen == [b""]
     ctx.send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["reddit", "duck"])
+async def test_new_commands_get_delayed_loading_and_cleanup(name):
+    from discord.ext import commands
+    from bot.utils.loading import install_command_loading, LOADING_DELAY
+    assert LOADING_DELAY == 0.5
+    loading_message = NS(delete=AsyncMock())
+    sticker = NS(name="meyaya_loading")
+    channel = NS(guild=NS(id=123, stickers=[sticker]), send=AsyncMock(return_value=loading_message))
+    async def callback(ctx):
+        await ctx._meyaya_loader.task
+        return "done"
+    command = commands.hybrid_command(name=name)(callback)
+    bot = NS(walk_commands=lambda: [command], stickers=[])
+    install_command_loading(bot)
+    assert command.app_command._callback is command.callback
+    ctx = NS(channel=channel, interaction=None)
+    assert await command.callback(ctx) == "done"
+    channel.send.assert_awaited_once_with(stickers=[sticker])
+    loading_message.delete.assert_awaited_once()
+    assert ctx._meyaya_loader is None

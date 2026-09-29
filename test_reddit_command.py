@@ -15,7 +15,8 @@ from bot.logging.telemetry import current_model_context
 
 
 def context(interaction=None):
-    asset = NS(read=AsyncMock(return_value=b"not an image"))
+    asset = NS(url="https://cdn.discordapp.com/avatars/42/test.png?size=128",
+               read=AsyncMock(return_value=b"not an image"))
     asset.with_size = lambda size: asset
     asset.with_format = lambda format: asset
     author = NS(id=42, name="Ayaya", display_name="Ayaya", display_avatar=asset)
@@ -108,6 +109,50 @@ def test_avatar_is_rendered_and_comment_changes_card_height():
     with Image.open(BytesIO(no_reply)) as card, Image.open(BytesIO(with_reply)) as other:
         assert card.getpixel((52, 50)) == (255, 102, 0)
         assert card.height < other.height
+
+
+@pytest.mark.asyncio
+async def test_party_avatar_uses_shared_cdn_loader_not_discord_read():
+    image = BytesIO()
+    Image.new("RGB", (128, 128), "#ff6600").save(image, format="PNG")
+    ship = NS(_get_avatar_bytes=AsyncMock(return_value=image.getvalue()))
+    ctx = context()
+    bot = NS(get_cog=lambda name: ship if name == "ShipCog" else None)
+    cog = FunCog(bot)
+    assert await cog._card_avatar(ctx.author) == image.getvalue()
+    ship._get_avatar_bytes.assert_awaited_once_with(ctx.author.display_avatar)
+    ctx.author.display_avatar.read.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_party_avatar_failure_is_logged_and_not_cached(caplog):
+    ship = NS(_get_avatar_bytes=AsyncMock(side_effect=[b"", b"valid bytes"]))
+    cog = FunCog(NS(get_cog=lambda _: ship))
+    ctx = context()
+    assert await cog._card_avatar(ctx.author) == b""
+    assert "party_avatar_unavailable" in caplog.text
+    assert await cog._card_avatar(ctx.author) == b"valid bytes"
+    assert ship._get_avatar_bytes.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_avatar_download_uses_app_http_pool_and_caches_real_portrait():
+    from unittest.mock import Mock
+    image = BytesIO()
+    Image.new("RGB", (128, 128), "#ff6600").save(image, format="PNG")
+    data = image.getvalue()
+    async def chunks(size):
+        yield data
+    response = NS(raise_for_status=Mock(), content=NS(iter_chunked=chunks))
+    request = AsyncMock()
+    request.__aenter__.return_value = response
+    session = NS(closed=False, get=Mock(return_value=request))
+    cog = FunCog(NS(http_session=session))
+    ctx = context()
+    assert await cog._card_avatar(ctx.author) == data
+    assert await cog._card_avatar(ctx.author) == data
+    session.get.assert_called_once_with(ctx.author.display_avatar.url)
+    ctx.author.display_avatar.read.assert_not_awaited()
 
 
 @pytest.mark.asyncio

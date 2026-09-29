@@ -14,7 +14,7 @@ SLOW_COMMANDS = frozenset({
     "profile", "profilecheck", "aura", "palette", "callingcard", "duostyle",
     "fortune", "tarot", "fate", "guardian", "ship", "bestiescore", "rate",
     "rank", "roast", "compliment", "room", "warninglabel", "roleplay",
-    "checkclaim", "argumenttimeline", "mostlikely",
+    "checkclaim", "argumenttimeline", "mostlikely", "reddit", "duck",
 })
 # Match callbacks that intentionally defer privately. The first defer fixes
 # response visibility, so a later callback cannot change a public defer.
