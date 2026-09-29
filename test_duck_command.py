@@ -9,7 +9,7 @@ import pytest
 from PIL import Image
 
 from bot.cogs.fun import FunCog
-from bot.services.duck_card import render_duck, MAX_OUTPUT_BYTES
+from bot.services.duck_card import render_duck, MAX_OUTPUT_BYTES, duck_message
 
 
 def member(name="Ayaya"):
@@ -18,6 +18,11 @@ def member(name="Ayaya"):
     asset.with_size = lambda _: asset
     asset.with_format = lambda _: asset
     return NS(id=42, display_name=name, display_avatar=asset)
+
+
+def test_duck_full_ending_sentence():
+    assert duck_message("Ayaya") == "Ayaya is looking for Davey Jones treasure."
+    assert duck_message("Ruru") == "Ruru is looking for Davey Jones treasure."
 
 
 def test_duck_preserves_animation_timeline_and_bounds_payload():
@@ -60,6 +65,9 @@ async def test_duck_defaults_to_requester_and_supports_target(interaction, expli
     ctx.defer.assert_awaited_once()
     sent = ctx.send.await_args.kwargs
     assert sent["file"].filename == "duck.gif"
+    assert sent["embed"].title is None
+    assert sent["embed"].colour is None
+    assert sent["embed"].image.url == "attachment://duck.gif"
     assert sent["file"].fp.read() == b"GIF89a" + ("Ruru" if explicit else "Ayaya").encode()
     assert sent["allowed_mentions"].to_dict() == discord.AllowedMentions.none().to_dict()
     assert cog.duck_slots.pending == 0
@@ -102,3 +110,29 @@ async def test_new_commands_get_delayed_loading_and_cleanup(name):
     channel.send.assert_awaited_once_with(stickers=[sticker])
     loading_message.delete.assert_awaited_once()
     assert ctx._meyaya_loader is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fails", [False, True])
+async def test_loader_remains_during_gif_upload_and_is_cleaned_after(fails):
+    from unittest.mock import patch
+    from discord.ext import commands
+    from bot.utils.command_context import TimedContext
+    ctx = TimedContext.__new__(TimedContext)
+    order = []
+    async def stop():
+        order.append("cleanup")
+    async def send(*args, **kwargs):
+        assert order == []
+        order.append("delivery")
+        if fails:
+            raise RuntimeError("upload failed")
+        return "sent"
+    ctx._meyaya_loader = NS(stop=stop)
+    with patch.object(commands.Context, "send", side_effect=send):
+        if fails:
+            with pytest.raises(RuntimeError, match="upload failed"):
+                await ctx.send("gif")
+        else:
+            assert await ctx.send("gif") == "sent"
+    assert order == ["delivery", "cleanup"]

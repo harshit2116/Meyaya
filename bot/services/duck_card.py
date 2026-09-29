@@ -5,12 +5,17 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageOps
 
-from bot.services.card_renderer import font
+from bot.services.card_renderer import font, lines
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "duck" / "eject.gif"
 CROP = (80, 22, 342, 240)  # Omit the recording's player list and microphone UI.
 OUTPUT_SIZE = (480, 400)
 MAX_OUTPUT_BYTES = 7 * 1024 * 1024
+
+
+def duck_message(name):
+    name = " ".join(str(name).split())[:32] or "Member"
+    return f"{name} is looking for Davey Jones treasure."
 
 
 def _avatar(data, name):
@@ -33,12 +38,13 @@ def _avatar(data, name):
 def render_duck(name, avatar=b""):
     """Preserve the full six-second timeline while sampling every other frame."""
     name = " ".join(str(name).split())[:32] or "Member"
+    message = duck_message(name)
     art, mask = _avatar(avatar, name)
     frames, durations = [], []
     with Image.open(TEMPLATE) as source:
         if source.size != (426, 240) or source.n_frames != 94:
             raise ValueError("Unsupported duck animation template")
-        clean = source.convert("RGB").crop((48, 106, 383, 139))
+        clean = source.convert("RGB").crop((48, 94, 383, 152))
         # One shared palette keeps dark ocean gradients and the portrait readable
         # without running an expensive colour quantizer on all 47 frames.
         swatch = source.convert("RGB").resize((128, 128))
@@ -54,7 +60,7 @@ def render_duck(name, avatar=b""):
                 continue
             frame = source.convert("RGB")
             if index >= 48:
-                frame.paste(clean, (48, 106))
+                frame.paste(clean, (48, 94))
             draw = ImageDraw.Draw(frame)
             # Follow the duck's trajectory in this fixed source template.
             center_y = round((index - 24) * 6.2)
@@ -62,14 +68,16 @@ def render_duck(name, avatar=b""):
                 frame.paste(art, (197, center_y - 21), mask)
                 draw.ellipse((196, center_y - 22, 239, center_y + 21), outline="#d6e9ff", width=1)
             if index >= 48:
-                message = f"{name} is looking for Davy Jones."
-                size = 13
-                while size > 8 and draw.textlength(message, font=font(size)) > 250:
-                    size -= 1
                 # Recreate the source's typewriter reveal with the member's name.
                 visible = message[:round(len(message) * min(1, (index - 46) / 30))]
-                draw.text((211, 122), visible, font=font(size), fill="white", anchor="mm",
-                          stroke_width=1, stroke_fill="#101929")
+                # Wrap rather than shrinking the full sentence to unreadable
+                # text or clipping the ending for longer display names.
+                rows = lines(draw, visible, 12, 248)
+                y = 122 - (len(rows) - 1) * 8
+                for row in rows:
+                    draw.text((211, y), row, font=font(12), fill="white", anchor="mm",
+                              stroke_width=1, stroke_fill="#101929")
+                    y += 16
             rendered = frame.crop(CROP).resize(OUTPUT_SIZE, Image.Resampling.BILINEAR)
             frames.append(rendered.quantize(palette=palette, dither=Image.Dither.NONE))
             durations.append(pending_duration)

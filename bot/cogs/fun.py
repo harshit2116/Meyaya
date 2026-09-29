@@ -224,7 +224,9 @@ class FunCog(commands.Cog):
             avatar = await self._card_avatar(target)
             from bot.services.duck_card import render_duck
             gif = await image_work(render_duck, target.display_name, avatar)
-        await ctx.send(file=discord.File(BytesIO(gif), filename="duck.gif"),
+        embed = discord.Embed()
+        embed.set_image(url="attachment://duck.gif")
+        await ctx.send(embed=embed, file=discord.File(BytesIO(gif), filename="duck.gif"),
                        allowed_mentions=discord.AllowedMentions.none())
 
     @commands.hybrid_command(
