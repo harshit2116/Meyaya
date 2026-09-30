@@ -2,10 +2,35 @@
 
 import logging
 import time
+from collections import OrderedDict
+from dataclasses import dataclass
 from bot.utils.command_timing import add_stage
 from discord.ext import commands
 
 logger = logging.getLogger(__name__)
+_MAX_COMMAND_OUTPUTS = 512
+_COMMAND_OUTPUT_TTL = 24 * 60 * 60
+
+
+@dataclass(frozen=True, slots=True)
+class CommandOutput:
+    command: str
+    invoker_id: int
+    invoker_name: str
+
+
+def command_output_for(bot, channel_id: int, message_id: int) -> CommandOutput | None:
+    outputs = getattr(bot, "_meyaya_command_outputs", None)
+    if outputs is None:
+        return None
+    entry = outputs.get((channel_id, message_id))
+    if entry is None:
+        return None
+    created_at, output = entry
+    if time.monotonic() - created_at > _COMMAND_OUTPUT_TTL:
+        outputs.pop((channel_id, message_id), None)
+        return None
+    return output
 
 
 class TimedContext(commands.Context):
@@ -18,7 +43,27 @@ class TimedContext(commands.Context):
         loader = getattr(self, "_meyaya_loader", None)
         started = time.monotonic()
         try:
-            return await super().send(*args, **kwargs)
+            sent = await super().send(*args, **kwargs)
+            command = getattr(self, "command", None)
+            if (command is not None and sent is not None
+                    and not kwargs.get("ephemeral", False)
+                    and getattr(sent, "id", None) is not None):
+                invoker = self.interaction.user if self.interaction is not None else self.author
+                outputs = getattr(self.bot, "_meyaya_command_outputs", None)
+                if outputs is None:
+                    outputs = OrderedDict()
+                    self.bot._meyaya_command_outputs = outputs
+                outputs[(self.channel.id, sent.id)] = (
+                    time.monotonic(),
+                    CommandOutput(
+                        command=command.qualified_name,
+                        invoker_id=invoker.id,
+                        invoker_name=invoker.display_name[:80],
+                    ),
+                )
+                while len(outputs) > _MAX_COMMAND_OUTPUTS:
+                    outputs.popitem(last=False)
+            return sent
         finally:
             elapsed = (time.monotonic() - started) * 1000
             add_stage('delivery_ms', elapsed)
