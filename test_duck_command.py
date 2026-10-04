@@ -9,7 +9,7 @@ import pytest
 from PIL import Image
 
 from bot.cogs.fun import FunCog
-from bot.services.duck_card import render_duck, MAX_OUTPUT_BYTES, duck_message
+from bot.services.duck_card import render_duck, MAX_OUTPUT_BYTES, duck_message, fitted_caption_font
 
 
 def member(name="Ayaya"):
@@ -21,8 +21,8 @@ def member(name="Ayaya"):
 
 
 def test_duck_full_ending_sentence():
-    assert duck_message("Ayaya") == "Ayaya is looking for Davey Jones treasure."
-    assert duck_message("Ruru") == "Ruru is looking for Davey Jones treasure."
+    assert duck_message("Ayaya") == "Ayaya is looking for Davey Jones locker."
+    assert duck_message("Ruru") == "Ruru is looking for Davey Jones locker."
 
 
 def test_duck_preserves_animation_timeline_and_bounds_payload():
@@ -33,23 +33,33 @@ def test_duck_preserves_animation_timeline_and_bounds_payload():
     assert len(data) < MAX_OUTPUT_BYTES
     with Image.open(BytesIO(data)) as gif:
         assert gif.size == (480, 400)
-        assert gif.n_frames == 47
+        assert gif.n_frames == 94
         assert gif.info["loop"] == 0
         duration = 0
         for index in range(gif.n_frames):
             gif.seek(index)
             duration += gif.info["duration"]
         assert duration == 6270
-        gif.seek(20)
+        gif.seek(40)
         pixel = gif.convert("RGB").getpixel((253, 140))
         assert pixel[0] > 200 and pixel[1] < 160
 
 
 def test_corrupt_avatar_and_long_unicode_name_still_render():
     with Image.open(BytesIO(render_duck("🌸" * 100, b"bad"))) as gif:
-        assert gif.n_frames == 47
-        gif.seek(46)
+        assert gif.n_frames == 94
+        gif.seek(93)
         gif.load()
+
+
+@pytest.mark.parametrize("name", ["Ayaya", "W" * 32, "🌸" * 32])
+def test_caption_fits_on_one_line_without_losing_ending(name):
+    from PIL import ImageDraw
+    message = duck_message(name)
+    assert message.endswith("Davey Jones locker.")
+    box = ImageDraw.Draw(Image.new("RGB", (480, 400))).textbbox(
+        (0, 0), message, font=fitted_caption_font(message), stroke_width=1)
+    assert box[2] - box[0] <= 448
 
 
 @pytest.mark.asyncio

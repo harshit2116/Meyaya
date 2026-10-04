@@ -3,6 +3,7 @@
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from functools import wraps
+from discord import app_commands
 import logging
 import time
 from bot.utils.application_emojis import loading_emoji
@@ -112,9 +113,13 @@ async def loading_indicator(channel, bot, *, delay=LOADING_DELAY, emoji_only=Fal
 
 
 def install_command_loading(bot):
-    """Wrap selected callbacks once, preserving their signatures and checks."""
+    """Wrap command callbacks only; conversation listeners never get a loader."""
+    hybrid_apps = set()
     for command in bot.walk_commands():
-        if command.name not in SLOW_COMMANDS or getattr(command.callback, "_meyaya_loading", False):
+        app_command = getattr(command, "app_command", None)
+        if app_command is not None:
+            hybrid_apps.add(id(app_command))
+        if getattr(command.callback, "_meyaya_loading", False):
             continue
         callback = command.callback
 
@@ -122,8 +127,12 @@ def install_command_loading(bot):
             @wraps(callback)
             async def run(*args, **kwargs):
                 ctx = args[1] if command.cog is not None else args[0]
+                if getattr(ctx, "_meyaya_loader", None) is not None:
+                    return await callback(*args, **kwargs)
                 interaction = getattr(ctx, "interaction", None)
-                if interaction is not None and not interaction.response.is_done():
+                # Preserve existing callbacks' visibility/deferral choices when
+                # expanding coverage. Only the original known-safe set pre-defers.
+                if command.name in SLOW_COMMANDS and interaction is not None and not interaction.response.is_done():
                     await ctx.defer(ephemeral=command.name in PRIVATE_SLASH_COMMANDS)
                 async with loading_indicator(ctx.channel, bot) as loader:
                     ctx._meyaya_loader = loader
@@ -139,3 +148,24 @@ def install_command_loading(bot):
         if app_command is not None:
             # Hybrid slash dispatch owns a reference separate from text dispatch.
             app_command._callback = command.callback
+
+    # Generated reactions/help/GIF commands use separate application callbacks,
+    # not HybridCommand. Their own response/followup logic remains unchanged.
+    tree = getattr(bot, "tree", None)
+    for command in tree.walk_commands() if tree is not None else ():
+        if (not isinstance(command, app_commands.Command) or id(command) in hybrid_apps
+                or getattr(command.callback, "_meyaya_loading", False)):
+            continue
+
+        def wrap_app(callback, command):
+            @wraps(callback)
+            async def run(*args, **kwargs):
+                interaction = args[1] if command.binding is not None else args[0]
+                if interaction.channel is None:
+                    return await callback(*args, **kwargs)
+                async with loading_indicator(interaction.channel, bot):
+                    return await callback(*args, **kwargs)
+            run._meyaya_loading = True
+            return run
+
+        command._callback = wrap_app(command.callback, command)

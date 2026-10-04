@@ -2,7 +2,7 @@
 
 from io import BytesIO
 from types import SimpleNamespace as NS
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import discord
 import pytest
@@ -12,6 +12,33 @@ from bot.cogs.fun import FunCog
 from bot.services.reddit_card import render_reddit
 from bot.services.model_router import ModelRouter, ModelTier
 from bot.logging.telemetry import current_model_context
+from bot.utils.display_mentions import display_mentions
+
+
+def test_rendered_mentions_use_names_without_api_fetches():
+    ctx = context()
+    target = NS(id=7, display_name="Haru")
+    ctx.guild.get_member = lambda user_id: target if user_id == 7 else None
+    ctx.guild.get_channel_or_thread = lambda channel_id: NS(name="general") if channel_id == 8 else None
+    ctx.guild.get_role = lambda role_id: NS(name="Friends") if role_id == 9 else None
+    assert display_mentions(ctx, "<@7> <@!7> <#8> <@&9>") == "@Haru @Haru #general @Friends"
+    assert display_mentions(ctx, "<@42>") == "@Ayaya"
+    assert display_mentions(ctx, "<@999> <#999>") == "@unknown-user #unknown-channel"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("interaction", [None, object()])
+async def test_reddit_resolves_mentions_in_post_and_custom_comment(interaction):
+    ctx = context(interaction)
+    ctx.guild.get_channel_or_thread = lambda _: NS(name="general")
+    cog = FunCog(NS(user=ctx.author))
+    cog._card_avatar = AsyncMock(return_value=b"")
+    with patch("bot.services.reddit_card.render_reddit", return_value=b"png") as render:
+        await FunCog.reddit.callback(cog, ctx, post="<@42> is the best", comment="Meet in <#9>")
+    args = render.call_args.args
+    assert args[2] == "@Ayaya is the best"
+    assert args[3] == "Meet in #general"
+    assert "<@42>" not in ctx._meyaya_result_summary
 
 
 def context(interaction=None):

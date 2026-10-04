@@ -20,6 +20,7 @@ from bot.prompts.composer import build_system_instruction
 from bot.utils.embeds import meyaya_embed, score_bar
 from bot.utils.image_work import image_work, BoundedImageGate
 from bot.utils.command_context import remember_command_result
+from bot.utils.display_mentions import display_mentions
 
 logger = logging.getLogger(__name__)
 
@@ -157,12 +158,12 @@ class FunCog(commands.Cog):
         # Written commands use a pipe; slash commands have a separate field.
         if comment is None and "|" in post:
             post, comment = post.split("|", 1)
-        post = self._clean_input(post)
+        post = self._clean_input(display_mentions(ctx, post))
         if not post:
             await ctx.send("Give me a post first: `uwu reddit your post here`.")
             return
         custom = comment is not None
-        comment = " ".join((comment or "").split())[:240]
+        comment = " ".join(display_mentions(ctx, comment or "").split())[:240]
         await ctx.defer()
         async with self.reddit_slots:
             if not custom:
@@ -180,7 +181,7 @@ class FunCog(commands.Cog):
                 self._card_avatar(ctx.author),
                 self._card_avatar(getattr(self.bot, "user", None)) if not custom or comment else asyncio.sleep(0, result=b""),
             )
-            comment = comment[:240]
+            comment = display_mentions(ctx, comment)[:240]
             votes, replies = RNG.randint(10, 9900), RNG.randint(1, 1900)
             from bot.services.reddit_card import render_reddit
             png = await image_work(

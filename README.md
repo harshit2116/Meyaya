@@ -65,15 +65,19 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
 - Reddit-style mock posts: `uwu reddit <post>` or `/reddit post:<text>`.
   Uses the server name, requesting member's username/avatar and a short Gemini comment
   from Meyaya. `uwu reddit <post> | <comment>` (or the slash `comment` field) bypasses AI.
+  User, channel and role mentions in posts/comments render as readable cached names,
+  not raw Discord markup. Unresolved references use neutral unknown labels.
   If AI is unavailable, the card is sent without a comment. `rate` is entirely local.
 - Duck animation: `uwu duck [@member]` or `/duck`. Defaults to the requester;
   overlays the member's avatar and name on the bundled duck-ejection GIF without AI.
-  Rendering uses the shared image worker, 47 sampled frames preserving the full
+  Rendering uses the shared image worker, all 94 source frames preserving the full
   timeline, a bounded queue and a 10-second member cooldown. Template and source note:
   `bot/assets/duck/`; renderer: `bot/services/duck_card.py`.
 - Reddit and duck share ship's bounded CDN avatar downloader/cache. Failed downloads
   retry on the next call and emit `party_avatar_unavailable` without leaking URLs.
-  Both use the existing loading indicator after 0.5 seconds, removed on completion.
+  All prefix, hybrid and standalone slash commands use the shared loading indicator
+  after 0.5 seconds if still running; fast results skip it. Cleanup follows delivery.
+  AI conversation listeners do not display this indicator.
 - Consent-based marriage, vows, anniversaries, and confirmed divorce
 - Anonymous multiplayer games judged by Gemini
 - Entertainment-only court cases with registered witnesses, fair follow-ups, and explained verdicts
