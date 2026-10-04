@@ -72,6 +72,13 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
   Three illustrated locations with matching harmless incidents, avatar, timestamp
   and evidence/status labels. Supersampled local PNG rendering, no Gemini requests,
   shared avatar cache/worker, bounded queue and a 10-second member cooldown.
+- Avatar sliding puzzle: `uwu scramble [@member]` or `/scramble`. Defaults to yourself.
+  Click highlighted numbered tiles to move them into the blank; match the reference
+  picture and the numbered order. Only the requester controls the board. Includes
+  a move counter, elapsed time on each update, full-picture victory/reveal, and a
+  fixed five-minute deadline. One active puzzle per user, at most 20 globally;
+  sessions are temporary and end on restart. No Gemini calls. Implementation:
+  `bot/services/scramble.py` and `bot/views/scramble.py`.
 - Duck animation: `uwu duck [@member]` or `/duck`. Defaults to the requester;
   overlays the member's avatar and name on the bundled duck-ejection GIF without AI.
   Rendering uses the shared image worker, all 94 source frames preserving the full
@@ -84,6 +91,18 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
   AI conversation listeners do not display this indicator.
 - Consent-based marriage, vows, anniversaries, and confirmed divorce
 - Anonymous multiplayer games judged by Gemini
+- Local single-player games: `/escape`, `/detective`, and `/personalitytest`
+  (also available with `uwu`). Escape has three five-scene adventures, branching
+  routes, inventory-gated choices and an eight-minute in-game resource. Detective
+  has four cases with four selectable evidence leads, shuffled fictional suspects,
+  and an accusation stage after at least two leads. Personality Test draws six
+  of twelve questions, shuffles answers, and shows the three-trait mix including
+  blended results on ties. Games have owner-only controls, an End game button,
+  and replay in the same message. Idle games and replay buttons expire after three
+  minutes. One active solo run per user/server, up to 64 active runs and 128 retained
+  views per process. Sessions end on restart; no database or Gemini calls.
+  Content: `bot/data/solo_games.py`; rules: `bot/services/solo_games.py`;
+  Discord controls: `bot/cogs/solo_games.py`.
 - Entertainment-only court cases with registered witnesses, fair follow-ups, and explained verdicts
 - Google-grounded fact checks for one message or a selected argument range
 - Reply-aware Gemini chat with personal memory and server lore

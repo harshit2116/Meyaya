@@ -106,7 +106,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
         "facepalm",
         "cry",
     ),
-    "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "caught", "mostlikely", "8ball", "warninglabel"),
+    "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "caught", "scramble", "mostlikely", "8ball", "warninglabel"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
     "Fantasy / Profile": ("summon", "guardian"),
@@ -222,19 +222,19 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "escape",
         "escape",
-        "Find a way out through a short branching adventure.",
+        "Escape through branching routes, collect useful items, and manage the clock.",
         "Single Player Games",
     ),
     HelpCommand(
         "detective",
         "detective",
-        "Study the clues, question three suspects, and name the culprit.",
+        "Choose which leads to investigate, compare alibis, and accuse a suspect.",
         "Single Player Games",
     ),
     HelpCommand(
         "personalitytest",
         "personalitytest",
-        "Answer six chaotic questions and discover your personality type.",
+        "Answer six questions to discover your personality mix and what shaped it.",
         "Single Player Games",
     ),
     HelpCommand(
@@ -375,6 +375,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
     ),
     HelpCommand("duck", "duck [@member]", "Send your avatar, or a member's, into the depths with an animated duck card.", "Fun and Scores"),
     HelpCommand("caught", "caught [@member]", "Create a fictional CCTV incident card starring you or a member, complete with evidence and an escape status.", "Fun and Scores"),
+    HelpCommand("scramble", "scramble [@member]", "Rebuild a member's avatar in a clickable sliding puzzle before time runs out.", "Fun and Scores"),
     HelpCommand(
         "bestiescore",
         "bestiescore <member> [other]",

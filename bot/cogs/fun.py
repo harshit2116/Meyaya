@@ -56,7 +56,61 @@ class FunCog(commands.Cog):
         self.reddit_slots = BoundedImageGate(capacity=4, concurrency=2)
         self.duck_slots = BoundedImageGate(capacity=3)
         self.caught_slots = BoundedImageGate(capacity=3)
+        self.scramble_slots = BoundedImageGate(capacity=3)
+        self.scramble_players = set()
+        self.scramble_views = set()
         self._standalone_avatar_loader = None
+
+    async def cog_unload(self):
+        for view in tuple(self.scramble_views):
+            view.finish()
+
+
+    @commands.hybrid_command(name="scramble", description="Solve a sliding puzzle made from a member's avatar.")
+    @app_commands.describe(member="Whose avatar to solve; defaults to yours")
+    @commands.guild_only()
+    @commands.cooldown(1, 10, commands.BucketType.member)
+    async def scramble(self, ctx: commands.Context, member: discord.Member | None = None) -> None:
+        from bot.services.scramble import prepare_avatar
+        from bot.views.scramble import ScrambleView
+
+        player = ctx.author.id
+        if player in self.scramble_players:
+            await ctx.send("Finish or give up your current puzzle before starting another.")
+            return
+        if len(self.scramble_players) >= 20:
+            await ctx.send("All puzzle tables are occupied. Please try again shortly.")
+            return
+        self.scramble_players.add(player)
+        view = None
+        try:
+            await ctx.defer()
+            target = member or ctx.author
+            async with self.scramble_slots:
+                data = await self._card_avatar(target, size=512)
+                try:
+                    avatar = await image_work(prepare_avatar, data)
+                except (ValueError, OSError):
+                    await ctx.send("I couldn't load that avatar. Please try again shortly.")
+                    return
+                def release():
+                    self.scramble_players.discard(player)
+                    self.scramble_views.discard(view)
+                view = ScrambleView(player, target.display_name, avatar, release)
+                self.scramble_views.add(view)
+                file = await view.picture()
+            remember_command_result(ctx, target_id=target.id, target_name=target.display_name,
+                                    method="Interactive avatar sliding puzzle; only its starting player can move tiles.")
+            view.message = await ctx.send(embed=view.embed(), file=file, view=view,
+                                          allowed_mentions=discord.AllowedMentions.none())
+            view.start_clock()
+        except BaseException:
+            if view:
+                view.finish()
+            raise
+        finally:
+            if view is None:
+                self.scramble_players.discard(player)
 
     @commands.hybrid_command(
         name="mostlikely",
@@ -200,11 +254,11 @@ class FunCog(commands.Cog):
         await ctx.send(file=discord.File(BytesIO(png), filename="reddit.png"),
                        allowed_mentions=discord.AllowedMentions.none())
 
-    async def _card_avatar(self, member) -> bytes:
+    async def _card_avatar(self, member, *, size=128) -> bytes:
         if member is None:
             return b""
         try:
-            asset = member.display_avatar.with_size(128).with_format("png")
+            asset = member.display_avatar.with_size(size).with_format("png")
             get_cog = getattr(self.bot, "get_cog", None)
             ship = get_cog("ShipCog") if get_cog else None
             if ship is not None:
