@@ -73,4 +73,4 @@ disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests", "test_reddit_command.py", "test_duck_command.py", "test_chat_command_reply.py", "test_chat_batching.py"]
+testpaths = ["tests", "test_reddit_command.py", "test_duck_command.py", "test_chat_command_reply.py", "test_chat_batching.py", "test_conversation_identity.py", "test_chat_quiet.py"]

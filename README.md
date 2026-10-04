@@ -93,6 +93,25 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
 - Entertainment-only court cases with registered witnesses, fair follow-ups, and explained verdicts
 - Google-grounded fact checks for one message or a selected argument range
 - Reply-aware Gemini chat with personal memory and server lore
+  - Reply context reuses Discord's message cache before fetching over HTTP. Mention-
+    prefixed commands and explicit courtesy closings exit before reply resolution,
+    avoiding unnecessary network calls and duplicate command-context parsing.
+  - Pure closings such as "thanks" or "goodnight" do not trigger another AI reply.
+    Questions, corrections and attachments are preserved. Ambiguous acknowledgements
+    such as "okay" still reach the model when they might answer an offer/question.
+    Chat can return `NO_REPLY` without sending a message or executing hidden directives.
+  - Recall answers use only the available facts, history and quoted results. Missing
+    context prompts an honest request for a reminder, not an invented memory or an
+    unsupported outage claim. Actual AI-generation failures receive a separate
+    service-unavailable message with an error ID.
+  - Conversation context separates the speaker, referenced members, quoted author,
+    command invoker, and card target by Discord ID. Explicit mentions and bounded
+    cached-name matches help resolve references; duplicate or unknown names prompt
+    clarification rather than an invented identity. No member-list API fetch is needed.
+  - Newer conversational corrections supersede earlier interpretations of the topic
+    or intended person. Speaker-labelled prompts remain in short-term history, so
+    corrections carry into later turns. They do not change verified family identity,
+    historical card results, or grant permission to edit permanent memories.
   - Public image cards retain the actual scores, selected members, card fields, and Reddit
     post/comment text. Replies use the summary attached to that specific result.
     Summaries are process-local, capped at 512 messages / 2,000 characters each, and expire

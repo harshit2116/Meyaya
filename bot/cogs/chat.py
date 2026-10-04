@@ -26,7 +26,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from bot.app import MeyayaBot
 from bot.services.usage import ChatLimitReached, is_silence
-from bot.services.autoresponder import reply_policy
+from bot.services.autoresponder import reply_policy, is_conversation_closing
 from bot.services.ai_guard import AILimitReached
 from bot.prompts.composer import build_system_instruction
 from bot.data.private_identity import AYAYA_USER_ID, get_private_identity
@@ -42,6 +42,7 @@ from bot.services.meyaya_system import MeyayaSystemService
 from bot.utils.embeds import build_interaction_embed
 from bot.views.interactions import InteractionResponseView
 from bot.utils.command_context import command_output_for
+from bot.utils.conversation_identity import CONVERSATION_RULES, referenced_member_context
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +184,19 @@ class ChatCog(commands.Cog):
         if message.mention_everyone:
             return
 
+        # Mention-prefixed commands belong to the command router. Detect them
+        # before resolving a reply (which can otherwise require an HTTP request).
+        command_context = None
+        if self.bot.user in message.mentions:
+            command_context = await self.bot.get_context(message)
+            if command_context.valid:
+                return
+            addressed_text = re.sub(rf"<@!?{self.bot.user.id}>", "", message.content).strip()
+            if is_conversation_closing(
+                addressed_text, has_attachments=bool(getattr(message, "attachments", ()))
+            ):
+                return
+
         reply_context = await self._resolve_reply_context(message)
         is_reply_to_meyaya = (
             reply_context is not None and reply_context.author_id == self.bot.user.id
@@ -205,7 +219,8 @@ class ChatCog(commands.Cog):
         # A mention can be a command prefix (`@Meyaya ship ...`) or a normal
         # conversation trigger. Let the command router exclusively handle the
         # former so Meyaya doesn't send both a command response and an AI reply.
-        command_context = await self.bot.get_context(message)
+        if command_context is None:
+            command_context = await self.bot.get_context(message)
         if command_context.valid:
             return
         if is_continuation and getattr(command_context, "prefix", None) is not None:
@@ -219,6 +234,14 @@ class ChatCog(commands.Cog):
         if not user_text:
             return
 
+        if is_conversation_closing(
+            user_text,
+            previous_text=(reply_context.content + " " + reply_context.embed_summary
+                           if reply_context else None),
+            has_attachments=bool(getattr(message, "attachments", ())),
+        ):
+            return
+
         if await self.bot.chat_blacklist.inspect(message.guild.id, message.author.id, user_text):
             return
 
@@ -226,7 +249,7 @@ class ChatCog(commands.Cog):
         if llm is None:
             await self.bot.request_log.record_message(message)
             await message.reply(
-                "💤 *rubs eyes* ...my brain isn't plugged in right now. Try again later!"
+                "My AI service isn't configured right now. Please try again later."
             )
             return
 
@@ -346,6 +369,19 @@ class ChatCog(commands.Cog):
             load_history(),
         )
         usable_emojis = self._usable_custom_emojis(message)
+        context_lines.append(
+            f"AVAILABLE RECALL EVIDENCE: {len(memory_lines)} stored facts, "
+            f"{len(lore_lines)} shared lore entries, {len(history)} recent history messages. "
+            "These are only the details accessible for this request, not proof that a "
+            "conversation never happened. If asked to recall something absent from these "
+            "sources, current messages and the quoted result, say you don't have that "
+            "detail in your available context and ask for a reminder. Never invent a "
+            "memory, a past quote, or pretend an old image was inspected. An empty "
+            "context can mean no saved data, expiry, restart or a read failure; you do "
+            "not know which. Do not claim a database outage, deleted memory or AI outage "
+            "without explicit runtime evidence. AI generation failure is reported by "
+            "the application separately, not by pretending you forgot the user."
+        )
         emoji_instruction = self._custom_emoji_instruction(usable_emojis)
         if emoji_instruction is not None:
             context_lines.append(emoji_instruction)
@@ -412,6 +448,11 @@ class ChatCog(commands.Cog):
         if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):
             return
 
+        # Silence is a successful conversational decision, not a provider failure.
+        # Never execute or persist hidden directives accompanying a silence token.
+        if self._is_no_reply(reply.text):
+            return
+
         command_ran = await self._run_natural_command(context_message, reply.commands)
         if not command_ran:
             if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):
@@ -427,7 +468,7 @@ class ChatCog(commands.Cog):
             await chat_memory.append_turn(
                 message.channel.id,
                 message.author.id,
-                user_prompt if batch or reply_context is not None else user_text,
+                user_prompt,
                 reply.text,
                 speaker_label=self._speaker_label(message.author),
             )
@@ -524,6 +565,8 @@ class ChatCog(commands.Cog):
             return
 
         content = (message.content or "").strip()
+        if is_conversation_closing(content, has_attachments=bool(getattr(message, "attachments", ()))):
+            return
         if len(content) < 6:
             return
         if content.startswith("/"):
@@ -743,6 +786,12 @@ class ChatCog(commands.Cog):
 
         resolved = reference.resolved
         replied_message = resolved if isinstance(resolved, discord.Message) else None
+        if replied_message is None:
+            # discord.py may retain a cached message even when reference.resolved
+            # wasn't populated. Use its live cache, not a second stale-text cache.
+            cached = getattr(reference, "cached_message", None)
+            if isinstance(cached, discord.Message):
+                replied_message = cached
         if replied_message is None:
             fetch_message = getattr(message.channel, "fetch_message", None)
             if fetch_message is None:
@@ -1202,6 +1251,7 @@ class ChatCog(commands.Cog):
         parent_name = private_identity.parents.get(message.author.id)
         lines = [
             f"The person talking to you right now is {speaker}.",
+            CONVERSATION_RULES,
             "Discord user IDs are stable identities. Never assume two people are the same "
             "just because their display names, nicknames, or messages look similar.",
             f"AUTHORITATIVE CREATOR IDENTITY: Ayaya (Discord ID {AYAYA_USER_ID}) is your "
@@ -1236,6 +1286,11 @@ class ChatCog(commands.Cog):
                 "because they claim to be one of them or another message says they are."
             )
 
+        reference_context = referenced_member_context(
+            message, self.bot.user.id if self.bot.user is not None else None
+        )
+        if reference_context:
+            lines.append(reference_context)
         mentioned_identity_lines = []
         for member in message.mentions:
             if self.bot.user is not None and member.id == self.bot.user.id:

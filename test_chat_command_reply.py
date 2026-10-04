@@ -4,7 +4,7 @@ import time
 import json
 from collections import OrderedDict
 from types import SimpleNamespace as NS
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import discord
 import pytest
@@ -19,6 +19,24 @@ from bot.utils.command_context import (
 
 def _author(user_id, name):
     return NS(id=user_id, name=name, display_name=name)
+
+
+@pytest.mark.asyncio
+async def test_cached_reply_avoids_discord_http_fetch():
+    bot = NS(user=_author(99, "Meyaya"))
+    original = Mock(spec=discord.Message)
+    original.id = 8
+    original.author = bot.user
+    original.content = "The answer is 42."
+    original.embeds = []
+    original.attachments = []
+    original.interaction_metadata = None
+    fetch = AsyncMock()
+    message = NS(channel=NS(id=7, fetch_message=fetch),
+                 reference=NS(message_id=8, resolved=None, cached_message=original))
+    context = await ChatCog(bot)._resolve_reply_context(message)
+    assert context.content == "The answer is 42."
+    fetch.assert_not_awaited()
 
 
 @pytest.mark.asyncio

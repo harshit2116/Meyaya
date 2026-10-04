@@ -50,6 +50,30 @@ def prepare_cog(bot):
 
 
 @pytest.mark.asyncio
+async def test_mention_command_skips_reply_resolution_and_chat():
+    bot = make_bot()
+    bot.get_context = AsyncMock(return_value=NS(valid=True, prefix="<@99> "))
+    cog = prepare_cog(bot)
+    message = make_message(bot, 1, "duck")
+    message.reference = NS(message_id=50)
+    await cog.on_message(message)
+    cog._resolve_reply_context.assert_not_awaited()
+    cog._respond_to_message.assert_not_awaited()
+    bot.get_context.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_explicit_thanks_skips_reply_resolution():
+    bot = make_bot()
+    cog = prepare_cog(bot)
+    message = make_message(bot, 1, "thanks!")
+    message.reference = NS(message_id=50)
+    await cog.on_message(message)
+    cog._resolve_reply_context.assert_not_awaited()
+    cog._respond_to_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_three_fast_messages_make_one_turn_including_unmentioned_followups():
     bot = make_bot()
     cog = prepare_cog(bot)

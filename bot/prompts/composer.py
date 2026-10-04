@@ -77,6 +77,14 @@ def build_system_instruction(
         + PROFILE_RULES[profile]
     )
     if profile == "chat":
+        sections.append(
+            "CONVERSATION ENDINGS: You may return exactly NO_REPLY when the entire "
+            "current turn merely acknowledges or ends the conversation and needs no "
+            "response. In that case emit no other text or hidden directives. Do not "
+            "stay silent for a question, correction, meaningful disclosure, attachment, "
+            "or an answer to your own question/offer. If a batch includes a substantive "
+            "request followed by 'thanks' or 'okay', answer the request."
+        )
         for rule in ("memory", "lore", "tools"):
             sections.append(f"{rule.upper()} RULES:\n{load_rule(rule)}")
         sections.append(RELATIONSHIP_RULES)
