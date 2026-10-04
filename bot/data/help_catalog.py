@@ -21,7 +21,7 @@ class HelpCommand:
 CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "Social": "Roasts, compliments, rankings, and impressions.",
     "Fortune / Tarot": "Fortunes, tarot readings, and fate cards.",
-    "Fantasy / Profile": "Character summons and spirit guardians.",
+    "Fantasy / Profile": "Permanent awakened identities, character summons and spirit guardians.",
     "Single Player Games": "Short adventures, mysteries, and personality quizzes.",
     "Essentials": "The best place to start with Meyaya.",
     "Profile Studio": "Review a profile or turn its style into a card.",
@@ -109,7 +109,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
     "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "caught", "scramble", "mostlikely", "8ball", "warninglabel"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
-    "Fantasy / Profile": ("summon", "guardian"),
+    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile"),
     "Relationships": ("marry", "marriage", "renewvows", "divorce"),
     "Single Player Games": ("escape", "detective", "personalitytest"),
     "Multiplayer Games": ("showdown", "survive", "excuse", "endgame"),
@@ -211,6 +211,14 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "guardian",
         "guardian [member]",
         "Reveal a member's spirit guardian, blessing, and weakness.",
+        "Fantasy / Profile",
+    ),
+    HelpCommand(
+        "awaken", "awaken", "Reveal the permanent fantasy identity hidden within you.",
+        "Fantasy / Profile",
+    ),
+    HelpCommand(
+        "fantasyprofile", "fantasyprofile [member]", "View an awakened fantasy character.",
         "Fantasy / Profile",
     ),
     HelpCommand(

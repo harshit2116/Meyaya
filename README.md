@@ -4,6 +4,18 @@ Meyaya is a Discord character bot built with Python. She supports social reactio
 profiles, marriage, multiplayer games, court cases, Gemini chat and memory, English-only monitoring,
 and live voice conversations.
 
+## Permanent fantasy awakenings
+
+`/awaken` (or `uwu awaken`) opens a confirmation ritual and reveals a permanent,
+global fantasy identity. `/fantasyprofile [member]` opens its Soul Interface:
+Character, Weapon, Abilities and Details. These commands use local generation and
+Pillow rendering, not Gemini quota. Existing `/summon` and `/guardian` are unchanged.
+
+Before enabling this version, run `alembic upgrade head` from the bot's configured
+environment. Migration `0029_fantasy_profiles` adds the identity table; do not reset
+or delete its rows to fix an image problem. See [FANTASY_GUIDE.md](FANTASY_GUIDE.md)
+for architecture, balance rules, failure handling and verification instructions.
+
 ## Deferred remote-dashboard integration
 
 The optional remote-dashboard connection is currently inactive.
