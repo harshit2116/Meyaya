@@ -68,6 +68,10 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
   User, channel and role mentions in posts/comments render as readable cached names,
   not raw Discord markup. Unresolved references use neutral unknown labels.
   If AI is unavailable, the card is sent without a comment. `rate` is entirely local.
+- Caught CCTV card: `uwu caught [@member]` or `/caught`. Defaults to yourself.
+  Three illustrated locations with matching harmless incidents, avatar, timestamp
+  and evidence/status labels. Supersampled local PNG rendering, no Gemini requests,
+  shared avatar cache/worker, bounded queue and a 10-second member cooldown.
 - Duck animation: `uwu duck [@member]` or `/duck`. Defaults to the requester;
   overlays the member's avatar and name on the bundled duck-ejection GIF without AI.
   Rendering uses the shared image worker, all 94 source frames preserving the full

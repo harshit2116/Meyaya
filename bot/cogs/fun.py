@@ -55,6 +55,7 @@ class FunCog(commands.Cog):
         self.bot = bot
         self.reddit_slots = BoundedImageGate(capacity=4, concurrency=2)
         self.duck_slots = BoundedImageGate(capacity=3)
+        self.caught_slots = BoundedImageGate(capacity=3)
         self._standalone_avatar_loader = None
 
     @commands.hybrid_command(
@@ -249,6 +250,28 @@ class FunCog(commands.Cog):
             method="The requested member, or the invoker by default, is placed in a playful animation.",
         )
         await ctx.send(embed=embed, file=discord.File(BytesIO(gif), filename="duck.gif"),
+                       allowed_mentions=discord.AllowedMentions.none())
+
+    @commands.hybrid_command(name="caught", description="Catch a member in a fictional CCTV snack crime.")
+    @app_commands.describe(member="Member to catch; defaults to yourself")
+    @commands.guild_only()
+    @commands.cooldown(1, 10, commands.BucketType.member)
+    async def caught(self, ctx: commands.Context, member: discord.Member | None = None) -> None:
+        from bot.services.caught_card import choose_incident, render_caught
+        target = member or ctx.author
+        await ctx.defer()
+        case = choose_incident()
+        timestamp = discord.utils.utcnow()
+        async with self.caught_slots:
+            avatar = await self._card_avatar(target)
+            png = await image_work(render_caught, target.display_name, avatar, case, timestamp)
+        remember_command_result(
+            ctx, target_id=target.id, target_name=target.display_name,
+            location=case.location, incident=case.incident, evidence=case.evidence,
+            status=case.status, timestamp=timestamp.isoformat(),
+            method="Random harmless fictional CCTV incident, not a real accusation or personal fact.",
+        )
+        await ctx.send(file=discord.File(BytesIO(png), filename="caught.png"),
                        allowed_mentions=discord.AllowedMentions.none())
 
     @commands.hybrid_command(
