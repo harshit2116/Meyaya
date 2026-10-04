@@ -47,6 +47,8 @@ class Settings(BaseSettings):
         "gemini-2.5-flash": {"rpm": 5, "rpd": 20},
     }, alias="GEMINI_MODEL_LIMITS")
     ai_user_cooldown_seconds: int = Field(default=5, ge=0, le=300, alias="AI_USER_COOLDOWN_SECONDS")
+    chat_batch_delay_seconds: float = Field(default=0.75, ge=0, le=2, alias="CHAT_BATCH_DELAY_SECONDS")
+    chat_batch_max_wait_seconds: float = Field(default=2, ge=0, le=5, alias="CHAT_BATCH_MAX_WAIT_SECONDS")
     ai_max_input_chars: int = Field(default=32000, ge=1000, le=100000, alias="AI_MAX_INPUT_CHARS")
     ai_max_output_tokens: int = Field(default=2048, ge=100, le=8192, alias="AI_MAX_OUTPUT_TOKENS")
     voice_max_sessions: int = Field(default=1, ge=1, le=5, alias="VOICE_MAX_SESSIONS")

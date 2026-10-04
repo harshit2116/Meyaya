@@ -63,6 +63,7 @@ node_modules/
 /.agents/
 /skills-lock.json
 /archive/
+/feature_archive/
 
 
 /docs/

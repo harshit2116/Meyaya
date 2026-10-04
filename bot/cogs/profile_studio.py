@@ -21,9 +21,33 @@ from bot.services.profile_cards import (
     callingcard_card,
     duostyle_card,
     palette_card,
+    aura_details,
+    duostyle_feedback,
+    duostyle_reason,
+    profilecheck_feedback,
 )
+from bot.services.profile_aesthetic import profile_affinity, profile_class, style_compatibility
+from bot.services.profile_scoring import CATEGORIES, category_available, profilecheck_points
+from bot.utils.command_context import remember_command_result
 from bot.services.profiles import ProfileService
 from bot.services.profilecheck_render import ProfileCheckRenderer
+
+
+def profile_review_result(visual):
+    """Summarize the finalized scores shown on the card, including unavailable categories."""
+    grade, criticism, advice = profilecheck_feedback(visual)
+    return {
+        "target_id": visual.user_id, "name": visual.name, "overall": visual.overall_score,
+        "scores_out_of_100": {
+            key: getattr(visual, field) if category_available(visual, field) else None
+            for key, field, _ in CATEGORIES
+        },
+        "internal_weights": {name: weight for _, name, weight, _ in profilecheck_points(visual)},
+        "grade": grade, "criticism": criticism, "advice": advice,
+        "palette": visual.palette, "banner_color": visual.accent_color,
+        "has_banner_image": visual.has_banner, "has_avatar_decoration": visual.has_decoration,
+        "method": "Subjective local visual heuristics; missing comparison categories stay empty.",
+    }
 
 
 class ProfileStudioCog(commands.Cog):
@@ -78,22 +102,16 @@ class ProfileStudioCog(commands.Cog):
         inspected = monotonic()
         visual, rendered, extension = await self._profile_renderer.render(visual)
         prepared = monotonic()
+        review = profile_review_result(visual)
+        remember_command_result(ctx, **review)
         await ctx.send(file=discord.File(BytesIO(rendered), filename=f"meyaya-profile-check.{extension}"),
                        allowed_mentions=discord.AllowedMentions.none())
         logging.getLogger(__name__).log(
             logging.INFO if monotonic() - started >= 2 else logging.DEBUG,
             "profilecheck inspect_ms=%.1f prepare_ms=%.1f upload_ms=%.1f",
             (inspected-started)*1000, (prepared-inspected)*1000, (monotonic()-prepared)*1000)
-        from bot.services.profile_cards import profilecheck_feedback
         key = (ctx.guild.id, ctx.channel.id, ctx.author.id)
-        self._reviews[key] = (monotonic(), {
-            "target_id": target.id, "name": target.display_name, "overall": visual.overall_score,
-            "avatar": visual.avatar_score, "cohesion": visual.styling_score,
-            "color_harmony": visual.harmony_score, "visual_detail": visual.originality_score,
-            "palette": visual.palette, "banner_color": visual.accent_color,
-            "has_banner_image": visual.has_banner, "has_avatar_decoration": visual.has_decoration,
-            "advice": profilecheck_feedback(visual)[2],
-        })
+        self._reviews[key] = (monotonic(), review)
         self._reviews.move_to_end(key)
         while len(self._reviews) > 128:
             self._reviews.popitem(last=False)
@@ -112,7 +130,13 @@ class ProfileStudioCog(commands.Cog):
             return
         visual = await self.aesthetics.inspect(target)
         rendered = await image_work(aura_card, visual)
-        await self._send_card(ctx, rendered, "meyaya-aura.png")
+        title, _, energy, traits = aura_details(visual)
+        await self._send_card(ctx, rendered, "meyaya-aura.png", result={
+            "target_id": target.id, "name": visual.name, "archetype": title,
+            "essence": energy, "signature": traits, "affinity": profile_affinity(visual),
+            "class": profile_class(visual), "palette": visual.palette,
+            "method": "Playful fantasy language derived from the visible profile palette.",
+        })
 
     @commands.hybrid_command(
         name="palette", description="Build a palette from a member's profile colors."
@@ -130,7 +154,10 @@ class ProfileStudioCog(commands.Cog):
             return
         visual = await self.aesthetics.inspect(target)
         rendered = await image_work(palette_card, visual)
-        await self._send_card(ctx, rendered, "meyaya-profile-palette.png")
+        await self._send_card(ctx, rendered, "meyaya-profile-palette.png", result={
+            "target_id": target.id, "name": visual.name, "palette": visual.palette,
+            "method": "Colors sampled from API-visible profile assets.",
+        })
 
     @commands.hybrid_command(
         name="duostyle",
@@ -157,7 +184,16 @@ class ProfileStudioCog(commands.Cog):
             self.aesthetics.inspect(second),
         )
         rendered = await image_work(duostyle_card, left, right)
-        await self._send_card(ctx, rendered, "meyaya-duo-style.png")
+        compatibility = style_compatibility(left, right)
+        await self._send_card(ctx, rendered, "meyaya-duo-style.png", result={
+            "first_id": first.id, "first_name": left.name,
+            "second_id": second.id, "second_name": right.name,
+            "style_sync": compatibility,
+            "verdict": duostyle_feedback(left, right, compatibility),
+            "reason": duostyle_reason(left, right),
+            "first_palette": left.palette, "second_palette": right.palette,
+            "method": "Local comparison of profile palettes and styling; not a relationship assessment.",
+        })
 
     @commands.hybrid_command(
         name="callingcard",
@@ -184,10 +220,16 @@ class ProfileStudioCog(commands.Cog):
             relationship=summary.meyaya.relationship,
             titles=summary.titles,
         )
-        await self._send_card(ctx, rendered, "meyaya-calling-card.png")
+        await self._send_card(ctx, rendered, "meyaya-calling-card.png", result={
+            "target_id": target.id, "name": visual.name, "nickname": summary.meyaya.nickname,
+            "bond": summary.meyaya.relationship, "titles": summary.titles,
+            "palette": visual.palette,
+        })
 
     @staticmethod
-    async def _send_card(ctx: commands.Context, image: bytes, filename: str) -> None:
+    async def _send_card(ctx: commands.Context, image: bytes, filename: str, *, result=None) -> None:
+        if result is not None:
+            remember_command_result(ctx, **result)
         await ctx.send(
             file=discord.File(BytesIO(image), filename=filename),
             allowed_mentions=discord.AllowedMentions.none(),

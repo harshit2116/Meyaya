@@ -21,6 +21,7 @@ from bot.app import MeyayaBot
 from bot.services.ship import ShipService
 from bot.services.ship_card import render_ship_card, valid_avatar
 from bot.utils.embeds import build_ship_embed
+from bot.utils.command_context import remember_command_result
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +63,10 @@ class ShipCog(commands.Cog):
     ) -> None:
         if ctx.interaction is not None:
             await ctx.defer()
-            embed, file = await self._build_ship_response(user_one, user_two)
+            embed, file = await self._build_ship_response(user_one, user_two, ctx=ctx)
         else:
             async with background_typing(ctx.channel):
-                embed, file = await self._build_ship_response(user_one, user_two)
+                embed, file = await self._build_ship_response(user_one, user_two, ctx=ctx)
         if file is None:
             await ctx.send(embed=embed)
         else:
@@ -75,6 +76,8 @@ class ShipCog(commands.Cog):
         self,
         user_one: discord.Member,
         user_two: discord.Member,
+        *,
+        ctx: commands.Context | None = None,
     ) -> tuple[discord.Embed, discord.File | None]:
         result = self.service.ship(user_one.id, user_two.id)
         image_bytes: bytes | None = None
@@ -101,6 +104,13 @@ class ShipCog(commands.Cog):
             label=result.label,
             attachment_filename=FILENAME if file is not None else None,
         )
+        if ctx is not None:
+            remember_command_result(
+                ctx, first_id=user_one.id, first_name=user_one.display_name,
+                second_id=user_two.id, second_name=user_two.display_name,
+                score=result.percentage, verdict=result.label,
+                method="Fresh random fun score; self-love scores 100. Not a real romantic assessment.",
+            )
         return embed, file
 
     async def _get_ship_card(

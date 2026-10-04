@@ -19,6 +19,7 @@ from bot.app import MeyayaBot
 from bot.prompts.composer import build_system_instruction
 from bot.utils.embeds import meyaya_embed, score_bar
 from bot.utils.image_work import image_work, BoundedImageGate
+from bot.utils.command_context import remember_command_result
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,12 @@ class FunCog(commands.Cog):
         embed.set_image(url="attachment://mostlikely.png")
         if winner is not None:
             embed.set_thumbnail(url=str(winner.display_avatar.url))
+        remember_command_result(
+            ctx, selected_member_id=winner_id,
+            selected_member_name=getattr(winner, "display_name", None), scenario=scenario,
+            eligible_members=len(eligible),
+            method="Random choice among eligible human members; a playful result, not a personal assessment.",
+        )
         await ctx.send(embed=embed, file=discord.File(BytesIO(png), filename="mostlikely.png"),
                        allowed_mentions=discord.AllowedMentions.none())
 
@@ -174,12 +181,20 @@ class FunCog(commands.Cog):
                 self._card_avatar(getattr(self.bot, "user", None)) if not custom or comment else asyncio.sleep(0, result=b""),
             )
             comment = comment[:240]
+            votes, replies = RNG.randint(10, 9900), RNG.randint(1, 1900)
             from bot.services.reddit_card import render_reddit
             png = await image_work(
                 render_reddit, ctx.guild.name, ctx.author.name, post, comment,
                 author_avatar, meyaya_avatar,
-                RNG.randint(10, 9900), RNG.randint(1, 1900),
+                votes, replies,
             )
+        remember_command_result(
+            ctx, author_id=ctx.author.id, username=ctx.author.name,
+            subreddit="r/" + "-".join(ctx.guild.name.split())[:60],
+            post=post, comment=comment, comment_source="custom" if custom else "Meyaya",
+            votes=votes, replies=replies if comment else 0,
+            method="Fictional Reddit-style card; vote and reply counts are random decoration.",
+        )
         await ctx.send(file=discord.File(BytesIO(png), filename="reddit.png"),
                        allowed_mentions=discord.AllowedMentions.none())
 
@@ -226,6 +241,12 @@ class FunCog(commands.Cog):
             gif = await image_work(render_duck, target.display_name, avatar)
         embed = discord.Embed()
         embed.set_image(url="attachment://duck.gif")
+        from bot.services.duck_card import duck_message
+        remember_command_result(
+            ctx, target_id=target.id, target_name=target.display_name,
+            ending=duck_message(target.display_name),
+            method="The requested member, or the invoker by default, is placed in a playful animation.",
+        )
         await ctx.send(embed=embed, file=discord.File(BytesIO(gif), filename="duck.gif"),
                        allowed_mentions=discord.AllowedMentions.none())
 
@@ -273,6 +294,12 @@ class FunCog(commands.Cog):
             except Exception:
                 logger.exception("Failed to render bestiescore card")
             else:
+                remember_command_result(
+                    ctx, first_id=user_one.id, first_name=user_one.display_name,
+                    second_id=user_two.id, second_name=user_two.display_name,
+                    score=score, verdict=verdict,
+                    method="Stable daily fun score based on the member pair; not a real friendship assessment.",
+                )
                 await ctx.send(
                     file=discord.File(BytesIO(card), filename="bestiescore.png"),
                     allowed_mentions=discord.AllowedMentions.none(),

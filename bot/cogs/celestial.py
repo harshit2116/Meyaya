@@ -9,6 +9,7 @@ from collections import OrderedDict
 import discord
 from discord.ext import commands
 from bot.services.celestial import draw_card, render_card
+from bot.utils.command_context import remember_command_result
 
 
 class CelestialCog(commands.Cog):
@@ -29,6 +30,12 @@ class CelestialCog(commands.Cog):
         lines = [f"**{discord.utils.escape_markdown(member.display_name)} - {result.title}**"]
         lines.extend(f"**{k}:** {v}" for k, v in result.fields)
         lines.extend(f"**{p}: {title}** - {meaning}" for p, title, meaning in result.panels)
+        remember_command_result(
+            ctx, target_id=member.id, target_name=member.display_name,
+            title=result.title, day=result.day, fields=dict(result.fields),
+            panels=result.panels, question=question[:300],
+            method="Deterministic daily fantasy draw for entertainment; not a factual prediction.",
+        )
         await ctx.send(
             None if kind in {"fortune", "fate", "guardian"} else "\n".join(lines),
             file=discord.File(BytesIO(png), filename=f"{kind}.png"),

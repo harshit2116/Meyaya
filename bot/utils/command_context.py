@@ -1,6 +1,7 @@
 """Separate command work from Discord response delivery in slow-command logs."""
 
 import logging
+import json
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from discord.ext import commands
 logger = logging.getLogger(__name__)
 _MAX_COMMAND_OUTPUTS = 512
 _COMMAND_OUTPUT_TTL = 24 * 60 * 60
+MAX_RESULT_SUMMARY = 2000
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +19,16 @@ class CommandOutput:
     command: str
     invoker_id: int
     invoker_name: str
+    result_summary: str = ""
+
+
+def remember_command_result(ctx, **result) -> None:
+    """Attach bounded result data to the next public response, never to user memory."""
+    summary = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+    ctx._meyaya_result_summary = (
+        summary if len(summary) <= MAX_RESULT_SUMMARY
+        else summary[:MAX_RESULT_SUMMARY - 3] + "..."
+    )
 
 
 def command_output_for(bot, channel_id: int, message_id: int) -> CommandOutput | None:
@@ -59,12 +71,15 @@ class TimedContext(commands.Context):
                         command=command.qualified_name,
                         invoker_id=invoker.id,
                         invoker_name=invoker.display_name[:80],
+                        result_summary=getattr(self, "_meyaya_result_summary", ""),
                     ),
                 )
                 while len(outputs) > _MAX_COMMAND_OUTPUTS:
                     outputs.popitem(last=False)
             return sent
         finally:
+            # Do not accidentally attach one card's data to a later response.
+            self._meyaya_result_summary = ""
             elapsed = (time.monotonic() - started) * 1000
             add_stage('delivery_ms', elapsed)
             if elapsed >= 500:

@@ -6,8 +6,7 @@ and live voice conversations.
 
 ## Deferred remote-dashboard integration
 
-The secure laptop-to-HeavenCloud dashboard connection is archived for later in
-[feature_archive/remote-dashboard](feature_archive/remote-dashboard/README.md).
+The optional remote-dashboard connection is currently inactive.
 Its API, proxy, tunnel launcher and live-stream hooks are not active. The existing
 dashboard, Meyaya Health and error-ID features remain available.
 
@@ -94,6 +93,17 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
 - Entertainment-only court cases with registered witnesses, fair follow-ups, and explained verdicts
 - Google-grounded fact checks for one message or a selected argument range
 - Reply-aware Gemini chat with personal memory and server lore
+  - Public image cards retain the actual scores, selected members, card fields, and Reddit
+    post/comment text. Replies use the summary attached to that specific result.
+    Summaries are process-local, capped at 512 messages / 2,000 characters each, and expire
+    after 24 hours. Restarting clears them; private/ephemeral responses are excluded.
+  - Rapid messages from one member in one channel become one AI turn after 0.75 seconds
+    of quiet, with a 2-second maximum collection window. A mention or reply to Meyaya
+    starts the conversation; bare follow-ups within 2 seconds can join it. Commands,
+    other members, and messages directed at other people stay separate.
+    Messages arriving during generation wait for the previous reply and history write.
+    Pending batches are capped at 6 messages / 6,000 characters and respect existing
+    AI capacity and member cooldowns. Recent history is trimmed to the input budget.
 - Jungkook RP and Alya RP replies with separate webhook names and avatars
 - Mood, familiarity, affection, annoyance, nicknames, and natural actions
 - Profile Studio image cards for profile checks, auras, palettes, duo styles, and calling cards
@@ -131,6 +141,13 @@ Private persona, voice rules, roleplay prompts, and identity configuration belon
 which Git ignores. Roleplay also requires `Manage Webhooks` in the destination channel.
 
 ## Development Checks
+
+`CHAT_BATCH_DELAY_SECONDS` controls the quiet period (default `0.75`);
+`CHAT_BATCH_MAX_WAIT_SECONDS` caps collection time (default `2`). Set the delay to `0`
+for immediate dispatch while retaining ordered processing. For a new image command,
+call `remember_command_result(ctx, **result_data)` from `bot/utils/command_context.py`
+immediately before `ctx.send`. Supply only the public data shown on that result;
+the response cache records it after a successful send without another model request.
 
 Games now enforce explicit phases and keep submissions locked during judging retries.
 Model metrics and game transitions are saved to rotating `logs/telemetry.jsonl` files.
