@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+import logging
+from contextlib import AsyncExitStack
 
 import discord
 from discord import app_commands
@@ -20,6 +22,7 @@ from bot.utils.embeds import meyaya_embed
 from bot.utils.command_parameters import normalize_member_parameters
 from bot.services.server_setup import load_setup
 from bot.services.server_dashboard import server_overview, dashboard_embed
+from bot.services.fantasy_profile import FantasyProfileService
 from bot.views.server_setup import ServerSetupView
 
 PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9!?.$%&*+_-]{1,10}$")
@@ -31,6 +34,10 @@ async def application_owner(interaction: discord.Interaction) -> bool:
 
 def private_owner(ctx):
     return ctx.author.id == 715925710849572904
+
+
+def fantasy_reset_prefix(ctx):
+    return getattr(ctx, "interaction", None) is None and (getattr(ctx, "prefix", "") or "").strip().casefold() == "uwu"
 
 
 def normalize_prefix(value: str) -> str | None:
@@ -49,6 +56,54 @@ class AdminCog(commands.Cog):
 
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
+
+    @commands.command(name="fantasyreset", hidden=True)
+    @commands.check(private_owner)
+    @commands.check(fantasy_reset_prefix)
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def fantasyreset(self, ctx: commands.Context, member: discord.User, confirmation: str = ""):
+        # Defense in depth: no slash, mention-prefix or alternate-prefix route.
+        if not private_owner(ctx) or not fantasy_reset_prefix(ctx):
+            return
+        if confirmation != "confirm":
+            await ctx.send(f"This permanently deletes user `{member.id}`'s fantasy identity across all servers.\n"
+                           f"To confirm: `uwu fantasyreset {member.id} confirm`",
+                           allowed_mentions=discord.AllowedMentions.none())
+            return
+        cog = self.bot.get_cog("FantasyCog")
+        def affected(view):
+            if member.id in getattr(view, "participant_ids", ()):
+                return True
+            profile = getattr(view, "profile", None)
+            return getattr(profile, "user_id", None) == member.id or (
+                profile is None and view.owner == member.id)
+        views = sorted((view for view in getattr(cog, "views", ()) if affected(view)), key=lambda view: view.id)
+        try:
+            # Wait for an in-flight local confirmation/reveal before deleting;
+            # it must not silently recreate the identity after this reset.
+            async with asyncio.timeout(30), AsyncExitStack() as locks:
+                for view in views:
+                    await locks.enter_async_context(view.lock)
+                async with self.bot.db_session() as session:
+                    deleted = await FantasyProfileService(session).reset(member.id)
+                for view in tuple(getattr(cog, "views", ())):
+                    if affected(view):
+                        if view not in views:
+                            views.append(view)
+                        view.finish()
+        except (SQLAlchemyError, TimeoutError):
+            await ctx.send("I couldn't verify the reset. Check `/fantasyprofile` before trying again.")
+            return
+        for view in views:
+            if view.message:
+                try:
+                    await view.message.edit(view=view)
+                except discord.HTTPException:
+                    pass
+        logging.getLogger(__name__).info("fantasy_identity_reset actor_id=%s target_id=%s deleted=%s", ctx.author.id, member.id, deleted)
+        await ctx.send(f"Fantasy identity reset for user `{member.id}`. They can use `/awaken` again." if deleted
+                       else f"User `{member.id}` has no awakened fantasy identity.",
+                       allowed_mentions=discord.AllowedMentions.none())
 
     @commands.hybrid_command(name="serversetup", description="Set up Meyaya's chat access and moderation for this server.")
     @commands.guild_only()

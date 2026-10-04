@@ -230,6 +230,7 @@ class InteractionsCog(commands.Cog):
                 owner_id=interaction.user.id,
                 bot_mention=bot_mention,
                 command_prefix=command_prefix,
+                bot=bot,
             )
             await interaction.response.send_message(
                 embed=build_help_embed(
@@ -261,6 +262,7 @@ class InteractionsCog(commands.Cog):
                 owner_id=ctx.author.id,
                 bot_mention=bot_mention,
                 command_prefix=command_prefix,
+                bot=bot,
             )
             view.message = await ctx.send(
                 embed=build_help_embed(

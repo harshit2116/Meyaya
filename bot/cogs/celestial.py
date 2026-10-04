@@ -98,7 +98,7 @@ def make_command(name):
 CelestialCommands = type(
     "CelestialCommands",
     (CelestialCog,),
-    {name: make_command(name) for name in ("tarot", "fate", "guardian")},
+    {name: make_command(name) for name in ("tarot", "fate")},
 )
 
 

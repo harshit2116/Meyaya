@@ -409,7 +409,9 @@ class MeyayaBot(commands.Bot):
         await self.process_commands(message)
 
     async def on_interaction(self, interaction):
-        return
+        from bot.utils.game_interactions import reply_to_expired_game
+
+        await reply_to_expired_game(self, interaction)
 
     async def on_app_command_completion(self, interaction, command):
         if interaction.guild_id is not None:
@@ -497,6 +499,24 @@ class MeyayaBot(commands.Bot):
         """Log the connected bot account."""
 
         print(f"Logged in as {self.user} ({self.user.id if self.user else 'unknown'})")
+        from bot.services.bot_profile_style import apply_all_guild_name_styles
+
+        await apply_all_guild_name_styles(self)
+
+    async def on_guild_available(self, guild) -> None:
+        if self.is_ready():
+            from bot.services.bot_profile_style import apply_guild_name_style
+
+            await apply_guild_name_style(self, guild)
+
+    async def on_guild_join(self, guild) -> None:
+        if self.is_ready():
+            from bot.services.bot_profile_style import apply_guild_name_style
+
+            await apply_guild_name_style(self, guild)
+
+    async def on_guild_remove(self, guild) -> None:
+        getattr(self, "_guild_name_style_attempted", set()).discard(guild.id)
 
 
 def create_bot() -> MeyayaBot:

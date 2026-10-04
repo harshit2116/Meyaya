@@ -9,12 +9,65 @@ and live voice conversations.
 `/awaken` (or `uwu awaken`) opens a confirmation ritual and reveals a permanent,
 global fantasy identity. `/fantasyprofile [member]` opens its Soul Interface:
 Character, Weapon, Abilities and Details. These commands use local generation and
-Pillow rendering, not Gemini quota. Existing `/summon` and `/guardian` are unchanged.
+Pillow rendering, not Gemini quota. Existing `/summon` is unchanged. `/guardian`
+now shows a soul-bound companion tied to the saved awakening, rather than a daily draw.
+
+`/versus member:@Haru` / `uwu versus @Haru` challenges another awakened member
+to a consent-based, automatic duel with at least eight combined moves in up to
+six rounds. A full-size profile-palette versus image opens the fight, then the
+battle embed image updates after every move with temporary HP/MP. A separate
+WON/LOST result image closes the match, leaving the opening image intact;
+permanent identities and XP stay unchanged.
+
+`/guardianbattle member:@Haru` / `uwu guardianbattle @Haru` starts a separate,
+consent-based guardian battle in the same channel. Trainers alternate Strike,
+Affinity Pulse, Guard and species-specific Blessing buttons. Original creature
+art, HP/MP and move text update in one monster-battle-style embed. See
+[GUARDIANS.md](GUARDIANS.md) for binding rules, timers and implementation details.
+Migration `0030_fantasy_duels` adds compact result history. See
+[FANTASY_DUELS.md](FANTASY_DUELS.md) for combat rules, file map, balance tests and deployment.
 
 Before enabling this version, run `alembic upgrade head` from the bot's configured
 environment. Migration `0029_fantasy_profiles` adds the identity table; do not reset
 or delete its rows to fix an image problem. See [FANTASY_GUIDE.md](FANTASY_GUIDE.md)
 for architecture, balance rules, failure handling and verification instructions.
+
+## Command help and parameter names
+
+`/help` and `uwu help` immediately list every public command, grouped by category.
+The optional category menu shows descriptions; `/help command:<name>` or
+`uwu help <name>` shows exact syntax and examples. No command picker or paging
+hides the command list. Only the opener can control their menu. Real permission
+requirements appear when applicable; generic permission/cooldown notes are omitted.
+
+`bot/data/help_catalog.py` is the source of public command descriptions, reused
+for slash descriptions, prefix help, category help, autocomplete and command knowledge.
+Keep descriptions within Discord's 100-character limit. After loading cogs and before
+syncing, `bot/utils/command_parameters.py` standardizes user options: one target is
+`member`; multiple targets are `member1`, `member2`, etc. Callback argument names
+stay unchanged so the presentation rename does not alter argument binding. Restart
+and sync commands after changing the catalog or option labels.
+
+## Display-name style
+
+After ready, `bot/services/bot_profile_style.py` applies the same name style in
+every joined guild: Journal font `16`, Gradient effect `2`, colours `#EEB2AA` and
+`#E36DE0` (peach-to-pink sampled from the reference screenshot). Requests use the existing Discord HTTP client sequentially, with a
+15-second deadline and built-in rate-limit handling. Newly joined or newly
+available guilds receive the same best-effort application. Each guild is attempted
+once per process; reconnects do not repeat PATCHes. Leaving removes its tracking
+entry so rejoining allows a new attempt. No recurring sync, dashboard setting,
+database row or style command. `GUILD_ID` keeps its dev-command-sync purpose and
+does not restrict styling.
+
+The observed style fields/IDs are not documented stable API guarantees. Watch
+`guild_name_style` logs for HTTP status, Discord error code and short reason.
+An accepted request does not guarantee styling: verify the server's member
+profile visually, especially if the response did not echo the fields. The
+requested pair is sent exactly, never replaced silently. Failures
+never block ready/startup and no substitute styles are applied. The server may
+require **Change Nickname** or another appropriate profile-editing permission;
+do not grant Administrator just for this feature.
 
 ## Deferred remote-dashboard integration
 
@@ -87,9 +140,11 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
 - Avatar sliding puzzle: `uwu scramble [@member]` or `/scramble`. Defaults to yourself.
   Click highlighted numbered tiles to move them into the blank; match the reference
   picture and the numbered order. Only the requester controls the board. Includes
-  a move counter, elapsed time on each update, full-picture victory/reveal, and a
+  a move counter, a native Discord relative countdown, full-picture victory/reveal, and a
   fixed five-minute deadline. One active puzzle per user, at most 20 globally;
-  sessions are temporary and end on restart. No Gemini calls. Implementation:
+  sessions are temporary and end on restart. Expired/restarted game buttons explain
+  that a fresh run is needed, rather than silently ignoring the interaction.
+  No Gemini calls. Implementation:
   `bot/services/scramble.py` and `bot/views/scramble.py`.
 - Duck animation: `uwu duck [@member]` or `/duck`. Defaults to the requester;
   overlays the member's avatar and name on the bundled duck-ejection GIF without AI.
@@ -99,7 +154,7 @@ remaining messages and server activity. Both also work with `uwu`. See [server s
 - Reddit and duck share ship's bounded CDN avatar downloader/cache. Failed downloads
   retry on the next call and emit `party_avatar_unavailable` without leaking URLs.
   All prefix, hybrid and standalone slash commands use the shared loading indicator
-  after 0.5 seconds if still running; fast results skip it. Cleanup follows delivery.
+  after 1 second if still running; fast results skip it. Cleanup follows delivery.
   AI conversation listeners do not display this indicator.
 - Consent-based marriage, vows, anniversaries, and confirmed divorce
 - Anonymous multiplayer games judged by Gemini

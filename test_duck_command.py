@@ -104,7 +104,7 @@ async def test_failed_avatar_download_uses_initial_portrait(monkeypatch):
 async def test_new_commands_get_delayed_loading_and_cleanup(name):
     from discord.ext import commands
     from bot.utils.loading import install_command_loading, LOADING_DELAY
-    assert LOADING_DELAY == 0.5
+    assert LOADING_DELAY == 1.0
     loading_message = NS(delete=AsyncMock())
     sticker = NS(name="meyaya_loading")
     channel = NS(guild=NS(id=123, stickers=[sticker]), send=AsyncMock(return_value=loading_message))

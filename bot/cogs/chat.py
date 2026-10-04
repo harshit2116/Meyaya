@@ -7,7 +7,7 @@ from bot.logging.health import health, ProviderUnavailable
 
 import asyncio
 from bot.utils.typing import background_typing
-from bot.utils.application_emojis import application_emojis
+from bot.utils.application_emojis import LOADING_EMOJI_NAMES, application_emojis
 from bot.services.optional_context import OptionalContext
 from bot.utils.command_timing import timing_stage
 from collections import deque
@@ -710,7 +710,7 @@ class ChatCog(commands.Cog):
             return ()
 
         owned = tuple(emoji for emoji in application_emojis(self.bot)
-                      if emoji.name.casefold() != 'meyaya_loading')
+                      if emoji.name.casefold() not in LOADING_EMOJI_NAMES)
         owned_ids = {emoji.id for emoji in owned}
         current = list(guild.emojis)
         allow_external = False
@@ -730,7 +730,7 @@ class ChatCog(commands.Cog):
         seen_names: set[str] = set()
         for emoji in candidates:
             normalized_name = emoji.name.casefold()
-            if normalized_name in seen_names or not emoji.available:
+            if normalized_name in LOADING_EMOJI_NAMES or normalized_name in seen_names or not emoji.available:
                 continue
             try:
                 if emoji.id not in owned_ids and not emoji.is_usable():

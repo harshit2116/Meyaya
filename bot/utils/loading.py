@@ -9,7 +9,7 @@ import time
 from bot.utils.application_emojis import loading_emoji
 
 logger = logging.getLogger(__name__)
-LOADING_DELAY = 0.5
+LOADING_DELAY = 1.0
 STICKER_NAME = "meyaya_loading"
 SLOW_COMMANDS = frozenset({
     "profile", "profilecheck", "aura", "palette", "callingcard", "duostyle",

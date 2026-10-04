@@ -109,7 +109,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
     "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "caught", "scramble", "mostlikely", "8ball", "warninglabel"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
-    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile"),
+    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "versus", "guardianbattle"),
     "Relationships": ("marry", "marriage", "renewvows", "divorce"),
     "Single Player Games": ("escape", "detective", "personalitytest"),
     "Multiplayer Games": ("showdown", "survive", "excuse", "endgame"),
@@ -210,7 +210,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "guardian",
         "guardian [member]",
-        "Reveal a member's spirit guardian, blessing, and weakness.",
+        "View the soul-bound guardian linked to an awakening.",
         "Fantasy / Profile",
     ),
     HelpCommand(
@@ -219,6 +219,14 @@ COMMANDS: tuple[HelpCommand, ...] = (
     ),
     HelpCommand(
         "fantasyprofile", "fantasyprofile [member]", "View an awakened fantasy character.",
+        "Fantasy / Profile",
+    ),
+    HelpCommand(
+        "versus", "versus <member>", "Challenge a member to an automatic fantasy duel.",
+        "Fantasy / Profile",
+    ),
+    HelpCommand(
+        "guardianbattle", "guardianbattle <member>", "Challenge a member to a turn-based guardian battle.",
         "Fantasy / Profile",
     ),
     HelpCommand(
@@ -382,7 +390,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "Fun and Scores",
     ),
     HelpCommand("duck", "duck [@member]", "Send your avatar, or a member's, into the depths with an animated duck card.", "Fun and Scores"),
-    HelpCommand("caught", "caught [@member]", "Create a fictional CCTV incident card starring you or a member, complete with evidence and an escape status.", "Fun and Scores"),
+    HelpCommand("caught", "caught [@member]", "Create a fictional CCTV card for a member, with evidence and an escape status.", "Fun and Scores"),
     HelpCommand("scramble", "scramble [@member]", "Rebuild a member's avatar in a clickable sliding puzzle before time runs out.", "Fun and Scores"),
     HelpCommand(
         "bestiescore",

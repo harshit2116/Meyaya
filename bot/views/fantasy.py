@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from io import BytesIO
 
 import discord
 
@@ -49,6 +50,14 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
             name="Discipline", value=f"{profile.class_name} / {profile.subclass_name}", inline=False
         )
     elif tab == "details":
+        from bot.services.fantasy_guardian import bound_guardian
+
+        companion = bound_guardian(profile)
+        embed.add_field(
+            name="Soul-bound guardian",
+            value=f"{companion.name} · {companion.affinity_name}\nView `/guardian` · Battle `/guardianbattle`",
+            inline=False,
+        )
         embed.add_field(name="The dormant story", value=profile.description, inline=False)
         embed.add_field(name="Alignment", value=profile.alignment, inline=True)
         embed.add_field(
@@ -244,6 +253,143 @@ class AlreadyAwakenedView(OwnedFantasyView):
                     interaction, self.profile, self.member, self.owner, previous=self
                 )
             self.finish()
+
+
+class AwakeningRevealView(OwnedFantasyView):
+    """Saved identity revealed at the owner's pace, never on a timer."""
+
+    LABELS = (
+        "Reveal weapon",
+        "Reveal class",
+        "Reveal potential",
+        "Reveal abilities",
+        "Open full profile",
+    )
+
+    def __init__(self, cog, owner, profile, member):
+        super().__init__(cog, owner, timeout=300)
+        self.profile, self.member = profile, member
+        self.step = 0
+        self.weapon_gif = None
+        self.refresh_buttons()
+
+    def refresh_buttons(self):
+        self.advance.label = self.LABELS[self.step]
+        self.back.disabled = self.step == 0
+
+    def finish(self):
+        self.weapon_gif = None
+        super().finish()
+
+    def embed(self):
+        profile = self.profile
+        theme = theme_for(profile)
+        embed = meyaya_embed(
+            "Your awakening",
+            "Take your time. Each discovery stays until you continue.",
+            color=int(theme.color[1:], 16),
+            icon="✦",
+        )
+        if self.step == 1:
+            embed.title = "✦ You received this weapon"
+            embed.description = "Your weapon has answered. It is now bound to your saved identity."
+        embed.add_field(
+            name="Affinity", value=f"{theme.symbol} **{profile.affinity_name}**", inline=False
+        )
+        if self.step >= 1:
+            embed.add_field(
+                name="Bound weapon",
+                value=f"**{profile.weapon_name}**\n{profile.weapon_rarity} · {profile.weapon_type}\n{profile.weapon_lore}",
+                inline=False,
+            )
+        if self.step >= 2:
+            embed.add_field(
+                name="Awakened identity",
+                value=f"**{profile.class_name}** · {profile.subclass_name}\n{profile.fantasy_title}",
+                inline=False,
+            )
+        if self.step >= 3:
+            embed.add_field(
+                name="Potential",
+                value=f"STR {profile.strength} · DEX {profile.dexterity} · INT {profile.intelligence}\nVIT {profile.vitality} · LCK {profile.luck}\nHP {profile.hp}/{profile.max_hp} · MP {profile.mp}/{profile.max_mp}",
+                inline=False,
+            )
+        if self.step >= 4:
+            embed.add_field(
+                name="Passive · " + profile.passive_name,
+                value=profile.passive_description,
+                inline=False,
+            )
+            embed.add_field(
+                name="Signature · " + profile.signature_name,
+                value=profile.signature_description,
+                inline=False,
+            )
+        embed.set_footer(
+            text=f"Discovery {self.step + 1}/5 · Saved permanently · /fantasyprofile opens it anytime"
+        )
+        return embed
+
+    async def move(self, interaction, direction):
+        await interaction.response.defer()
+        if self.lock.locked():
+            return
+        async with self.lock:
+            if self.closed:
+                return
+            if direction > 0 and self.step == 4:
+                async with loading_indicator(interaction.channel, self.cog.bot):
+                    await self.cog.deliver(
+                        interaction, self.profile, self.member, self.owner, previous=self
+                    )
+                return
+            old = self.step
+            self.step = max(0, min(4, self.step + direction))
+            self.refresh_buttons()
+            try:
+                async with loading_indicator(interaction.channel, self.cog.bot):
+                    if self.step == 1 and self.weapon_gif is None:
+                        self.weapon_gif = await self.cog.weapon_bytes(self.profile)
+                    embed = self.embed()
+                    files = []
+                    if self.step == 1 and self.weapon_gif:
+                        embed.set_image(url="attachment://meyaya-weapon.gif")
+                        files = [
+                            discord.File(BytesIO(self.weapon_gif), filename="meyaya-weapon.gif")
+                        ]
+                    try:
+                        await interaction.edit_original_response(
+                            content=None,
+                            embed=embed,
+                            attachments=files,
+                            view=self,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                        )
+                    except discord.HTTPException as error:
+                        if not files:
+                            raise
+                        self.cog.report(error, "fantasy_weapon_upload")
+                        await interaction.edit_original_response(
+                            content=None,
+                            embed=self.embed(),
+                            attachments=[],
+                            view=self,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                        )
+            except BaseException:
+                self.step = old
+                self.refresh_buttons()
+                raise
+
+    @discord.ui.button(label="Reveal weapon", style=discord.ButtonStyle.primary)
+    async def advance(self, interaction, button):
+        await self.move(interaction, 1)
+
+    @discord.ui.button(
+        label="Previous discovery", style=discord.ButtonStyle.secondary, disabled=True
+    )
+    async def back(self, interaction, button):
+        await self.move(interaction, -1)
 
 
 class AwakeningView(OwnedFantasyView):

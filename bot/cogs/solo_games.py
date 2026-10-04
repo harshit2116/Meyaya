@@ -67,7 +67,8 @@ class SoloView(discord.ui.View):
                        for index, a in enumerate(self.game.actions())]
             actions.append(("quit", "End game", True, discord.ButtonStyle.secondary, 3))
         for key, label, enabled, style, row in actions:
-            button = discord.ui.Button(label=label, disabled=not enabled, style=style, row=row)
+            button = discord.ui.Button(label=label, disabled=not enabled, style=style, row=row,
+                                       custom_id=f"meyaya:solo:{self.id}:{revision}:{key}")
 
             async def callback(interaction, choice=key, version=revision):
                 await self.choose(interaction, choice, version)

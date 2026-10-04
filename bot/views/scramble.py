@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from io import BytesIO
-from time import monotonic
+from time import monotonic, time
 
 import discord
 
@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class TileButton(discord.ui.Button):
-    def __init__(self, position):
-        super().__init__(label="…", row=position // 3)
+    def __init__(self, position, session_id):
+        super().__init__(label="…", row=position // 3, custom_id=f"meyaya:scramble:{session_id}:{position}")
         self.position = position
 
     async def callback(self, interaction):
@@ -24,19 +24,24 @@ class TileButton(discord.ui.Button):
 
 class ScrambleView(discord.ui.View):
     def __init__(self, owner_id, name, avatar, release):
-        super().__init__(timeout=300)
+        # Own one absolute clock, rather than discord.py's interaction-reset idle
+        # timeout racing our five-minute deadline and removing callbacks first.
+        super().__init__(timeout=None)
         self.owner_id, self.name, self.avatar = owner_id, name, avatar
         self.release = release
         self.board = shuffled_board()
         self.moves = 0
         self.started = monotonic()
         self.deadline = self.started + 300
+        self.wall_deadline = int(time() + 300)
+        self.duration = None
         self.lock = asyncio.Lock()
         self.message = None
         self.ended = False
         self.expiry_task = None
         for pos in range(9):
-            self.add_item(TileButton(pos))
+            self.add_item(TileButton(pos, self.id))
+        self.give_up.custom_id = f"meyaya:scramble:{self.id}:reveal"
         self.sync_buttons()
 
     def sync_buttons(self):
@@ -50,11 +55,15 @@ class ScrambleView(discord.ui.View):
             else:
                 button.disabled = self.ended
 
-    def embed(self, status="Slide a numbered tile into the empty space."):
-        elapsed = int(monotonic() - self.started)
+    def embed(self, status="Slide a numbered tile into the empty space.", *, completed=False):
+        elapsed = self.duration if self.duration is not None else int(monotonic() - self.started)
         embed = discord.Embed(title="🧩 Avatar Scramble", description=status, color=0xAAB7F4)
         embed.add_field(name="Moves", value=str(self.moves))
-        embed.add_field(name="Time", value=f"{elapsed // 60}:{elapsed % 60:02d}")
+        if self.ended or completed:
+            embed.add_field(name="Run time", value=f"{elapsed // 60}:{elapsed % 60:02d}")
+        else:
+            # Discord refreshes relative timestamps without repeated API edits.
+            embed.add_field(name="Time left", value=f"<t:{self.wall_deadline}:R>")
         embed.set_image(url="attachment://scramble.png")
         embed.set_footer(text="Only the player who started this puzzle can move tiles • 5 minute limit")
         return embed
@@ -73,6 +82,7 @@ class ScrambleView(discord.ui.View):
         if self.ended:
             return
         self.ended = True
+        self.duration = min(300, max(0, int(monotonic() - self.started)))
         self.release()
         self.sync_buttons()
         self.stop()
@@ -80,8 +90,11 @@ class ScrambleView(discord.ui.View):
             self.expiry_task.cancel()
 
     def start_clock(self):
+        if self.ended or self.expiry_task is not None:
+            return
         self.started = monotonic()
         self.deadline = self.started + 300
+        self.wall_deadline = int(time() + 300)
         self.expiry_task = asyncio.create_task(self.expire(), name="scramble-expiry")
 
     async def expire(self):
@@ -113,8 +126,8 @@ class ScrambleView(discord.ui.View):
                 if won:
                     for button in self.children:
                         button.disabled = True
-                await interaction.edit_original_response(embed=self.embed("✨ Picture restored! Nicely done." if won else "Slide a numbered tile into the empty space."), attachments=[file], view=self)
-            except Exception:
+                await interaction.edit_original_response(embed=self.embed("✨ Picture restored! Nicely done." if won else "Slide a numbered tile into the empty space.", completed=won), attachments=[file], view=self)
+            except BaseException:
                 self.board, self.moves = old_board, old_moves
                 self.sync_buttons()
                 raise
@@ -127,8 +140,19 @@ class ScrambleView(discord.ui.View):
         async with self.lock:
             if self.ended:
                 return
+            if monotonic() >= self.deadline:
+                await self._expire_locked()
+                return
+            # A failed render must not stop a still-visible playable view.
+            file = await self.picture(finished=True)
+            for child in self.children:
+                child.disabled = True
+            try:
+                await interaction.edit_original_response(embed=self.embed("Puzzle ended. Here’s the complete picture.", completed=True), attachments=[file], view=self)
+            except BaseException:
+                self.sync_buttons()
+                raise
             self.finish()
-            await interaction.edit_original_response(embed=self.embed("Puzzle ended. Here’s the complete picture."), attachments=[await self.picture(finished=True)], view=self)
 
     async def _expire_locked(self):
         self.finish()
@@ -136,7 +160,7 @@ class ScrambleView(discord.ui.View):
             try:
                 await self.message.edit(embed=self.embed("Time’s up! Start a fresh puzzle with `/scramble`."), view=self)
             except discord.HTTPException:
-                pass
+                logger.warning("scramble_expiry_edit_failed message_id=%s", getattr(self.message, "id", None))
 
     async def on_timeout(self):
         async with self.lock:

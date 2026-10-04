@@ -101,9 +101,11 @@ class FunCog(commands.Cog):
                 file = await view.picture()
             remember_command_result(ctx, target_id=target.id, target_name=target.display_name,
                                     method="Interactive avatar sliding puzzle; only its starting player can move tiles.")
+            # Set the visible deadline and start its task together. Loader cleanup
+            # after send must not reset the clock behind the already visible timer.
+            view.start_clock()
             view.message = await ctx.send(embed=view.embed(), file=file, view=view,
                                           allowed_mentions=discord.AllowedMentions.none())
-            view.start_clock()
         except BaseException:
             if view:
                 view.finish()

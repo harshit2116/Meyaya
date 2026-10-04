@@ -156,6 +156,88 @@ async def test_failed_avatar_releases_player():
     assert "avatar" in ctx.send.await_args.args[0]
 
 
+@pytest.mark.asyncio
+async def test_absolute_clock_is_one_task_and_expires_without_clicks(monkeypatch):
+    import asyncio
+    clock = [1000.0]
+    monkeypatch.setattr("bot.views.scramble.monotonic", lambda: clock[0])
+    monkeypatch.setattr("bot.views.scramble.time", lambda: 2000.0)
+    view = make_view()
+    view.message = NS(edit=AsyncMock())
+    assert view.timeout is None
+    assert view.embed().fields[1].name == "Time left"
+    assert view.embed().fields[1].value == "<t:2300:R>"
+    view.start_clock()
+    task = view.expiry_task
+    view.start_clock()
+    assert view.expiry_task is task and view.deadline == 1300
+    clock[0] = 1300
+    await asyncio.wait_for(task, timeout=1)
+    assert view.ended and view.duration == 300
+    assert view.embed().fields[1].value == "5:00"
+    assert all(button.disabled for button in view.children)
+    view.release.assert_called_once()
+    view.message.edit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_acknowledged_before_render_and_failed_reveal_stays_playable():
+    view = make_view()
+    click = interaction()
+    async def render(**kwargs):
+        click.response.defer.assert_awaited_once()
+        raise RuntimeError("renderer busy")
+    view.picture = render
+    with pytest.raises(RuntimeError):
+        await view.give_up.callback(click)
+    assert not view.ended and not view.is_finished()
+    assert any(not button.disabled for button in view.children)
+    view.release.assert_not_called()
+    view.finish()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["scramble", "solo", "legacy"])
+async def test_orphaned_game_buttons_receive_explicit_response(kind):
+    import discord
+    from bot.utils.game_interactions import reply_to_expired_game
+    click = interaction()
+    click.type = discord.InteractionType.component
+    click.message = NS(id=77, author=NS(id=9), embeds=[])
+    click.data = {"custom_id": f"meyaya:{kind}:old:choice"}
+    if kind == "legacy":
+        embed = discord.Embed()
+        embed.set_footer(text="Your choices only • Ends after 3 minutes without a choice")
+        click.message.embeds = [embed]
+    click.response.is_done = Mock(return_value=False)
+    bot = NS(user=NS(id=9), get_cog=lambda name: None)
+    await reply_to_expired_game(bot, click)
+    click.response.send_message.assert_awaited_once()
+    assert "restarted" in click.response.send_message.call_args.args[0]
+    assert click.response.send_message.call_args.kwargs["ephemeral"]
+
+
+@pytest.mark.asyncio
+async def test_active_game_and_other_bot_buttons_not_double_acknowledged():
+    import discord
+    from bot.utils.game_interactions import reply_to_expired_game
+    view = make_view()
+    view.message = NS(id=77)
+    click = interaction()
+    click.type = discord.InteractionType.component
+    click.message = NS(id=77, author=NS(id=9), embeds=[])
+    click.data = {"custom_id": view.children[0].custom_id}
+    click.response.is_done = Mock(return_value=False)
+    cog = NS(scramble_views={view})
+    bot = NS(user=NS(id=9), get_cog=lambda name: cog if name == "FunCog" else None)
+    await reply_to_expired_game(bot, click)
+    click.response.send_message.assert_not_awaited()
+    view.finish()
+    click.message.author.id = 10
+    await reply_to_expired_game(bot, click)
+    click.response.send_message.assert_not_awaited()
+
+
 def test_discoverable_hybrid():
     assert FunCog.scramble.app_command.name == "scramble"
     assert any(item.name == "scramble" for item in COMMANDS)

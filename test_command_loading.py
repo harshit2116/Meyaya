@@ -9,7 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 import pytest
 
-from bot.utils.loading import install_command_loading
+from bot.utils.loading import install_command_loading, LOADING_DELAY
 
 
 @pytest.mark.asyncio
@@ -19,9 +19,9 @@ async def test_unlisted_prefix_and_standalone_slash_get_delayed_loading():
     channel = NS(guild=NS(id=1, stickers=[]), send=AsyncMock(return_value=loaded))
     @bot.command(name="unlisted")
     async def unlisted(ctx):
-        await asyncio.sleep(.55)
+        await asyncio.sleep(LOADING_DELAY + .1)
     async def slash(interaction):
-        await asyncio.sleep(.55)
+        await asyncio.sleep(LOADING_DELAY + .1)
     app = app_commands.Command(name="standalone", description="Test", callback=slash)
     bot.tree.add_command(app)
     install_command_loading(bot)

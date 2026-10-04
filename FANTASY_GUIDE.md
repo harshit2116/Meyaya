@@ -1,10 +1,27 @@
 # Meyaya — permanent fantasy awakenings
 
+For consent-based `/versus` duels using these saved identities, see
+[FANTASY_DUELS.md](FANTASY_DUELS.md). Migration `0030_fantasy_duels` adds result
+history only; combat never changes stored HP/MP, XP or awakening data.
+
+`/guardian [member]` now opens the awakening's soul-bound companion, not a daily
+draw. The Details tab names the companion; `/guardianbattle member:@member`
+starts manual guardian combat. See [GUARDIANS.md](GUARDIANS.md).
+
 ## Commands and experience
 
 - `/awaken`, `uwu awaken`: a first-use confirmation with **Awaken** and **Not yet**.
   Confirming commits the identity before the visual reveal begins. The sequence is
-  Searching your soul → animated affinity sigil → bound weapon → Soul Interface.
+  animated affinity sigil → bound weapon → class → potential → abilities.
+  Each discovery waits for the owner's button press; earlier discoveries remain
+  visible. The weapon step includes a locally illustrated, looping acquisition
+  GIF matching its saved weapon family, affinity and rarity. It uses the bounded
+  image worker, is cached for this reveal, and falls back to text if rendering or
+  uploading fails. No API calls, rerolls or database changes are involved.
+  **Previous discovery** goes back. **Open full profile** is required
+  to open the final Soul Interface. There are no timed stage changes.
+  The reveal expires after five minutes without a button interaction; the saved
+  identity is never lost and `/fantasyprofile` can open it anytime.
   Reusing the command offers **View Character**, never another roll.
 - `/fantasyprofile [member]`, `uwu fantasyprofile [member]`: read the caller's or
   another member's saved character. Looking someone up never awakens them.
@@ -14,7 +31,21 @@
 
 This establishes identities, not a playable combat/progression system. Skills and
 weapon traits describe future abilities; there are no damage rolls, quests, XP
-awards, inventory, levelling, purchases, user rerolls or administrative resets yet.
+awards, inventory, levelling, purchases or user rerolls yet.
+
+### Owner-only reset
+
+Only Ayaya (`715925710849572904`), matching Meyaya's existing private-owner check,
+can run `uwu fantasyreset @member confirm` (a raw Discord user ID also works).
+This is a hidden **prefix-only** command, not a slash command. Mention prefixes
+and other server prefixes are rejected. It can also be used in DMs with `uwu`.
+Without the final `confirm` argument it only shows the deletion warning.
+
+The reset transaction deletes only the selected user's global fantasy row.
+It closes that user's pending awakening and existing profile interfaces in this
+bot process, waiting for a local in-flight confirmation first. The next `/awaken`
+can create a new identity. There is no reset-all option. Old identity values are
+not retained by this command; recovering them requires a database backup.
 
 ## Architecture and file map
 
@@ -74,7 +105,7 @@ unchanged if present. If absent, it generates the complete snapshot and executes
 PostgreSQL `INSERT … ON CONFLICT (user_id) DO NOTHING RETURNING …`.
 Only one competing insertion wins, including separate processes. Losing callers
 read the winning row in a subsequent READ COMMITTED statement. There is **no**
-`DO UPDATE`, delete/reset path or seed regeneration. The service exits/commits its
+`DO UPDATE`, user-accessible delete/reset path or seed regeneration. The service exits/commits its
 transaction before a caller receives the character or begins its reveal.
 
 Use PostgreSQL's normal **READ COMMITTED** isolation, as the existing application

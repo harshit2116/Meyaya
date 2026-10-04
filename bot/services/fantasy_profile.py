@@ -12,6 +12,11 @@ class FantasyProfileService:
     async def get(self, user_id):
         return await self.profiles.get(user_id)
 
+    async def reset(self, user_id):
+        """Explicit owner administration only; ordinary awakening never calls this."""
+        async with self.session.begin():
+            return await self.profiles.reset(user_id)
+
     async def awaken(self, user_id):
         async with self.session.begin():
             existing = await self.profiles.get(user_id)

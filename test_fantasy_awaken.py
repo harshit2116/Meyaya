@@ -27,7 +27,19 @@ from bot.repositories.fantasy_profiles import FantasyProfileRepository
 from bot.services.fantasy_generation import generate_identity, resource_totals
 from bot.services.fantasy_profile import FantasyProfileService
 from bot.services.fantasy_render import CARD_SIZE, render_ritual, render_soul_card
-from bot.views.fantasy import AlreadyAwakenedView, AwakeningView, FantasyProfileView, soul_embed
+from bot.services.fantasy_weapon_render import (
+    weapon_art,
+    render_weapon_acquisition,
+    WEAPON_CARD_SIZE,
+    MAX_WEAPON_BYTES,
+)
+from bot.views.fantasy import (
+    AlreadyAwakenedView,
+    AwakeningView,
+    AwakeningRevealView,
+    FantasyProfileView,
+    soul_embed,
+)
 
 
 def profile(user_id=715925710849572904, seed=3, **kwargs):
@@ -36,6 +48,60 @@ def profile(user_id=715925710849572904, seed=3, **kwargs):
             user_id, rng=Random(seed), now=datetime(2026, 10, 4, tzinfo=UTC), **kwargs
         )
     )
+
+
+def test_weapon_families_are_distinct_and_animation_is_bounded():
+    from bot.data.fantasy import WEAPONS
+
+    arts = [weapon_art(family, "#c6aaff", "#d8b87d") for family in WEAPONS]
+    assert len({art.tobytes() for art in arts}) == len(WEAPONS)
+    assert all(art.size == (260, 260) and art.getbbox() for art in arts)
+    soul = profile(123)
+    original = result_summary(soul, NS(display_name="Ayaya"))
+    data = render_weapon_acquisition(soul)
+    assert len(data) <= MAX_WEAPON_BYTES
+    with Image.open(BytesIO(data)) as image:
+        assert image.size == WEAPON_CARD_SIZE and image.n_frames == 48
+        assert image.info["loop"] == 0 and image.info["duration"] == 40
+        first = image.convert("RGB").tobytes()
+        image.seek(12)
+        assert image.convert("RGB").tobytes() != first
+    assert result_summary(soul, NS(display_name="Ayaya")) == original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["none", "render", "upload"])
+async def test_weapon_discovery_animation_cache_and_fallback(failure):
+    cog = FantasyCog(NS())
+    cog.weapon_bytes = AsyncMock(return_value=None if failure == "render" else b"GIF")
+    view = AwakeningRevealView(cog, 123, profile(123), interaction().user)
+    cog.track_view(view)
+    inter = interaction()
+    if failure == "upload":
+        inter.edit_original_response.side_effect = [
+            discord.HTTPException(NS(status=500, reason="failed"), "upload failed"),
+            NS(),
+        ]
+    await view.advance.callback(inter)
+    kwargs = inter.edit_original_response.call_args.kwargs
+    assert view.step == 1 and not view.closed
+    assert "received this weapon" in kwargs["embed"].title
+    assert bool(kwargs["attachments"]) == (failure == "none")
+    inter.edit_original_response.side_effect = None
+    await view.back.callback(inter)
+    await view.advance.callback(inter)
+    assert cog.weapon_bytes.await_count == (2 if failure == "render" else 1)
+    view.finish()
+    assert view.weapon_gif is None
+
+
+@pytest.mark.asyncio
+async def test_weapon_renderer_failure_returns_text_fallback(monkeypatch):
+    cog = FantasyCog(NS())
+    monkeypatch.setattr(
+        "bot.cogs.fantasy.image_work", AsyncMock(side_effect=ValueError("bad render"))
+    )
+    assert await cog.weapon_bytes(profile(123)) is None
 
 
 @pytest.mark.parametrize("class_id", tuple(CLASSES))
@@ -381,8 +447,85 @@ async def test_reveal_and_upload_failure_keep_saved_profile(monkeypatch):
     )
     inter = interaction()
     await cog.deliver(inter, profile(123), inter.user, 123, reveal=True)
-    assert inter.edit_original_response.call_args.kwargs["embed"].title.endswith("Soul Interface")
+    assert inter.edit_original_response.call_args.kwargs["embed"].title.endswith("Your awakening")
+    assert isinstance(inter.edit_original_response.call_args.kwargs["view"], AwakeningRevealView)
     cog.cog_unload()
+
+
+@pytest.mark.asyncio
+async def test_reveal_waits_for_buttons_and_final_profile_is_explicit(monkeypatch):
+    monkeypatch.setattr("bot.cogs.fantasy.image_work", AsyncMock(return_value=b"GIF"))
+    cog = FantasyCog(NS())
+    cog.card_bytes = AsyncMock(return_value=b"PNG")
+    cog.weapon_bytes = AsyncMock(return_value=b"GIF")
+    inter = interaction()
+    previous = AwakeningView(cog, 123)
+    cog.track_view(previous)
+    cog.pending[123] = previous
+    soul = profile(123)
+    await cog.deliver(inter, soul, inter.user, 123, reveal=True, previous=previous)
+    view = inter.edit_original_response.call_args.kwargs["view"]
+    assert previous.closed and isinstance(view, AwakeningRevealView)
+    assert cog.pending[123] is view and view.step == 0
+    assert view.embed().fields[0].value.endswith(f"**{soul.affinity_name}**")
+    assert len(view.embed().fields) == 1
+    cog.card_bytes.assert_not_awaited()
+    await asyncio.sleep(0)
+    assert view.step == 0
+    for step in range(1, 5):
+        await view.advance.callback(inter)
+        assert view.step == step and not view.closed
+        assert view.embed().fields[0].name == "Affinity"
+        assert len(view.embed()) < 6000
+        cog.card_bytes.assert_not_awaited()
+    assert view.advance.label == "Open full profile"
+    await view.back.callback(inter)
+    assert view.step == 3 and view.advance.label == "Reveal abilities"
+    await view.advance.callback(inter)
+    await view.advance.callback(inter)
+    cog.card_bytes.assert_awaited_once()
+    assert view.closed and 123 not in cog.pending
+    assert isinstance(inter.edit_original_response.call_args.kwargs["view"], FantasyProfileView)
+    assert soul.weapon_name in cog.bot._meyaya_command_outputs[(5, 9)][1].result_summary
+    await view.advance.callback(inter)
+    cog.card_bytes.assert_awaited_once()
+    cog.cog_unload()
+
+
+@pytest.mark.asyncio
+async def test_reveal_author_timeout_and_failed_step_preserve_identity():
+    cog = FantasyCog(NS())
+    cog.weapon_bytes = AsyncMock(return_value=None)
+    soul = profile(123)
+    view = AwakeningRevealView(cog, 123, soul, interaction().user)
+    cog.track_view(view)
+    cog.pending[123] = view
+    assert not await view.interaction_check(interaction(456))
+    assert await view.interaction_check(interaction(123))
+    failed = interaction()
+    failed.edit_original_response.side_effect = RuntimeError("edit failed")
+    with pytest.raises(RuntimeError):
+        await view.advance.callback(failed)
+    assert view.step == 0 and view.profile is soul and not view.closed
+    assert view.advance.label == "Reveal weapon"
+    view.message = NS(edit=AsyncMock())
+    await view.on_timeout()
+    assert view.closed and not cog.pending and not cog.views
+    assert all(button.disabled for button in view.children)
+    assert view.profile is soul
+
+
+@pytest.mark.asyncio
+async def test_reveal_busy_click_acknowledged_without_skipping_discovery():
+    cog = FantasyCog(NS())
+    view = AwakeningRevealView(cog, 123, profile(123), interaction().user)
+    inter = interaction()
+    async with view.lock:
+        await view.advance.callback(inter)
+    inter.response.defer.assert_awaited_once()
+    inter.edit_original_response.assert_not_awaited()
+    assert view.step == 0
+    view.finish()
 
 
 def test_help_cog_registration_and_shared_loading():
