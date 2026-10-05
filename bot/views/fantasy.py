@@ -12,16 +12,33 @@ from bot.services.fantasy_render import theme_for
 from bot.utils.application_emojis import application_emojis
 from bot.utils.embeds import meyaya_embed
 from bot.utils.loading import loading_indicator
-from bot.data.fantasy_alignment import PATRONS, patron_for, ALIGNMENT_ART
+from bot.data.fantasy_alignment import PATRONS, PATRON_PROFILES, patron_for, ALIGNMENT_ART
 from bot.services.fantasy_profile import AlignmentUnavailable
 
 logger = logging.getLogger(__name__)
 
 
+def patron_profile_embed(patron_key, *, image=True):
+    patron = PATRONS[patron_key]
+    lore = PATRON_PROFILES[patron_key]
+    embed = discord.Embed(title=lore["header"], colour=int(patron.color.lstrip("#"), 16))
+    embed.add_field(
+        name="Name · Title", value=f"**{patron.name}**\n*{patron.subtitle}*", inline=False
+    )
+    for label in ("class", "affinities", "status", "threat", "lore"):
+        embed.add_field(name=label.title(), value=lore[label], inline=False)
+    if image:
+        embed.set_image(url="attachment://meyaya-soul.png")
+    embed.set_footer(text=f'{patron.name}: “{lore["quote"]}”')
+    return embed
+
+
 def soul_embed(profile, name, *, tab="character", image=False, bot=None):
     if getattr(profile, "is_meyaya_boss", False):
         if image:
-            return discord.Embed().set_image(url="attachment://meyaya-soul.png")
+            return patron_profile_embed("meyaya", image=True)
+        if getattr(profile, "is_meyaya_boss", False):
+            return patron_profile_embed("meyaya", image=False)
         embed = meyaya_embed(
             "Soul Interface",
             "# MEYAYA\nThe Girl at the End of Every Story",

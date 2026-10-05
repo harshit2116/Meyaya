@@ -886,24 +886,28 @@ class FantasyCog(commands.Cog):
         await ctx.defer()
         if isinstance(member, str) and member in {"meyaya", "veyra"}:
             from bot.services.meyaya_boss_renderer import render_patron_profile
+            from bot.data.fantasy_alignment import PATRONS, PATRON_PROFILES
+            from bot.views.fantasy import patron_profile_embed
 
             async with self.render_slots:
                 png = await image_work(render_patron_profile, member)
-            name = "Veyra" if member == "veyra" else "Meyaya"
+            patron = PATRONS[member]
+            lore = PATRON_PROFILES[member]
             remember_command_result(
                 ctx,
-                target_name=name,
-                title="Enemy of All" if member == "veyra" else "Bloom of Origin",
-                class_name="Void Revenant" if member == "veyra" else "Star-Petal Arcanist",
-                weapon=(
-                    "Mournfang - Blade of the Last Silence"
-                    if member == "veyra"
-                    else "Everbloom - Crown of the Last Wish"
-                ),
+                target_name=patron.name,
+                title=patron.subtitle,
+                class_name=lore["class"],
+                affinity=lore["affinities"],
+                status=lore["status"],
+                threat=lore["threat"],
+                lore=lore["lore"],
+                quote=lore["quote"],
+                weapon=lore["weapon"],
                 method="Authored patron lore profile; hidden vitals, not a saved member identity.",
             )
             await ctx.send(
-                embed=discord.Embed().set_image(url="attachment://meyaya-soul.png"),
+                embed=patron_profile_embed(member),
                 file=discord.File(BytesIO(png), filename="meyaya-soul.png"),
                 allowed_mentions=discord.AllowedMentions.none(),
             )

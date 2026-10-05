@@ -52,6 +52,29 @@ PATRONS = {
     ),
 }
 
+PATRON_PROFILES = {
+    "meyaya": {
+        "header": "✦ Soul Interface - Divine Presence acknowledged.",
+        "class": "Star-Petal Arcanist",
+        "affinities": "Arcane · Bloom · Ego",
+        "status": "Origin Protocol · Divine Presence acknowledged",
+        "threat": "BEYOND MEASUREMENT",
+        "lore": "Where Meyaya blooms, reality remembers its beginning.",
+        "quote": "I already know how your story ends. I made sure it ends beautifully.",
+        "weapon": "Everbloom - Crown of the Last Wish",
+    },
+    "veyra": {
+        "header": "⚠ Soul Interface - Hostile Presence detected.",
+        "class": "Void Revenant",
+        "affinities": "Void · Ruin · Ash",
+        "status": "Erasure Active · Hostile Presence detected",
+        "threat": "ANNIHILATION CLASS",
+        "lore": "Where Veyra walks, even fate forgets its name.",
+        "quote": "I have seen the end of every world. You will not be the exception.",
+        "weapon": "Mournfang - Blade of the Last Silence",
+    },
+}
+
 
 def patron_for(profile):
     if getattr(profile, "is_meyaya_boss", False):
