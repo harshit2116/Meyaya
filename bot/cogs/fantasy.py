@@ -172,10 +172,14 @@ class FantasyCog(commands.Cog):
                 )
 
         available()
-        profiles = {
-            left.id: await self.get_profile(left.id),
-            right.id: await self.get_profile(right.id),
-        }
+        members = (left, right)
+        loaded = await asyncio.gather(
+            *(self.get_profile(member.id) for member in members), return_exceptions=True
+        )
+        for profile in loaded:
+            if isinstance(profile, BaseException):
+                raise profile
+        profiles = {member.id: profile for member, profile in zip(members, loaded)}
         if any(profile is None for profile in profiles.values()):
             raise commands.CommandError("Both fighters need a saved identity. Use `/awaken` first.")
         # Recheck after database awaits; admission and reservation are atomic on this loop.
@@ -237,25 +241,31 @@ class FantasyCog(commands.Cog):
                 view=view,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
-            for member in (view.left, view.right):
+            async def inspect_fighter(member):
                 try:
                     async with asyncio.timeout(8):
                         visual = await self.bot.build_profile_aesthetic_service().inspect(member)
-                    portraits.append(visual.avatar or b"")
-                    palettes.append(visual.palette)
+                    return visual.avatar or b"", visual.palette
                 except Exception as error:
                     self.report(error, "fantasy_duel_palette")
-                    portraits.append(b"")
-                    palettes.append(())
+                    return b"", ()
+
+            async with asyncio.TaskGroup() as group:
+                visuals = [
+                    group.create_task(inspect_fighter(member))
+                    for member in (view.left, view.right)
+                ]
+            for visual in visuals:
+                avatar, palette = visual.result()
+                portraits.append(avatar)
+                palettes.append(palette)
             if cinematic:
                 await cinematic.intro(state)
 
             async def frame(*, intro=False, outcome=False, controls=None, history_note=""):
                 nonlocal battle_message
-                if any(
-                    view.left.guild.get_member(user_id) is None for user_id in view.participant_ids
-                ):
-                    raise commands.CommandError("A fighter left this server.")
+                if view.closed:
+                    raise commands.CommandError("This duel has ended.")
                 safe = lambda text: discord.utils.escape_markdown(
                     discord.utils.escape_mentions(str(text))
                 )
@@ -497,6 +507,15 @@ class FantasyCog(commands.Cog):
                 view.finish()
 
     @commands.Cog.listener()
+    async def on_raw_member_remove(self, payload):
+        for view in tuple(self.views):
+            if (
+                payload.user.id in getattr(view, "participant_ids", ())
+                and view.left.guild.id == payload.guild_id
+            ):
+                view.finish()
+
+    @commands.Cog.listener()
     async def on_guild_remove(self, guild):
         for view in tuple(self.views):
             if getattr(getattr(getattr(view, "left", None), "guild", None), "id", None) == guild.id:
@@ -666,7 +685,8 @@ class FantasyCog(commands.Cog):
             avatar = b""
             try:
                 asset = member.display_avatar.with_size(512).with_format("png")
-                avatar = await self.bot.build_profile_aesthetic_service()._download(str(asset))
+                async with asyncio.timeout(5):
+                    avatar = await self.bot.build_profile_aesthetic_service()._download(str(asset))
             except Exception as error:
                 # A portrait outage must not stop an already saved identity.
                 self.report(error, "fantasy_avatar")
@@ -842,6 +862,9 @@ class FantasyCog(commands.Cog):
     @commands.cooldown(1, 15, commands.BucketType.user)
     async def awaken(self, ctx):
         await ctx.defer()
+        if ctx.author.id in self.duel_users:
+            await ctx.send("Finish your current battle before opening an awakening.")
+            return
         if ctx.author.id in self.pending:
             await ctx.send(
                 "Your awakening door is already open. Use its buttons, or wait for it to close."
@@ -854,6 +877,9 @@ class FantasyCog(commands.Cog):
             await ctx.send(
                 f"The Soul Register is unavailable. Please try again later.\nError ID: `{error_id}`"
             )
+            return
+        if ctx.author.id in self.pending or ctx.author.id in self.duel_users:
+            await ctx.send("Finish your current fantasy activity first.")
             return
         if profile is not None:
             view = AlreadyAwakenedView(self, ctx.author.id, profile, ctx.author)
@@ -889,8 +915,12 @@ class FantasyCog(commands.Cog):
             from bot.data.fantasy_alignment import PATRONS, PATRON_PROFILES
             from bot.views.fantasy import patron_profile_embed
 
-            async with self.render_slots:
-                png = await image_work(render_patron_profile, member)
+            png = None
+            try:
+                async with self.render_slots:
+                    png = await image_work(render_patron_profile, member)
+            except Exception as error:
+                self.report(error, "fantasy_patron_render")
             patron = PATRONS[member]
             lore = PATRON_PROFILES[member]
             remember_command_result(
@@ -906,11 +936,20 @@ class FantasyCog(commands.Cog):
                 weapon=lore["weapon"],
                 method="Authored patron lore profile; hidden vitals, not a saved member identity.",
             )
-            await ctx.send(
-                embed=patron_profile_embed(member),
-                file=discord.File(BytesIO(png), filename="meyaya-soul.png"),
+            kwargs = dict(
+                embed=patron_profile_embed(member, image=bool(png)),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
+            if png:
+                kwargs["file"] = discord.File(BytesIO(png), filename="meyaya-soul.png")
+            try:
+                await ctx.send(**kwargs)
+            except discord.HTTPException:
+                if not png:
+                    raise
+                kwargs.pop("file", None)
+                kwargs["embed"] = patron_profile_embed(member, image=False)
+                await ctx.send(**kwargs)
             return
         member = member or ctx.author
         try:

@@ -347,7 +347,7 @@ async def test_boss_bypasses_db_canonical_id_and_details_masking():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["none", "gif", "render", "db", "message"])
+@pytest.mark.parametrize("failure", ["none", "gif", "render", "db", "message", "cache"])
 async def test_boss_full_flow_serialization_and_cleanup(monkeypatch, failure):
     from bot.cogs import fantasy
 
@@ -382,6 +382,8 @@ async def test_boss_full_flow_serialization_and_cleanup(monkeypatch, failure):
     cog = FantasyCog(bot)
     cog.report = Mock(return_value="MY-TEST")
     guild = NS(id=5, get_member=lambda uid: NS(id=uid))
+    if failure == "cache":
+        guild.get_member = lambda uid: None
     left, right = member(1, guild), member(99, guild)
     right.bot = True
     view = DuelChallengeView(cog, left, right, {1: profile(), 99: meyaya_boss_profile(99)})

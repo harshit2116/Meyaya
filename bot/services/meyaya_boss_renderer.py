@@ -210,6 +210,7 @@ def render_boss_profile(profile, avatar=b""):
     return render_patron_profile("meyaya")
 
 
+@lru_cache(maxsize=2)
 def render_patron_profile(patron):
     if patron not in {"meyaya", "veyra"}:
         raise ValueError("Unknown patron profile")

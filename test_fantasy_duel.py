@@ -366,7 +366,7 @@ async def test_overlapping_challenges_have_one_reservation():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("event", ["member", "guild", "message", "unload"])
+@pytest.mark.parametrize("event", ["member", "raw_member", "guild", "message", "unload"])
 async def test_lifecycle_cancels_active_callback_and_releases_admission(event):
     guild = NS(id=22)
     a, b = member(1, guild), member(2, guild)
@@ -386,6 +386,8 @@ async def test_lifecycle_cancels_active_callback_and_releases_admission(event):
     await started.wait()
     if event == "member":
         await cog.on_member_remove(b)
+    elif event == "raw_member":
+        await cog.on_raw_member_remove(NS(guild_id=guild.id, user=NS(id=b.id)))
     elif event == "guild":
         await cog.on_guild_remove(guild)
     elif event == "message":
@@ -432,9 +434,11 @@ async def test_live_duel_buttons_are_left_for_view_dispatch():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["none", "render", "upload", "database", "message"])
+@pytest.mark.parametrize("failure", ["none", "render", "upload", "database", "message", "cache", "parallel"])
 async def test_full_flow_every_move_image_fallbacks_and_cleanup(monkeypatch, failure):
     guild = NS(id=22, get_member=lambda user_id: NS(id=user_id))
+    if failure == "cache":
+        guild.get_member = lambda user_id: None
     a, b = member(1, guild), member(2, guild)
     session = NS(execute=AsyncMock())
 
@@ -456,6 +460,18 @@ async def test_full_flow_every_move_image_fallbacks_and_cleanup(monkeypatch, fai
     )
     cog = FantasyCog(bot)
     cog.report = Mock(return_value="MY-TEST")
+    if failure == "parallel":
+        started = set()
+        both_started = asyncio.Event()
+
+        async def inspect_fighter(fighter):
+            started.add(fighter.id)
+            if len(started) == 2:
+                both_started.set()
+            await both_started.wait()
+            return NS(avatar=b"", palette=("#ffaaaa",))
+
+        bot.build_profile_aesthetic_service = lambda: NS(inspect=inspect_fighter)
     view = DuelChallengeView(cog, a, b, {1: profile(1), 2: profile(2)})
     cog.track_view(view)
     cog.duel_users.update({1: view, 2: view})
@@ -504,6 +520,9 @@ async def test_full_flow_every_move_image_fallbacks_and_cleanup(monkeypatch, fai
     else:
         await view.accept.callback(inter)
         assert session.execute.await_count == 1
+        if failure == "parallel":
+            assert started == {1, 2}
+            cog.report.assert_not_called()
         result = next(iter(cog.views))
         assert isinstance(result, DuelResultView)
         assert 4 <= result.battle.moves <= 40
