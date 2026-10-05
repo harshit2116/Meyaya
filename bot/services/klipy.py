@@ -7,6 +7,7 @@ import asyncio
 from dataclasses import dataclass
 from random import SystemRandom
 import time
+import re
 from urllib.parse import urlsplit
 from weakref import WeakValueDictionary
 
@@ -94,6 +95,50 @@ class KlipyService:
         normalized_query = self._normalize_anime_query(query)
         return await self._search_gifs(normalized_query, strict_action=True)
 
+    async def exact_gif(self, share_url: str) -> GifResult:
+        """Resolve a specific Klipy share slug, never scrape HTML or substitute GIFs."""
+        parsed = urlsplit(share_url)
+        slug = parsed.path.removeprefix("/gifs/")
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname not in {"klipy.com", "www.klipy.com"}
+            or not parsed.path.startswith("/gifs/")
+            or not re.fullmatch(r"[a-z0-9-]{1,150}", slug)
+        ):
+            return GifResult(None)
+        if not self.api_key:
+            return GifResult(None)
+        key = "exact:" + slug
+        lock = self._search_locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            cached = self._get_cached_search(key)
+            if cached:
+                return GifResult(cached[0])
+            try:
+                async with self.http_session.get(
+                    f"{KLIPY_BASE_URL}/{self.api_key}/gifs/items",
+                    params={"slugs": slug},
+                    headers={"Accept": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=4),
+                ) as response:
+                    if response.status != 200:
+                        logger.warning(
+                            "KLIPY exact GIF unavailable status=%s slug=%s", response.status, slug
+                        )
+                        return GifResult(None)
+                    payload = await response.json()
+                for item in self._extract_items(payload):
+                    if item.get("slug") == slug:
+                        url = self._extract_url(item)
+                        if url:
+                            self._put_cached_search(key, (url,))
+                            return GifResult(url)
+            except Exception as error:
+                logger.warning(
+                    "KLIPY exact GIF failed slug=%s error=%s", slug, type(error).__name__
+                )
+            return GifResult(None)
+
     async def _search_gifs(self, query: str, *, strict_action: bool = False) -> GifResult:
         cache_key = f"{query.casefold()}|{int(strict_action)}"
         cached_urls = self._get_cached_search(cache_key)
@@ -135,7 +180,9 @@ class KlipyService:
                     payload.get("result") if isinstance(payload, dict) else None,
                 )
                 if response.status != 200:
-                    logger.warning("KLIPY media unavailable status=%s query=%s", response.status, query)
+                    logger.warning(
+                        "KLIPY media unavailable status=%s query=%s", response.status, query
+                    )
                     return GifResult(url=None)
         except Exception as error:
             # The API key is part of the endpoint path; exception URLs can expose it.
@@ -351,9 +398,18 @@ class KlipyService:
         if url.scheme not in {"https", "http"} or not url.hostname or url.username or url.password:
             return False
         # Known share sites are HTML even when the post title ends with '.gif'.
-        if url.hostname.lower() in {"klipy.com", "www.klipy.com", "tenor.com", "www.tenor.com", "giphy.com", "www.giphy.com"}:
+        if url.hostname.lower() in {
+            "klipy.com",
+            "www.klipy.com",
+            "tenor.com",
+            "www.tenor.com",
+            "giphy.com",
+            "www.giphy.com",
+        }:
             return False
-        return not require_extension or url.path.lower().endswith((".gif", ".webp", ".png", ".jpg", ".jpeg"))
+        return not require_extension or url.path.lower().endswith(
+            (".gif", ".webp", ".png", ".jpg", ".jpeg")
+        )
 
     def _rank_action_candidates(
         self,

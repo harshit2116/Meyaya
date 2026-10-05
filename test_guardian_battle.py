@@ -27,22 +27,24 @@ def battle(seed=1):
     )
 
 
-def test_meyaya_boss_fixed_and_overpowered_in_both_modes():
+def test_meyaya_boss_archetype_fixed_and_guardian_stays_overpowered():
     boss = meyaya_boss_profile(99)
     assert vars(boss) == vars(meyaya_boss_profile(99))
-    assert boss.weapon_rarity == "Mythic" and boss.level == 999
+    assert boss.weapon_rarity == "Mythic" and boss.class_name == "Soulweaver"
     guardian = bound_guardian(boss)
     assert guardian.species == "dragon" and guardian.bond == 100
     assert guardian.max_hp == 30000 and guardian.attack == 500
     for seed in range(100):
         player = profile(1, seed)
-        duel = DuelEngine(Fighter.snapshot(player, "Player"), Fighter.snapshot(boss, "Meyaya"), seed)
-        while not duel.state.finished:
-            duel.advance_move()
-        assert duel.state.winner_id == 99
-        arena = GuardianBattle(GuardianFighter(bound_guardian(player), "Player"), GuardianFighter(guardian, "Meyaya"), seed)
+        arena = GuardianBattle(
+            GuardianFighter(bound_guardian(player), "Player"),
+            GuardianFighter(guardian, "Meyaya"),
+            seed,
+        )
         while not arena.finished:
-            arena.choose(arena.actor.guardian.owner_id, "affinity" if arena.actor.mp >= 14 else "strike")
+            arena.choose(
+                arena.actor.guardian.owner_id, "affinity" if arena.actor.mp >= 14 else "strike"
+            )
         assert arena.winner_id == 99
     assert boss.hp == boss.max_hp and boss.mp == boss.max_mp
 
@@ -55,7 +57,11 @@ async def test_meyaya_npc_turn_then_player_turn_and_recall():
     cog = FantasyCog(NS(user=NS(id=99)))
     boss = await cog.get_profile(99)  # Does not require a database.
     profiles = {1: profile(1), 99: boss}
-    arena = GuardianBattle(GuardianFighter(bound_guardian(profiles[1]), "Player"), GuardianFighter(bound_guardian(boss), "Meyaya"), 1)
+    arena = GuardianBattle(
+        GuardianFighter(bound_guardian(profiles[1]), "Player"),
+        GuardianFighter(bound_guardian(boss), "Meyaya"),
+        1,
+    )
     view = GuardianBattleView(cog, a, npc, profiles, arena)
     cog.track_view(view)
     cog.duel_users[1] = view
@@ -77,7 +83,9 @@ async def test_meyaya_npc_turn_then_player_turn_and_recall():
 async def test_only_meyaya_bot_admitted_and_not_globally_reserved():
     guild = NS(id=22)
     cog = FantasyCog(NS(user=NS(id=99)))
-    cog.get_profile = AsyncMock(side_effect=lambda uid: meyaya_boss_profile(uid) if uid == 99 else profile(uid))
+    cog.get_profile = AsyncMock(
+        side_effect=lambda uid: meyaya_boss_profile(uid) if uid == 99 else profile(uid)
+    )
     npc = member(99, guild)
     npc.bot = True
     _, first = await cog.create_duel(member(1, guild), npc)
@@ -99,9 +107,16 @@ async def test_boss_commands_start_without_waiting_for_consent(monkeypatch, comm
     player, npc = member(1, guild), member(99, guild)
     npc.bot = True
     cog = FantasyCog(NS(user=NS(id=99)))
-    cog.get_profile = AsyncMock(side_effect=lambda uid: meyaya_boss_profile(uid) if uid == 99 else profile(uid))
+    cog.get_profile = AsyncMock(
+        side_effect=lambda uid: meyaya_boss_profile(uid) if uid == 99 else profile(uid)
+    )
     message = NS(edit=AsyncMock())
-    ctx = NS(author=player, channel=NS(send=AsyncMock()), send=AsyncMock(return_value=message), defer=AsyncMock())
+    ctx = NS(
+        author=player,
+        channel=NS(send=AsyncMock()),
+        send=AsyncMock(return_value=message),
+        defer=AsyncMock(),
+    )
     cog.run_duel = AsyncMock()
     monkeypatch.setattr(GuardianBattleView, "update", AsyncMock())
     await getattr(FantasyCog, command).callback(cog, ctx, npc)

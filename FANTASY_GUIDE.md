@@ -1,4 +1,4 @@
-# Meyaya — permanent fantasy awakenings
+# Meyaya - fantasy awakenings and rebirth
 
 For consent-based `/versus` duels using these saved identities, see
 [FANTASY_DUELS.md](FANTASY_DUELS.md). Migration `0030_fantasy_duels` adds result
@@ -10,28 +10,64 @@ starts manual guardian combat. See [GUARDIANS.md](GUARDIANS.md).
 
 ## Commands and experience
 
+Patron configuration and copy live in `bot/data/fantasy_alignment.py`. The existing
+`fantasy_profiles.alignment` field stores `meyaya`, `veyra` or `unclaimed`; no new
+alignment migration or server setting is needed. Old moral-alignment strings are
+treated as unclaimed without rewriting rows until the owner chooses. Only the
+alignment, patron title and character comment change when an oath is sealed.
+Classes, weapon IDs, affinity, saved stat rolls and awakening timestamp stay intact.
+`choose_alignment` uses a short row-locked transaction with timestamp validation;
+the art and final avatar are uploaded only after commit. Rebirth clears alignment.
+
 - `/awaken`, `uwu awaken`: a first-use confirmation with **Awaken** and **Not yet**.
   Confirming commits the identity before the visual reveal begins. The sequence is
-  animated affinity sigil → bound weapon → class → potential → abilities.
+  animated affinity sigil → bound weapon → alignment choice → final identity.
   Each discovery waits for the owner's button press; earlier discoveries remain
   visible. The weapon step includes a locally illustrated, looping acquisition
   GIF matching its saved weapon family, affinity and rarity. It uses the bounded
   image worker, is cached for this reveal, and falls back to text if rendering or
-  uploading fails. No API calls, rerolls or database changes are involved.
-  **Previous discovery** goes back. **Open full profile** is required
-  to open the final Soul Interface. There are no timed stage changes.
+  uploading fails. No API calls or rerolls are involved.
+  **Previous discovery** goes back. The third step shows the supplied Origin vs
+  Erasure artwork and two choices: **Meyaya - Bloom of Origin** or **Veyra - Enemy
+  of All**. The owner must choose before the complete class/stats/abilities reveal.
+  The oath is saved before rendering and locked until rebirth. Discord has no
+  pink button style: Meyaya uses a standard primary button with a flower; Veyra
+  uses danger/red. There are no timed stage changes.
   The reveal expires after five minutes without a button interaction; the saved
-  identity is never lost and `/fantasyprofile` can open it anytime.
+  identity is never lost and the owner's `/fantasyprofile` resumes an unclaimed
+  reveal anytime, even after a restart. Looking up another member never lets
+  the viewer choose that member's patron.
   Reusing the command offers **View Character**, never another roll.
+- `/rebirth`, `uwu rebirth`: self-only, 90-second confirmation to replace the
+  current global build. Confirming immediately rolls and saves a fresh level-1
+  identity, weapon, stats and guardian, then opens the paced reveal. There is no
+  undo. The rebirth count survives rerolls; the 24-hour cooldown is stored in
+  PostgreSQL and survives restarts/server changes. Cancelling, timing out or a
+  failed transaction costs nothing. Active battles/awakening views block rebirth.
+  Stale confirmations are rejected under a row lock. Existing duel history remains.
+  A new life clears the oath and lets the owner choose either patron again.
 - `/fantasyprofile [member]`, `uwu fantasyprofile [member]`: read the caller's or
   another member's saved character. Looking someone up never awakens them.
+  Prefix-only lore names `Veyra` or `Veryra` open Veyra's image-only authored card;
+  `Meyaya` opens Meyaya's card. Names are case-insensitive. To view a real member
+  named Veyra, mention that member instead. These lore cards never create player
+  rows or start a battle. Slash commands retain the ordinary member picker.
 - The final public profile has Character, Weapon, Abilities and Details tabs.
   Only its initiating viewer can operate those buttons. Anyone else can open their
   own public profile view. Views expire after 180 seconds and disable their controls.
 
-This establishes identities, not a playable combat/progression system. Skills and
-weapon traits describe future abilities; there are no damage rolls, quests, XP
-awards, inventory, levelling, purchases or user rerolls yet.
+Both combat modes use these saved identities and skills; there are still no XP
+awards, quests, inventory purchases or levelling rewards. Rebirth does not grant
+extra stat points or rare-drop bonuses. Weapons now have 30 recognisable native
+designs (three per family): their catalogue suffix determines the silhouette,
+saved weapon ID determines engraving, and affinity/rarity colour the inlays and
+gemstones. The same weapon always looks the same, including after restarts.
+
+Deployment: apply migration `0031_fantasy_rebirth` with `alembic upgrade head`
+using the normal migration environment before restarting/syncing `/rebirth`.
+The migration adds `rebirth_count` (existing profiles start at zero) and nullable
+`last_rebirth_at`. It does not reroll existing identities. No production migration
+is automatically applied by this implementation.
 
 ### Owner-only reset
 
@@ -40,6 +76,9 @@ can run `uwu fantasyreset @member confirm` (a raw Discord user ID also works).
 This is a hidden **prefix-only** command, not a slash command. Mention prefixes
 and other server prefixes are rejected. It can also be used in DMs with `uwu`.
 Without the final `confirm` argument it only shows the deletion warning.
+There is no command cooldown or rebirth waiting period for this owner-only reset.
+Because it deletes the complete row, its rebirth count and player cooldown also
+reset; it is an administrative override, not an extra player reroll path.
 
 The reset transaction deletes only the selected user's global fantasy row.
 It closes that user's pending awakening and existing profile interfaces in this
@@ -104,8 +143,11 @@ The service starts a transaction, checks for an existing row, and returns it
 unchanged if present. If absent, it generates the complete snapshot and executes
 PostgreSQL `INSERT … ON CONFLICT (user_id) DO NOTHING RETURNING …`.
 Only one competing insertion wins, including separate processes. Losing callers
-read the winning row in a subsequent READ COMMITTED statement. There is **no**
-`DO UPDATE`, user-accessible delete/reset path or seed regeneration. The service exits/commits its
+read the winning row in a subsequent READ COMMITTED statement. Initial awakening
+never uses `DO UPDATE` or seed regeneration. Confirmed rebirth is a separate
+row-locked transaction: it checks the original awakening timestamp and stored
+cooldown again before replacing the snapshot and incrementing its count.
+The service exits/commits its
 transaction before a caller receives the character or begins its reveal.
 
 Use PostgreSQL's normal **READ COMMITTED** isolation, as the existing application
@@ -157,7 +199,7 @@ Ayaya · Bearer of the Hollow Crown
 [portrait card: Ayaya / VOIDBLADE / Astral Duelist]
 [Void affinity · HP 154/154 · MP 115/115]
 
-Potential: STR / DEX / INT / VIT / LCK — stored initial values
+Potential: STR / DEX / INT / VIT / LCK - stored initial values
 Bound weapon: Hollow Secrets · Common · Twin Daggers
 Awakened arts: Starless Step / Moon Sever
 

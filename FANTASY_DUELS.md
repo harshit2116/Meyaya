@@ -1,4 +1,4 @@
-# Fantasy Versus — rules v2
+# Fantasy Versus - rules v5
 
 Use `/versus member:@Haru` or `uwu versus @Haru`. Both human members must already
 have permanent `/awaken` identities and belong to the same server. Only the
@@ -6,12 +6,31 @@ opponent can accept/decline; the challenger can cancel. Challenges expire after
 90 seconds. Results offer participant-only Rematch, My Fantasy Profile and
 Battle Details for 3 minutes. A rematch requires **another consent challenge**.
 
+The battle embed retains the latest three events, newest first. Older events
+leave the visible window as attacks, dodges, healing, wards and damage-over-time
+resolve. These effects change actual temporary HP/status, not just narration.
+Version 5 keeps rolling event history and explicit DODGE wording, and allows
+knockouts after a four-action opening. `/rebirth` changes future battle inputs
+but never rewrites stored results from previous identities.
+
+Alignment grants one bounded resonance without replacing class passives/signatures:
+
+- Meyaya: one Prismatic Guard at the first exchange (4% maximum HP), plus 10%
+  stronger healing. Healing still cannot exceed maximum HP.
+- Veyra: the first two landed strikes soften remaining shields by 15%; the first
+  also applies Erasure Trace for two round ends (1.5% maximum HP per tick).
+  Misses never consume those charges, and existing three-status limits still apply.
+
+These are temporary fight effects, never saved HP/stat changes. Unclaimed legacy
+profiles have no resonance until their owner chooses through `/fantasyprofile`.
+
 Exception: challenge Meyaya herself with `/versus member:@Meyaya` or
-`uwu versus @Meyaya`. She accepts immediately, using a deterministic local
-final-boss identity: level 999, all stats 250, Mythic weapon, 10,000 HP/MP.
-Her ordinary class mechanics and minimum-move rules still apply, but she is
-intentionally overpowered. No NPC profile database row or Gemini request is
-needed. Your awakening is unchanged and there are no rewards. Start another
+`uwu versus @Meyaya`. She accepts immediately, using a dedicated adaptive
+Soulweaver archetype, hidden vitals, bounded Spell Memory and Prism Cascade.
+This is one continuous encounter, not a level-999 player or multiple phases.
+See [MEYAYA_BOSS.md](MEYAYA_BOSS.md) for mechanics, GIFs, masking and balance.
+No NPC profile database row or Gemini request is needed. Your awakening is
+unchanged and there are no rewards. Start another
 `/versus @Meyaya` for a boss rematch (the human-consent Rematch button is disabled).
 Other bots cannot be challenged. Her guardian counterpart is documented in
 [GUARDIANS.md](GUARDIANS.md).
@@ -45,7 +64,8 @@ not a second executable ability. Guardian and summon remain separate commands.
 
 One `random.Random(seed)` per duel selects a cosmetic arena and all combat rolls.
 Initiative = DEX + class bonus + uniform(-2, 2); shuffled ties avoid challenger
-priority. Both fighters act while alive. Maximum six rounds.
+priority. Both fighters act while alive. Twenty rounds is a safety ceiling only;
+normal fights end when actual damage, skills and defenses produce a knockout.
 
 Offence: physical STR; agile max(STR, DEX); magic INT;
 hybrid 0.75 × max(STR, INT) + 0.25 × min(STR, INT).
@@ -55,17 +75,20 @@ raw = (18 + 1.10 × offence + 0.12 × DEX - 0.20 × defender VIT)
       × mode scale × class scale × weapon scale × (1 + 0.01 × rarity index)
       × uniform(0.90, 1.10) × element × mitigation × statuses × skill × crit
 endurance = clamp(sqrt(defender max HP / 160), 0.8, 1.3)
-damage = clamp(round(raw × 0.65 × endurance), 1, floor(defender max HP × 0.22))
+damage = max(1, round(raw × 0.95 × endurance))
+opening actions 1–3 only: cap damage to floor(defender max HP × 0.45)
 ```
 
-Mode scales physical/agile/hybrid/magic = 1.00/1.18/1.24/1.42 compensate for
+Mode scales physical/agile/hybrid/magic = 1.05/1.15/1.22/1.30 compensate for
 the actual saved resource distribution, without replacing HP/stat rolls.
 Class scales: Mage 1.10, Cleric 0.95, Runeblade 1.10, Starcaller 1.18,
 Dreamweaver 1.10, Fatebinder 1.18, Dragon Warden 1.05, Abyss Walker 1.08,
 Moon Priestess 0.98; otherwise 1. Knight mitigation 6%, Paladin/Gravekeeper 4%,
 Dragon Warden 4%. Endurance scaling offsets tank advantage with longer fights
 while retaining saved VIT/HP differences. Damage pacing, not a hidden survival
-floor or fake attacks, keeps valid saved profiles fighting for at least eight moves.
+floor or fake attacks, keeps valid saved profiles fighting for at least four moves.
+From action four onward there is no percentage damage cap. Starcaller receives
+a 0.97 burst scaling correction for the knockout-led rules.
 
 Crit = min(22%, 3.5% + 0.3% × LCK + weapon bonus + temporary 4%); damage ×1.30.
 Dodge = min(20%, 2.5% + 0.25% × DEX + weapon bonus + temporary 5%). Precision
@@ -126,13 +149,13 @@ v2 interpretations, not replacement awakening identities.
 | chronomancer | magic | discount | weaken | 1 |
 | abyss_walker | hybrid | resist | evasion | 1 |
 
-Passives trigger once: shield adds 3% max HP; renew restores 3% at/below half HP;
+Passives trigger once: shield adds 5% max HP; renew restores 6% at/below half HP;
 discount saves 6 MP on first signature; refund returns 5 MP after first signature.
 Empower adds 8% damage, resist adds 5% mitigation (total mitigation capped at 12%);
 evasion/crit/precision modify bounded chances as above. Temporary statuses last
 two round ends, at most three types; reapplication refreshes instead of stacking.
-Weaken reduces damage by 10%. Signature heal restores 3% max HP, guard adds a
-4% max HP ward capped at 15%. Unknown class/weapon mappings use neutral combat;
+Weaken reduces damage by 10%. Signature heal restores 10% max HP, guard adds a
+12% max HP ward capped at 25%. Unknown class/weapon mappings use neutral combat;
 unknown or mismatched authored abilities get no invented effect and are identified
 honestly in Battle Details.
 
@@ -164,13 +187,16 @@ The consent message is acknowledged/disabled, then three new channel messages:
 full-size standalone versus image with a large VS → one live battle
 embed edited after **every individual move** → a new standalone result image
 with clear WON/LOST labels (DRAW for ties) and participant result buttons. The
-opening and result images remain available instead of being overwritten. At least eight
-combined actions, maximum twelve within six rounds; misses count as genuine
-actions. Maximum fourteen PNG renders (intro, twelve actions, final controls),
+opening and result images remain available instead of being overwritten. At least four
+combined actions, maximum forty within twenty rounds; misses count as genuine
+actions. Maximum forty-two PNG renders (intro, forty actions, final controls),
 never a duel GIF. Intro holds 3 seconds, moves 1.5 seconds. Each side uses the member's cached
-avatar/profile palette; fallback initials and arena colours. Original procedural
-shards, glow and particles; eight cosmetic arenas. Defeated avatar greys out,
-winner gets a gold outline, HP/MP bars reflect temporary battle state. Render or
+avatar/profile palette; fallback initials and arena colours. Opening and victory
+use separate reusable illustrated backdrops in `bot/assets/duels`, locally tinted
+to each player's palette and labelled with their full fantasy title and name.
+The victory card puts the winner on the left and cuts the greyed loser portrait
+with a diagonal finishing slash. The existing live card remains unchanged, with
+procedural effects, eight cosmetic arenas and accurate temporary HP/MP bars. Render or
 upload failures fall back to text at that stage, not per-move message spam.
 
 No Gemini, polling, new executors/HTTP sessions, member enumeration or per-turn
@@ -210,9 +236,6 @@ python -m compileall -q bot scripts
 git diff --check
 ```
 
-Balance seed 20261005, 5,000 random class matchups (half-credit for draws): class
-win rates 40.4–63.2%, 119 draws; rounds 5/6 = 2689/2311; moves 9/10/11/12 =
-1615/1074/1095/1216. Another
-1,000 matched rarity comparisons: Mythic vs Common 57.65% (not guaranteed).
-Another 1,000 matched stat comparisons: +3 all stats with generated HP/MP wins
-81.7%. These are offline samples, not a claim of perfect competitive balance.
+Run the simulator for the current v5 balance report; the older v2/v3/v4 rates do
+not describe the new knockout-led pacing. These are offline samples, not a
+claim of perfect competitive balance.

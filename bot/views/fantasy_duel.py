@@ -226,12 +226,18 @@ class DuelResultView(DuelView):
     async def details(self, interaction, button):
         if not await self.interaction_check(interaction):
             return
-        from bot.services.fantasy_duel import element_multiplier, RULES_VERSION
+        from bot.services.fantasy_duel import element_multiplier, RULES_VERSION, MAX_ROUNDS
 
         battle = self.battle
-        text = f"**{battle.verdict}**\n{battle.moves} moves · Round {battle.round}/6 · Rules v{RULES_VERSION}\nNo XP or permanent changes. Damage shown is HP damage after shields.\n"
+        text = f"**{battle.verdict}**\n{battle.moves} moves · Round {battle.round}/{MAX_ROUNDS} · Rules v{RULES_VERSION}\nNo XP or permanent changes.\n"
         for f, other in ((battle.left, battle.right), (battle.right, battle.left)):
             name = discord.utils.escape_markdown(discord.utils.escape_mentions(f.name))
+            if f.is_boss:
+                text += f"\n**{name}**\nRecorded Class: SOULWEAVER\nAdaptive Class: {battle.boss_form}\nHP/MP: UNKNOWN\nPotential: ANALYSIS FAILED\nSpell Memory: {battle.memory_count} adaptations\nAuthority: Soul Interface\n"
+                continue
+            if other.is_boss:
+                text += f"\n**{name}**\nCriticals: {f.critical_hits} · Dodges: {f.dodges} · Skills: {f.skills_used}\nHP {f.hp}/{f.max_hp} · MP {f.mp}/{f.max_mp}\n"
+                continue
             text += f"\n**{name}**\nDamage dealt/taken: {f.damage_dealt}/{f.damage_taken}\nCriticals: {f.critical_hits} · Dodges: {f.dodges} · Skills: {f.skills_used}\nElement: {element_multiplier(f.affinity, other.affinity):.2f}× · Passive: {f.passive_name if f.passive else 'No mapped effect'}\n"
         await interaction.response.send_message(
             embed=meyaya_embed("Battle Details", text, icon="⚔"), ephemeral=True

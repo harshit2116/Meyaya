@@ -12,9 +12,9 @@ from bot.data.fantasy_combat import (
     CombatRule,
 )
 
-MAX_ROUNDS = 6
-RULES_VERSION = 2
-MIN_MOVES = 8
+MAX_ROUNDS = 20  # Safety ceiling, not the intended length of a fight.
+RULES_VERSION = 5
+MIN_MOVES = 4
 
 
 @dataclass
@@ -54,6 +54,10 @@ class Fighter:
     dodges: int = 0
     skills_used: int = 0
     last_move: str = ""
+    is_boss: bool = False
+    alignment: str = ""
+    resonance_used: bool = False
+    erasure_hits: int = 0
 
     @classmethod
     def snapshot(cls, profile, name):
@@ -73,7 +77,7 @@ class Fighter:
             and profile.signature_id.startswith(profile.class_id + ":")
             else ""
         )
-        return cls(
+        fighter = cls(
             profile.user_id,
             str(name)[:80],
             profile.class_id,
@@ -101,6 +105,12 @@ class Fighter:
             profile.max_mp,
             rule,
         )
+        fighter.is_boss = bool(getattr(profile, "is_meyaya_boss", False))
+        from bot.data.fantasy_alignment import patron_for
+
+        patron = patron_for(profile)
+        fighter.alignment = getattr(profile, "alignment", "") if patron else ""
+        return fighter
 
 
 @dataclass
@@ -113,10 +123,15 @@ class Battle:
     moves: int = 0
     last_actor: int | None = None
     log: list[str] = field(default_factory=list)
+    history: list[str] = field(default_factory=list)
     winner_id: int | None = None
     finished: bool = False
     verdict: str = ""
     finisher: str = ""
+    boss_form: str = ""
+    counter_pattern: str = ""
+    memory_count: int = 0
+    dialogue: str = ""
 
 
 def element_multiplier(attacker, defender):
@@ -137,6 +152,8 @@ class DuelEngine:
         return fighter.dexterity + fighter.rule.initiative + self.rng.uniform(-2, 2)
 
     def heal(self, fighter, amount):
+        if fighter.alignment == "meyaya":
+            amount = round(amount * 1.10)
         recovered = min(max(0, amount), fighter.max_hp - fighter.hp)
         fighter.hp += recovered
         return recovered
@@ -154,6 +171,10 @@ class DuelEngine:
             fighter.statuses[name] = turns
 
     def activate_passive(self, f):
+        if f.alignment == "meyaya" and not f.resonance_used:
+            f.resonance_used = True
+            f.shield += max(1, round(f.max_hp * 0.04))
+            self.state.log.append(f"🌸 {f.name}'s Origin Resonance raises Prismatic Guard.")
         if f.passive_used or not f.passive:
             return
         if f.passive == "renew" and f.hp > f.max_hp * 0.5:
@@ -161,9 +182,9 @@ class DuelEngine:
         f.passive_used = True
         effect = f.passive
         if effect == "shield":
-            f.shield += round(f.max_hp * 0.03)
+            f.shield += round(f.max_hp * 0.05)
         elif effect == "renew":
-            self.heal(f, round(f.max_hp * 0.03))
+            self.heal(f, round(f.max_hp * 0.06))
         elif effect in {"evasion", "empower", "crit", "resist", "precision"}:
             self.status(f, effect, 2)
         self.state.log.append(f"✦ {f.name}'s {f.passive_name} awakens ({effect}).")
@@ -181,10 +202,10 @@ class DuelEngine:
             if a.passive == "refund" and a.skills_used == 1:
                 a.mp = min(a.max_mp, a.mp + 5)
             if a.signature == "heal":
-                amount = self.heal(a, round(a.max_hp * 0.03))
+                amount = self.heal(a, round(a.max_hp * 0.10))
                 self.state.log.append(f"☾ {a.name} invokes {skill}, restoring {amount} HP.")
             elif a.signature == "guard":
-                a.shield = min(round(a.max_hp * 0.15), a.shield + round(a.max_hp * 0.04))
+                a.shield = min(round(a.max_hp * 0.25), a.shield + round(a.max_hp * 0.12))
                 self.state.log.append(f"◇ {a.name}'s {skill} raises a {a.shield} HP ward.")
             elif a.signature == "evasion":
                 self.status(a, "evasion", 2)
@@ -204,7 +225,7 @@ class DuelEngine:
             dodge *= 0.5
         if self.rng.random() < dodge:
             b.dodges += 1
-            self.state.log.append(f"✧ {b.name} slips beyond {a.name}'s {skill}!")
+            self.state.log.append(f"✧ DODGE · {b.name} avoids {a.name}'s {skill}! No damage.")
             return
         crit_chance = min(
             0.22, 0.035 + a.luck * 0.003 + weapon_crit + (0.04 if "crit" in a.statuses else 0)
@@ -226,12 +247,14 @@ class DuelEngine:
         )
         # Saved resource distribution favours tanks. Bounded caster/agile scaling
         # offsets that advantage without replacing anyone's actual HP/stat rolls.
-        mode_scale = {"physical": 1.0, "agile": 1.18, "hybrid": 1.24, "magic": 1.42}[a.rule.mode]
+        mode_scale = {"physical": 1.05, "agile": 1.15, "hybrid": 1.22, "magic": 1.30}[a.rule.mode]
         raw = (
             (18 + offense * 1.10 + a.dexterity * 0.12 - b.vitality * 0.20)
             * mode_scale
             * a.rule.damage_scale
         )
+        if a.class_id == "starcaller":
+            raw *= 0.97  # Retune burst scaling for knockout-led v4 pacing.
         raw *= family_mult * (1 + a.rarity * 0.01) * self.rng.uniform(0.90, 1.10)
         raw *= element_multiplier(a.affinity, b.affinity)
         raw *= 1 - min(0.12, b.rule.mitigation + (0.05 if "resist" in b.statuses else 0))
@@ -252,17 +275,26 @@ class DuelEngine:
         if critical:
             raw *= 1.30
             a.critical_hits += 1
-        # Slower genuine damage pacing, not an artificial last-HP survival floor.
-        # Four strikes plus bounded DOT cannot KO a full-health saved identity.
+        # Only the opening exchange is paced: two hits plus DOT stay below full
+        # HP. From move four onward, actual offence/defence and skills decide KOs.
         endurance_scale = min(1.3, max(0.8, (b.max_hp / 160) ** 0.5))
-        damage = max(1, min(max(1, int(b.max_hp * 0.22)), round(raw * 0.65 * endurance_scale)))
+        damage = max(1, round(raw * 0.95 * endurance_scale))
+        if self.state.moves < MIN_MOVES - 1:
+            damage = min(damage, max(1, int(b.max_hp * 0.45)))
         if signature and a.signature == "break":
             b.shield = round(b.shield * 0.5)
+        if a.alignment == "veyra" and a.erasure_hits < 2:
+            a.erasure_hits += 1
+            b.shield = round(b.shield * 0.85)
+            if not a.resonance_used:
+                a.resonance_used = True
+                self.status(b, "erasure_trace", 2)
+                self.state.log.append(f"🩸 {a.name}'s Erasure Resonance leaves an Erasure Trace.")
         taken, blocked = self.absorb(b, damage)
         a.damage_dealt += taken
         verb = self.rng.choice(("unleashes", "channels", "answers with"))
         self.state.log.append(
-            f"{'✹ CRITICAL · ' if critical else '⚔ '}{a.name} {verb} {skill} — {taken} damage{' · ' + str(blocked) + ' shield absorbed' if blocked else ''}."
+            f"{'✹ CRITICAL · ' if critical else '⚔ '}{a.name} {verb} {skill} - {taken} damage{' · ' + str(blocked) + ' shield absorbed' if blocked else ''}."
         )
         if signature and a.affinity in {"fire", "blood"} and b.hp:
             self.status(b, "burn" if a.affinity == "fire" else "bleed", 2)
@@ -272,13 +304,15 @@ class DuelEngine:
     def end_round(self):
         for f in (self.state.left, self.state.right):
             for status in tuple(f.statuses):
-                if status in {"burn", "bleed"} and f.hp:
-                    damage, _ = self.absorb(f, max(1, int(f.max_hp * 0.01)))
+                if status in {"burn", "bleed", "erasure_trace"} and f.hp:
+                    scale = 0.015 if status == "erasure_trace" else 0.01
+                    damage, _ = self.absorb(f, max(1, int(f.max_hp * scale)))
                     other = self.state.right if f is self.state.left else self.state.left
                     other.damage_dealt += damage
                     if not f.hp:
                         self.state.finisher = status.title()
-                    self.state.log.append(f"✦ {f.name}'s {status} deals {damage} damage.")
+                    label = status.replace("_", " ").title()
+                    self.state.log.append(f"✦ {f.name}'s {label} deals {damage} damage.")
                 f.statuses[status] -= 1
                 if f.statuses[status] <= 0:
                     del f.statuses[status]
@@ -321,6 +355,7 @@ class DuelEngine:
             self.end_round()
         if self.state.finished:
             self._turns.clear()
+        self.state.history = (self.state.history + self.state.log)[-3:]
         return self.state
 
     def advance(self):

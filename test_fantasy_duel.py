@@ -105,7 +105,7 @@ def test_single_move_steps_preserve_round_order_and_rng():
         assert state.moves == previous_moves + 1
         assert state.last_actor in (1, 2) and state.log
         assert state.round == (state.moves + 1) // 2
-    assert 8 <= state.moves <= 12
+    assert 4 <= state.moves <= 40
     assert asdict(state) == asdict(complete(engine(5)))
     before = asdict(state)
     e.advance_move()
@@ -160,11 +160,11 @@ def test_knockouts(left_hp, right_hp, winner):
 
 def test_maximum_round_fallback_and_draw():
     e = engine()
-    e.state.round = 6
+    e.state.round = 20
     e.end_round()
     assert e.state.finished and e.state.winner_id is None
     e = engine()
-    e.state.round = 6
+    e.state.round = 20
     e.state.right.hp = 1
     e.end_round()
     assert e.state.winner_id == 1
@@ -180,7 +180,13 @@ def test_chance_caps_and_damage_cap():
     )
     e.attack(a, b)
     assert not b.dodges and not a.critical_hits
-    assert a.damage_dealt <= int(b.max_hp * 0.22)
+    assert a.damage_dealt <= int(b.max_hp * 0.45)
+    # After the opening, a vastly stronger fighter may deliver a real knockout.
+    e.state.moves = 3
+    b.hp = b.max_hp
+    e.rng.random = lambda: 0.99
+    e.attack(a, b)
+    assert b.hp == 0
 
 
 @pytest.mark.parametrize("class_id", ["cleric", "paladin", "mage", "warlock", "moon_priestess"])
@@ -208,8 +214,8 @@ def test_balance_simulator_actual_class_and_rarity_distribution():
 
     result = simulate(5000)
     assert sum(result["rounds"].values()) == 5000
-    assert set(result["rounds"]) <= {3, 4, 5, 6}
-    assert min(result["moves"]) >= 8 and max(result["moves"]) <= 12
+    assert min(result["rounds"]) >= 2 and max(result["rounds"]) <= 20
+    assert min(result["moves"]) >= 4 and max(result["moves"]) <= 40
     assert all(35 <= rate <= 65 for rate in result["class_rates"].values())
     assert 50 < result["mythic_vs_common_percent"] < 70
     assert 65 < result["stronger_stats_percent"] < 95
@@ -219,8 +225,8 @@ def test_1000_battles_are_bounded_and_not_one_shots():
     for seed in range(1000):
         e = engine(seed)
         state = complete(e)
-        assert 3 <= state.round <= 6
-        assert 8 <= state.moves <= 12
+        assert 2 <= state.round <= 20
+        assert 4 <= state.moves <= 40
         for f in (state.left, state.right):
             assert 0 <= f.hp <= f.max_hp and 0 <= f.mp <= f.max_mp
             assert f.skills_used <= 2 and len(f.statuses) <= 3
@@ -237,6 +243,26 @@ def test_renderer_missing_avatar_and_palette_quality():
     assert image.getpixel((1060, 300))[2] > image.getpixel((1060, 300))[0]
     final = Image.open(BytesIO(render_duel(complete(e))))
     assert final.tobytes() != image.tobytes()
+
+
+def test_three_stages_use_distinct_art_and_missing_asset_falls_back(monkeypatch):
+    import bot.services.fantasy_duel_renderer as renderer
+
+    e = engine()
+    opening = render_duel(e.state, intro=True)
+    e.advance_move()
+    battle = render_duel(e.state)
+    victory = render_duel(complete(e))
+    assert len({opening, battle, victory}) == 3
+    for data in (opening, battle, victory):
+        assert len(data) < 4 * 1024 * 1024
+        assert Image.open(BytesIO(data)).size == DUEL_SIZE
+
+    def unavailable(kind):
+        raise FileNotFoundError(kind)
+
+    monkeypatch.setattr(renderer, "cinematic_background", unavailable)
+    assert Image.open(BytesIO(render_duel(engine().state, intro=True))).size == DUEL_SIZE
 
 
 @pytest.mark.asyncio
@@ -480,7 +506,7 @@ async def test_full_flow_every_move_image_fallbacks_and_cleanup(monkeypatch, fai
         assert session.execute.await_count == 1
         result = next(iter(cog.views))
         assert isinstance(result, DuelResultView)
-        assert 8 <= result.battle.moves <= 12
+        assert 4 <= result.battle.moves <= 40
         assert render.await_count == result.battle.moves + 2
         if failure != "render":
             assert rendered_moves == list(range(result.battle.moves + 1)) + [result.battle.moves]

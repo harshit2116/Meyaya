@@ -31,6 +31,10 @@ __pycache__/
 /dist/
 
 # Tests and code analysis caches
+# Local-only visual preview helpers (keep regression simulators tracked)
+/scripts/preview_duel_stages.py
+/scripts/preview_fantasy_alignment.py
+/scripts/preview_fantasy_weapons.py
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/

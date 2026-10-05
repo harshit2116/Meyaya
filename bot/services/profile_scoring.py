@@ -158,7 +158,7 @@ def build_improvement_summary(visual):
         return "Every available category is 100/100."
     if visual.comparison_available is False:
         return build_missing_comparison_message(visual)
-    return f"{name} needs the most work — {score}/100."
+    return f"{name} needs the most work - {score}/100."
 
 
 def get_rule_based_recommendation(visual):

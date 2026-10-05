@@ -257,6 +257,8 @@ def test_migration_matches_model_and_offline_upgrade_downgrade():
     assert "PRIMARY KEY (user_id)" in sql and "DROP TABLE fantasy_profiles" in sql
     assert "TIMESTAMP WITH TIME ZONE" in sql and "base_stats JSON NOT NULL" in sql
     for column in FantasyProfile.__table__.columns:
+        if column.name in {"rebirth_count", "last_rebirth_at"}:
+            continue  # Added by the separately tested 0031 migration.
         assert column.name in sql and column.nullable is False
     for constraint in FantasyProfile.__table__.constraints:
         if isinstance(constraint, sa.CheckConstraint):
@@ -421,6 +423,7 @@ async def test_render_failure_falls_back_and_stores_actual_summary():
     cog = FantasyCog(NS())
     cog.card_bytes = AsyncMock(side_effect=ValueError("bad renderer"))
     soul = profile(123)
+    soul.alignment = "meyaya"
     inter = interaction()
     await cog.deliver(inter, soul, inter.user, 123)
     kwargs = inter.edit_original_response.call_args.kwargs
@@ -438,7 +441,9 @@ async def test_reveal_and_upload_failure_keep_saved_profile(monkeypatch):
     inter = interaction()
     error = discord.HTTPException(NS(status=500, reason="failure"), "upload failed")
     inter.edit_original_response.side_effect = [error, NS(id=9, channel=NS(id=5))]
-    await cog.deliver(inter, profile(123), inter.user, 123)
+    claimed = profile(123)
+    claimed.alignment = "meyaya"
+    await cog.deliver(inter, claimed, inter.user, 123)
     assert inter.edit_original_response.await_count == 2
     assert not inter.edit_original_response.call_args.kwargs["view"].image
     cog.cog_unload()
@@ -472,22 +477,29 @@ async def test_reveal_waits_for_buttons_and_final_profile_is_explicit(monkeypatc
     cog.card_bytes.assert_not_awaited()
     await asyncio.sleep(0)
     assert view.step == 0
-    for step in range(1, 5):
+    for step in range(1, 3):
         await view.advance.callback(inter)
         assert view.step == step and not view.closed
-        assert view.embed().fields[0].name == "Affinity"
+        assert view.embed().fields[0].name == "Affinity" if step == 1 else not view.embed().fields
         assert len(view.embed()) < 6000
         cog.card_bytes.assert_not_awaited()
-    assert view.advance.label == "Open full profile"
+    assert view.advance not in view.children
+    assert view.origin in view.children and view.erasure in view.children
+    assert (
+        inter.edit_original_response.call_args.kwargs["attachments"][0].filename
+        == "origin-erasure.png"
+    )
     await view.back.callback(inter)
-    assert view.step == 3 and view.advance.label == "Reveal abilities"
+    assert view.step == 1 and view.advance.label == "Choose your alignment"
     await view.advance.callback(inter)
-    await view.advance.callback(inter)
+    soul.alignment = "meyaya"
+    cog.align_user = AsyncMock(return_value=soul)
+    await view.origin.callback(inter)
     cog.card_bytes.assert_awaited_once()
     assert view.closed and 123 not in cog.pending
     assert isinstance(inter.edit_original_response.call_args.kwargs["view"], FantasyProfileView)
     assert soul.weapon_name in cog.bot._meyaya_command_outputs[(5, 9)][1].result_summary
-    await view.advance.callback(inter)
+    await view.origin.callback(inter)
     cog.card_bytes.assert_awaited_once()
     cog.cog_unload()
 
@@ -612,8 +624,36 @@ async def test_postgres_concurrent_awakenings_on_explicit_isolated_database():
         results = await asyncio.gather(*(awaken() for _ in range(12)))
         assert sum(created for _, created in results) == 1
         assert len({row.weapon_name + row.fantasy_title for row, _ in results}) == 1
+        expected = results[0][0].awakened_at
+
+        async def claim(choice):
+            from bot.services.fantasy_profile import AlignmentUnavailable
+
+            async with sessions() as session:
+                try:
+                    return await FantasyProfileService(session).choose_alignment(
+                        123, expected, choice
+                    )
+                except AlignmentUnavailable:
+                    return None
+
+        claims = await asyncio.gather(*(claim("meyaya" if n % 2 else "veyra") for n in range(12)))
+        assert sum(row is not None for row in claims) == 1
+
+        async def rebirth():
+            from bot.services.fantasy_profile import RebirthUnavailable
+
+            async with sessions() as session:
+                try:
+                    return await FantasyProfileService(session).rebirth(123, expected)
+                except RebirthUnavailable:
+                    return None
+
+        rolls = await asyncio.gather(*(rebirth() for _ in range(12)))
+        assert sum(row is not None for row in rolls) == 1
         async with sessions() as session:
             assert await session.scalar(sa.select(sa.func.count()).select_from(FantasyProfile)) == 1
+            assert (await session.get(FantasyProfile, 123)).rebirth_count == 1
     finally:
         async with engine.begin() as connection:
             await connection.run_sync(lambda sync: FantasyProfile.__table__.drop(sync))

@@ -98,7 +98,7 @@ class ExtrasCog(commands.Cog):
         if not isinstance(result, dict) or any(not isinstance(result.get(key), str) or not result[key].strip() for key in fields):
             await ctx.send("My imagination needs a moment. Please try again shortly.")
             return
-        embed = meyaya_embed(safe_text(target.display_name, 80) + ("’s room" if room else " — handle with care"),
+        embed = meyaya_embed(safe_text(target.display_name, 80) + ("’s room" if room else " - handle with care"),
                              icon="🛋️" if room else "⚠️")
         embed.set_thumbnail(url=str(target.display_avatar.url))
         for key in fields:

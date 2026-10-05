@@ -4,20 +4,44 @@ Meyaya is a Discord character bot built with Python. She supports social reactio
 profiles, marriage, multiplayer games, court cases, Gemini chat and memory, English-only monitoring,
 and live voice conversations.
 
-## Permanent fantasy awakenings
+Meyaya uses a fixed Do Not Disturb presence with the custom status
+“The Girl at the end of every story”. Edit `bot/cogs/presence.py` to change it.
+The `Meyaya` emoji is sent best-effort; Discord may omit custom-status emoji for
+bot accounts. The former 15-minute presence rotation is disabled.
 
-`/awaken` (or `uwu awaken`) opens a confirmation ritual and reveals a permanent,
-global fantasy identity. `/fantasyprofile [member]` opens its Soul Interface:
-Character, Weapon, Abilities and Details. These commands use local generation and
+## Fantasy awakenings and rebirth
+
+`/awaken` (or `uwu awaken`) opens a confirmation ritual and reveals a saved,
+global fantasy identity. `/fantasyprofile [member]` opens its Soul Interface with
+Character, Weapon, Abilities and Details tabs.
+Affinity and weapon reveals lead to a Meyaya/Veyra oath choice, then the complete
+identity card. Alignment adds patron titles, commentary, visual themes and small
+`/versus` combat resonances; it is locked until rebirth. It also grants celestial
+Origin or ominous Erasure guardian forms. Expired/unclaimed reveals resume through
+the owner's `/fantasyprofile`. Existing core classes, weapons and stats stay intact.
+These commands use local generation and
 Pillow rendering, not Gemini quota. Existing `/summon` is unchanged. `/guardian`
 now shows a soul-bound companion tied to the saved awakening, rather than a daily draw.
 
+`/rebirth` / `uwu rebirth` offers a self-only confirmation to reroll the entire
+build, weapon and guardian, with a persistent 24-hour cooldown and rebirth count.
+Owner-only `uwu fantasyreset @member confirm` has no cooldown. Apply migration
+`0031_fantasy_rebirth` before restarting. Battles show the latest three events;
+guardian dodges, healing and shields affect real temporary combat resources.
+Weapon acquisition has 30 distinct native designs, with saved-ID engraving and
+affinity/rarity accents. See [FANTASY_GUIDE.md](FANTASY_GUIDE.md).
+
 `/versus member:@Haru` / `uwu versus @Haru` challenges another awakened member
-to a consent-based, automatic duel with at least eight combined moves in up to
-six rounds. A full-size profile-palette versus image opens the fight, then the
+to a consent-based, automatic duel with at least four combined moves and a
+twenty-round safety ceiling. A full-size profile-palette versus image opens the fight, then the
 battle embed image updates after every move with temporary HP/MP. A separate
 WON/LOST result image closes the match, leaving the opening image intact;
 permanent identities and XP stay unchanged.
+
+Challenge `/versus member:@Meyaya` for her dedicated Soul Interface boss encounter:
+hidden HP/MP, a one-time counter-class rewrite, capped Spell Memory, Prism Cascade
+and cinematic dialogue/GIFs. It is difficult but winnable, with no extra AI calls,
+phases or numeric boss profile. See [MEYAYA_BOSS.md](MEYAYA_BOSS.md).
 
 `/guardianbattle member:@Haru` / `uwu guardianbattle @Haru` starts a separate,
 consent-based guardian battle in the same channel. Trainers alternate Strike,

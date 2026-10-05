@@ -7,6 +7,7 @@ from datetime import UTC
 from types import SimpleNamespace
 from bot.data.fantasy import AFFINITIES
 from bot.services.fantasy_duel import element_multiplier
+from bot.data.fantasy_alignment import patron_for
 
 GUARDIAN_VERSION = 1
 SPECIES = (
@@ -15,7 +16,7 @@ SPECIES = (
         "owl",
         "Dream sentinel",
         "Clear Sight",
-        "Focused strikes find weak spots.",
+        "Focused strikes find weak spots; brief evasion.",
         "Lower physical defence.",
         0,
         -2,
@@ -26,7 +27,7 @@ SPECIES = (
         "fox",
         "Astral familiar",
         "Starstep",
-        "Recover a little HP and sharpen your next strike.",
+        "Recover HP, sharpen a strike and prepare evasion.",
         "No extra armour.",
         0,
         0,
@@ -76,6 +77,7 @@ class Guardian:
     blessing: str
     blessing_text: str
     weakness: str
+    alignment: str = ""
 
 
 def bound_guardian(profile):
@@ -83,11 +85,19 @@ def bound_guardian(profile):
         # Reuse the ordinary binding only to supply its complete immutable schema.
         ordinary = SimpleNamespace(**(vars(profile) | {"is_meyaya_boss": False}))
         return replace(
-            bound_guardian(ordinary), name="Meyaya's Astral Dragon", species="dragon",
-            role="Final-boss guardian", bond=100, max_hp=30000, max_mp=10000,
-            attack=500, defense=500, speed=500, blessing="Sovereign Ward",
+            bound_guardian(ordinary),
+            name="Meyaya's Astral Dragon",
+            species="dragon",
+            role="Final-boss guardian",
+            bond=100,
+            max_hp=30000,
+            max_mp=10000,
+            attack=500,
+            defense=500,
+            speed=500,
+            blessing="Sovereign Ward",
             blessing_text="Restores vitality and shields the sovereign.",
-            weakness="Intentionally overpowered NPC — challenge at your own risk.",
+            weakness="Intentionally overpowered NPC - challenge at your own risk.",
         )
     # No guild/day dependency. Preserve this version/catalog ordering for stability.
     when = profile.awakened_at
@@ -98,7 +108,7 @@ def bound_guardian(profile):
         rng.randrange(len(SPECIES))
     ]
     affinity = AFFINITIES.get(profile.affinity_id, AFFINITIES["arcane"])
-    return Guardian(
+    guardian = Guardian(
         profile.user_id,
         name,
         species,
@@ -117,6 +127,37 @@ def bound_guardian(profile):
         text,
         weakness,
     )
+    patron = patron_for(profile)
+    if not patron:
+        return guardian
+    names = {
+        "meyaya": {
+            "owl": "Dawnwatch Owl",
+            "fox": "Aurora Fox",
+            "dragon": "Everbloom Dragon",
+            "moth": "Seraph Moth",
+        },
+        "veyra": {
+            "owl": "Bloodmoon Owl",
+            "fox": "Ruinshade Fox",
+            "dragon": "Ashen Dreadwyrm",
+            "moth": "Graveveil Moth",
+        },
+    }
+    return replace(
+        guardian,
+        name=names[profile.alignment][species],
+        role=(
+            "Origin guardian · Celestial protector"
+            if profile.alignment == "meyaya"
+            else "Erasure guardian · Ruin familiar"
+        ),
+        color=patron.color,
+        alignment=profile.alignment,
+        blessing=("Origin Blessing · " if profile.alignment == "meyaya" else "Ruin Pact · ")
+        + blessing,
+        blessing_text=patron.name + "'s oath empowers this companion. " + text,
+    )
 
 
 @dataclass
@@ -128,6 +169,8 @@ class GuardianFighter:
     guarded: bool = False
     blessing_uses: int = 0
     focus: int = 0
+    evasive: int = 0
+    dodges: int = 0
 
     def __post_init__(self):
         self.hp, self.mp = self.guardian.max_hp, self.guardian.max_mp
@@ -156,6 +199,20 @@ class GuardianBattle:
     @property
     def actor(self):
         return self.fighters[self.turn]
+
+    @property
+    def log(self):
+        return self._log
+
+    @log.setter
+    def log(self, value):
+        history = getattr(self, "history", [])
+        if history and value.startswith(history[-1]):
+            history[-1] = value
+        else:
+            history.append(value)
+        self.history = history[-3:]
+        self._log = value
 
     def choose(self, user_id, move):
         if self.finished:
@@ -194,9 +251,10 @@ class GuardianBattle:
             a.hp += healed
             if species in {"owl", "fox"}:
                 a.focus = 2 if species == "owl" else 1
+                a.evasive = 2 if species == "owl" else 1
             if species == "dragon":
                 a.guarded = True
-            self.log = f"{a.guardian.name} invokes {a.guardian.blessing}: +{healed} HP{' · focused strikes ready' if a.focus else ''}{' · ward raised' if species == 'dragon' else ''}."
+            self.log = f"{a.guardian.name} invokes {a.guardian.blessing}: +{healed} HP{' · focus and evasion ready' if a.focus else ''}{' · ward raised' if species == 'dragon' else ''}."
         else:
             if move == "affinity":
                 a.mp -= 14
@@ -213,12 +271,29 @@ class GuardianBattle:
             critical = self.rng.random() < (0.12 if a.guardian.species == "fox" else 0.08)
             if critical:
                 raw *= 1.25
-            if b.guarded:
-                raw *= 0.5
-                b.guarded = False
-            damage = min(b.hp, max(5, min(round(b.guardian.max_hp * 0.32), round(raw))))
-            b.hp -= damage
-            self.log = f"{a.guardian.name} uses {a.guardian.affinity_name + ' Pulse' if move == 'affinity' else 'Strike'}! {damage} damage{' · Critical hit!' if critical else '.'}"
+            evade = min(
+                0.18,
+                0.04
+                + 0.10 * b.guardian.speed / max(1, a.guardian.speed + b.guardian.speed)
+                + (0.025 if b.guardian.species == "fox" else 0)
+                + (0.08 if b.evasive else 0),
+            )
+            if b.evasive:
+                b.evasive -= 1
+            attack_name = a.guardian.affinity_name + " Pulse" if move == "affinity" else "Strike"
+            if self.rng.random() < evade:
+                b.dodges += 1
+                self.log = f"DODGE · {b.guardian.name} avoids {a.guardian.name}'s {attack_name}! No damage; ward preserved."
+            else:
+                damage = max(5, min(round(b.guardian.max_hp * 0.32), round(raw)))
+                blocked = 0
+                if b.guarded:
+                    blocked = damage // 2
+                    damage -= blocked
+                    b.guarded = False
+                damage = min(b.hp, damage)
+                b.hp -= damage
+                self.log = f"{a.guardian.name} uses {attack_name}! {damage} damage{' · CRITICAL' if critical else ''}{' · shield absorbed ' + str(blocked) if blocked else ''}."
         if not b.hp:
             self.finished, self.winner_id = True, a.guardian.owner_id
         elif self.moves >= 24:

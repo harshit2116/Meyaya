@@ -34,6 +34,10 @@ class FantasyProfile(Base):
     affinity_name: Mapped[str] = mapped_column(String(40), nullable=False)
     level: Mapped[int] = mapped_column(Integer, nullable=False)
     xp: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    rebirth_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    last_rebirth_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     hp: Mapped[int] = mapped_column(Integer, nullable=False)
     max_hp: Mapped[int] = mapped_column(Integer, nullable=False)
     mp: Mapped[int] = mapped_column(Integer, nullable=False)

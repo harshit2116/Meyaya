@@ -60,7 +60,6 @@ class AdminCog(commands.Cog):
     @commands.command(name="fantasyreset", hidden=True)
     @commands.check(private_owner)
     @commands.check(fantasy_reset_prefix)
-    @commands.cooldown(1, 5, commands.BucketType.user)
     async def fantasyreset(self, ctx: commands.Context, member: discord.User, confirmation: str = ""):
         # Defense in depth: no slash, mention-prefix or alternate-prefix route.
         if not private_owner(ctx) or not fantasy_reset_prefix(ctx):

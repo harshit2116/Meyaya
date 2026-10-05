@@ -1,5 +1,13 @@
 # Soul-bound guardians and guardian battles
 
+The live embed and arena image keep three recent events, newest first. Attacks
+can be dodged (4% base + up to 10% from relative speed, +2.5% for Fox, +8% while
+evasive, capped at 18%). A dodge costs the attacking move's MP, but preserves
+the defender's unused ward. Owl/Fox blessings prepare two/one evasion charges
+alongside their existing focus/heal; Dragon shields and Moth healing retain
+their finite two-charge limit. Wards halve one landed hit and report absorption.
+`/rebirth` rerolls the awakening and therefore the bound guardian after confirmation.
+
 `/guardian [member]` / `uwu guardian [@member]` shows the companion belonging to
 the member's saved awakening. `/guardianbattle member:@Haru` /
 `uwu guardianbattle @Haru` challenges their companion in the current channel.
@@ -8,7 +16,7 @@ opponent: `/guardianbattle @Meyaya` or `uwu guardianbattle @Meyaya` starts witho
 waiting for consent. Her moves resolve automatically after 1.2 seconds, while
 the player chooses manually and can recall even during her turn. Other bots
 remain unsupported. Meyaya's local NPC profile is never inserted into the database:
-level 999, all five stats 250, Mythic weapon, 10,000 HP/MP. Her Astral Dragon has
+the canonical Soulweaver identity and Mythic weapon. Her Astral Dragon has
 30,000 HP, 10,000 MP, 500 ATK/DEF/SPD and bond 100. These fights are deliberately
 unfair, not balanced competitive matches, and give no XP or rewards.
 Players can challenge Meyaya concurrently, subject to normal bounded arena capacity.
@@ -16,6 +24,24 @@ Players can challenge Meyaya concurrently, subject to normal bounded arena capac
 `/versus` remains separate. One member cannot occupy both arenas simultaneously.
 
 ## Binding and fantasy integration
+
+Alignment adds eight authored forms over the four original species:
+
+| Species | Meyaya - Origin | Veyra - Erasure |
+| --- | --- | --- |
+| Owl | Dawnwatch Owl | Bloodmoon Owl |
+| Fox | Aurora Fox | Ruinshade Fox |
+| Dragon | Everbloom Dragon | Ashen Dreadwyrm |
+| Moth | Seraph Moth | Graveveil Moth |
+
+Origin guardians are celestial protectors with pink/gold highlights and halos;
+Erasure guardians are darker ruin familiars with crimson material tints and sigils.
+Each keeps its species anatomy, stats and functioning blessing. Alignment renames
+the blessing to Origin Blessing or Ruin Pact without changing its strength. The
+same saved awakening and oath always resolve to the same companion across servers
+and restarts. Rebirth rerolls the binding and permits a new patron choice.
+Existing unclaimed profiles retain the old guardian until their owner chooses.
+No new external image-generation calls or guardian assets are required at runtime.
 
 Version 1 hashes the owner ID, UTC-normalized saved awakening timestamp and class
 ID to choose one of four original companion species. There is no date/guild

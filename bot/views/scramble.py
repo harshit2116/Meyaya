@@ -104,7 +104,7 @@ class ScrambleView(discord.ui.View):
     async def move(self, interaction, position):
         await interaction.response.defer()
         if self.lock.locked():
-            await interaction.followup.send("One tile at a time—your board is updating.", ephemeral=True)
+            await interaction.followup.send("One tile at a time - your board is updating.", ephemeral=True)
             return
         async with self.lock:
             if self.ended:

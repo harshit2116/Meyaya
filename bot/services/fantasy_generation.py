@@ -5,7 +5,6 @@ from random import SystemRandom
 
 from bot.data.fantasy import (
     AFFINITIES,
-    ALIGNMENTS,
     CLASSES,
     GENERATION_VERSION,
     HP_BASE,
@@ -69,6 +68,8 @@ def generate_identity(user_id, *, rng=None, now=None, class_id=None):
         "affinity_name": affinity.name,
         "level": 1,
         "xp": 0,
+        "rebirth_count": 0,
+        "last_rebirth_at": None,
         "hp": hp,
         "max_hp": hp,
         "mp": mp,
@@ -89,7 +90,7 @@ def generate_identity(user_id, *, rng=None, now=None, class_id=None):
         "signature_name": rule.signature,
         "signature_description": f"{rule.signature_text} It {affinity.effect}.",
         "fantasy_title": rng.choice(TITLE_PATTERNS).format(word=prefix),
-        "alignment": rng.choice(ALIGNMENTS),
+        "alignment": "unclaimed",
         "description": f"A {subclass} whose {affinity.name.lower()} resonance first surfaced as a {rule.name}. {affinity.lore}",
         "meyaya_reaction": rng.choice(reactions),
         "awakened_at": now or datetime.now(UTC),

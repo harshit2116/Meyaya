@@ -2,18 +2,22 @@
 
 from io import BytesIO
 import math
+from dataclasses import replace
 
 from PIL import Image, ImageDraw, ImageOps
 
 from bot.data.fantasy import AFFINITIES, CLASSES, RARITIES, RARITY_COLORS
 from bot.services.card_renderer import font
+from bot.data.fantasy_alignment import patron_for
 
 CARD_SIZE = (900, 1000)
 MAX_CARD_BYTES = 4 * 1024 * 1024
 
 
 def theme_for(profile):
-    return AFFINITIES.get(profile.affinity_id, AFFINITIES["arcane"])
+    core = AFFINITIES.get(profile.affinity_id, AFFINITIES["arcane"])
+    patron = patron_for(profile)
+    return replace(core, color=patron.color, dark=patron.dark, lore=patron.lore) if patron else core
 
 
 def rgb(color):
@@ -179,6 +183,10 @@ def centered(draw, y, text, size, color, width=760):
 
 
 def render_soul_card(profile, name, avatar=b""):
+    if getattr(profile, "is_meyaya_boss", False):
+        from bot.services.meyaya_boss_renderer import render_boss_profile
+
+        return render_boss_profile(profile, avatar)
     theme = theme_for(profile)
     dark, accent = rgb(theme.dark), rgb(theme.color)
     image = Image.new("RGB", CARD_SIZE)
@@ -194,7 +202,14 @@ def render_soul_card(profile, name, avatar=b""):
     d.rounded_rectangle((22, 22, 877, 977), radius=30, outline=blend(dark, accent, 0.5), width=2)
     d.rounded_rectangle((34, 34, 865, 965), radius=24, outline=blend(dark, accent, 0.20), width=1)
     flower(d, 450, 43, 13, theme.color)
-    centered(d, 70, "M E Y A Y A   /   S O U L   I N T E R F A C E", 17, theme.color)
+    patron = patron_for(profile)
+    centered(
+        d,
+        70,
+        f"{patron.name.upper() if patron else 'MEYAYA'}   /   S O U L   I N T E R F A C E",
+        17,
+        theme.color,
+    )
     centered(d, 108, name, 36, "#fff6fa")
     centered(d, 158, profile.fantasy_title, 23, "#ddcfe8")
     rarity_index = RARITIES.index(profile.weapon_rarity) if profile.weapon_rarity in RARITIES else 0
@@ -238,7 +253,15 @@ def render_soul_card(profile, name, avatar=b""):
     centered(
         d, 902, f"LEVEL {profile.level:02d}  ·  {profile.xp} XP  ·  SOULBOUND", 20, theme.color
     )
-    centered(d, 939, theme.lore, 17, "#b9acc8")
+    centered(
+        d,
+        932,
+        f"{patron.name.upper()} / {patron.oath.upper()}" if patron else theme.lore,
+        17,
+        theme.color,
+    )
+    if patron:
+        centered(d, 957, patron.resonance, 15, "#dfc8d9")
     output = BytesIO()
     image.save(output, "PNG")
     data = output.getvalue()

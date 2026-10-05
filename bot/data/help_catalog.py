@@ -21,7 +21,7 @@ class HelpCommand:
 CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "Social": "Roasts, compliments, rankings, and impressions.",
     "Fortune / Tarot": "Fortunes, tarot readings, and fate cards.",
-    "Fantasy / Profile": "Permanent awakened identities, character summons and spirit guardians.",
+    "Fantasy / Profile": "Awakened identities, rebirths, character summons and spirit guardians.",
     "Single Player Games": "Short adventures, mysteries, and personality quizzes.",
     "Essentials": "The best place to start with Meyaya.",
     "Profile Studio": "Review a profile or turn its style into a card.",
@@ -109,7 +109,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
     "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "caught", "scramble", "mostlikely", "8ball", "warninglabel"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
-    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "versus", "guardianbattle"),
+    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "rebirth", "versus", "guardianbattle"),
     "Relationships": ("marry", "marriage", "renewvows", "divorce"),
     "Single Player Games": ("escape", "detective", "personalitytest"),
     "Multiplayer Games": ("showdown", "survive", "excuse", "endgame"),
@@ -222,7 +222,11 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "Fantasy / Profile",
     ),
     HelpCommand(
-        "versus", "versus <member>", "Challenge a member to an automatic fantasy duel.",
+        "rebirth", "rebirth", "Replace your fantasy build after confirmation. Available once every 24 hours.",
+        "Fantasy / Profile",
+    ),
+    HelpCommand(
+        "versus", "versus <member>", "Challenge a member, or face Meyaya's adaptive final-boss encounter.",
         "Fantasy / Profile",
     ),
     HelpCommand(

@@ -187,7 +187,7 @@ class GuardianBattleView(GuardianAccess, DuelView):
             f"**{safe(f.owner_name)}** · {f.guardian.name}\nHP {f.hp}/{f.guardian.max_hp} · MP {f.mp}/{f.guardian.max_mp}"
             for f in b.fighters
         )
-        text += "\n\n" + safe(b.log)
+        text += "\n\n**Recent events · newest first**\n" + "\n".join(safe(line) for line in reversed(b.history))
         if b.finished:
             winner = next(
                 (f.owner_name for f in b.fighters if f.guardian.owner_id == b.winner_id), None

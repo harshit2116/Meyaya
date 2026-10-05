@@ -1,6 +1,8 @@
 """Bounded per-move still cards: profile-palette split screen and clash art."""
 
 from io import BytesIO
+from pathlib import Path
+from functools import lru_cache
 import math
 from PIL import Image, ImageDraw, ImageEnhance, ImageOps
 from bot.services.card_renderer import font
@@ -8,6 +10,98 @@ from bot.services.fantasy_render import portrait, rgb, blend
 from bot.data.fantasy import RARITIES
 
 DUEL_SIZE = (1100, 640)
+ART_DIR = Path(__file__).resolve().parents[1] / "assets" / "duels"
+
+
+@lru_cache(maxsize=2)
+def cinematic_background(kind):
+    with Image.open(ART_DIR / f"{kind}.png") as source:
+        return ImageOps.fit(source.convert("L"), DUEL_SIZE, method=Image.Resampling.LANCZOS)
+
+
+def cinematic_card(state, portraits, palettes, *, intro):
+    """Reusable illustrated backdrops with local, truthful player overlays."""
+    colors = [rgb(p[0]) if p else rgb(state.arena[2]) for p in palettes]
+    base = cinematic_background("opening" if intro else "victory")
+    image = Image.new("RGB", DUEL_SIZE)
+    fighters = [state.left, state.right]
+    if not intro and state.winner_id == state.right.user_id:
+        fighters.reverse()
+        portraits = tuple(reversed(portraits))
+        colors.reverse()
+    for index in (0, 1):
+        toned = ImageOps.colorize(
+            base, blend((4, 5, 9), colors[index], 0.10), blend(colors[index], (255, 255, 255), 0.5)
+        )
+        box = (index * 550, 0, (index + 1) * 550, 640)
+        image.paste(toned.crop(box), box)
+    d = ImageDraw.Draw(image)
+    # Solid translucent bands retain contrast independently of bright art/palettes.
+    overlay = Image.new("RGBA", DUEL_SIZE)
+    od = ImageDraw.Draw(overlay)
+    od.rectangle((0, 0, 1100, 160), fill=(7, 9, 17, 205))
+    od.rectangle((0, 500, 1100, 640), fill=(7, 9, 17, 215))
+    image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
+    d = ImageDraw.Draw(image)
+    for index, fighter in enumerate(fighters):
+        x = 255 if index == 0 else 845
+        art = portrait(portraits[index], fighter.name, 274).convert("RGB")
+        loser = not intro and state.winner_id is not None and index == 1
+        if loser:
+            art = ImageEnhance.Brightness(ImageOps.grayscale(art).convert("RGB")).enhance(0.7)
+        mask = Image.new("L", (274, 274))
+        ImageDraw.Draw(mask).ellipse((1, 1, 272, 272), fill=255)
+        if loser:
+            from PIL import ImageChops
+
+            cut = Image.new("L", (274, 274))
+            ImageDraw.Draw(cut).polygon(((0, 0), (274, 0), (274, 9), (0, 148)), fill=255)
+            upper = ImageChops.multiply(mask, cut)
+            lower = ImageChops.multiply(mask, ImageOps.invert(cut))
+            image.paste(art, (x - 128, 192), upper)
+            image.paste(art, (x - 146, 210), lower)
+        else:
+            image.paste(art, (x - 137, 201), mask)
+        d.ellipse((x - 141, 197, x + 141, 479), outline=colors[index], width=5)
+        fit(d, (x, 65), fighter.title or fighter.class_name, 27, width=470, color=colors[index])
+        fit(d, (x, 111), fighter.name, 38, width=470)
+        fit(d, (x, 546), fighter.class_name + f" · Lv {fighter.level}", 22, width=450)
+        fit(
+            d,
+            (x, 594),
+            (
+                "CHALLENGER"
+                if intro and index == 0
+                else (
+                    "OPPONENT"
+                    if intro
+                    else "DRAW" if state.winner_id is None else "WON" if index == 0 else "LOST"
+                )
+            ),
+            34,
+            width=450,
+            color=colors[index],
+        )
+    if intro:
+        fit(d, (550, 322), "VS", 140, width=230)
+        fit(d, (550, 455), "SOULS COLLIDE", 17, width=210)
+    elif state.winner_id is not None:
+        # A bright diagonal finishing cut passes over the defeated avatar.
+        for offset, width in ((-10, 2), (10, 2), (0, 12), (0, 4)):
+            d.line(
+                (450, 480 + offset, 1010, 196 + offset),
+                fill=colors[0] if width != 4 else "#fff8ff",
+                width=width,
+            )
+        fit(d, (550, 184), "VICTORY", 39, width=270)
+        fit(d, (550, 520), state.finisher or "DECISIVE STRIKE", 17, width=260)
+    else:
+        fit(d, (550, 322), "DRAW", 60, width=230)
+    output = BytesIO()
+    image.save(output, "PNG")
+    if output.tell() > 4 * 1024 * 1024:
+        raise ValueError("Duel card exceeds upload budget")
+    return output.getvalue()
 
 
 def fit(draw, pos, text, size=23, color="#f5f0fa", width=370, anchor="mm"):
@@ -20,6 +114,16 @@ def fit(draw, pos, text, size=23, color="#f5f0fa", width=370, anchor="mm"):
 
 
 def render_duel(state, portraits=(b"", b""), palettes=((), ()), *, intro=False):
+    if state.right.is_boss:
+        from bot.services.meyaya_boss_renderer import render_boss_duel
+
+        return render_boss_duel(state, portraits, palettes, intro=intro)
+    if intro or state.finished:
+        try:
+            return cinematic_card(state, portraits, palettes, intro=intro)
+        except (OSError, ValueError):
+            # Cosmetic assets must not interrupt combat; keep the existing card fallback.
+            pass
     image = Image.new("RGB", DUEL_SIZE)
     d = ImageDraw.Draw(image)
     arena, dark, arena_accent, motif = state.arena
@@ -117,7 +221,7 @@ def render_duel(state, portraits=(b"", b""), palettes=((), ()), *, intro=False):
                     fill="#e2939b" if label == "HP" and current < maximum * 0.25 else tint,
                 )
             fit(d, (x, y - 13), f"{label}  {current} / {maximum}", 15, width=380)
-        statuses = list(fighter.statuses)
+        statuses = [s.replace("_", " ").title() for s in fighter.statuses]
         if fighter.shield:
             statuses.insert(0, f"Shield {fighter.shield}")
         fit(

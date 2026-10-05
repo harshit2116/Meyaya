@@ -1,13 +1,29 @@
 """Atomic global identity creation; conflicts never update an existing character."""
 
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy import delete
+from sqlalchemy import delete, select, update
 
 from bot.models.fantasy_profile import FantasyProfile
 from bot.repositories.base import Repository
 
 
 class FantasyProfileRepository(Repository):
+    async def locked(self, user_id):
+        result = await self.session.execute(
+            select(FantasyProfile).where(FantasyProfile.user_id == user_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
+    async def replace_identity(self, user_id, values):
+        result = await self.session.execute(
+            update(FantasyProfile)
+            .where(FantasyProfile.user_id == user_id)
+            .values(**values)
+            .returning(FantasyProfile)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one()
+
     async def reset(self, user_id):
         statement = (
             delete(FantasyProfile)

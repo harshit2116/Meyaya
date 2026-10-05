@@ -5,11 +5,14 @@ from typing import get_args
 
 import discord
 from discord import app_commands
+from discord.ext import commands
 
 
 def member_annotation(annotation):
-    return annotation in (discord.Member, discord.User) or any(
-        member_annotation(arg) for arg in get_args(annotation)
+    return (
+        annotation in (discord.Member, discord.User)
+        or (isinstance(annotation, type) and issubclass(annotation, commands.MemberConverter))
+        or any(member_annotation(arg) for arg in get_args(annotation))
     )
 
 

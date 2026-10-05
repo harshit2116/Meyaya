@@ -36,7 +36,30 @@ def creature(guardian, size=280, *, back=False):
     if back:
         art = ImageOps.mirror(art)
     art.thumbnail((size - 12, size - 12), Image.Resampling.LANCZOS)
+    alignment = getattr(guardian, "alignment", "")
+    if alignment in {"meyaya", "veyra"}:
+        # Local material tint; preserve the illustrated anatomy and alpha edges.
+        alpha = art.getchannel("A")
+        tinted = ImageOps.colorize(
+            ImageOps.grayscale(art),
+            "#321d35" if alignment == "meyaya" else "#10060f",
+            "#ffe3e9" if alignment == "meyaya" else "#eb4266",
+        ).convert("RGBA")
+        art = Image.blend(art, tinted, 0.45 if alignment == "meyaya" else 0.78)
+        art.putalpha(alpha)
     image = Image.new("RGBA", (size, size))
+    if alignment:
+        draw = ImageDraw.Draw(image)
+        colour = "#f7d9aa" if alignment == "meyaya" else "#c52b59"
+        draw.ellipse((8, 8, size - 9, size - 9), outline=colour, width=2)
+        if alignment == "meyaya":
+            draw.ellipse((size // 3, 9, size * 2 // 3, 27), outline=colour, width=3)
+        else:
+            draw.polygon(
+                ((size // 2, 5), (size - 7, size * 3 // 4), (7, size * 3 // 4)),
+                outline=colour,
+                width=2,
+            )
     image.alpha_composite(art, ((size - art.width) // 2, (size - art.height) // 2))
     return image
 
@@ -193,17 +216,18 @@ def battle_card(battle):
             )
         )
         fit(d, (bx + 200, by + 113), status, 17, color=f.guardian.color, width=365)
-    d.rounded_rectangle((24, 548, 976, 638), radius=18, fill="#182134", outline="#dde5e7", width=2)
-    fit(d, (500, 575), battle.log, 22, width=915)
+    d.rounded_rectangle((24, 533, 976, 641), radius=18, fill="#182134", outline="#dde5e7", width=2)
+    for index, event in enumerate(reversed(battle.history)):
+        fit(d, (500, 550 + index * 24), event, 18, width=915)
     fit(
         d,
-        (500, 611),
+        (500, 626),
         (
             "Battle complete · fantasy identities unchanged"
             if battle.finished
             else f"{battle.actor.owner_name}, choose your guardian's move below."
         ),
-        20,
+        16,
         width=900,
     )
     return png(image)

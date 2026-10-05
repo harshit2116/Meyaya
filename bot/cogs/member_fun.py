@@ -132,7 +132,7 @@ class MemberFunCog(commands.Cog):
         if not reply or not reply.text.strip():
             await ctx.send("I couldn't make a result this time. Try again shortly.")
             return
-        content = reply.text.strip().replace("—", "-")[:1900]
+        content = reply.text.strip().replace(chr(0x2014), "-")[:1900]
         embed = meyaya_embed(
             "Ranking: " + extra["category"] if kind == "rank" else kind.title(), content, icon="✨"
         )
