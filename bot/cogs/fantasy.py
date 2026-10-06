@@ -243,6 +243,7 @@ class FantasyCog(commands.Cog):
         portraits, palettes = [], []
         result_view = None
         battle_message = None
+        boss_comment = state.dialogue
         presentation = (
             PatronClashPresentation
             if clash
@@ -296,7 +297,7 @@ class FantasyCog(commands.Cog):
                 await cinematic.intro(state)
 
             async def frame(*, intro=False, outcome=False, controls=None, history_note=""):
-                nonlocal battle_message
+                nonlocal battle_message, boss_comment
                 if view.closed:
                     raise commands.CommandError("This duel has ended.")
                 safe = lambda text: discord.utils.escape_markdown(
@@ -350,11 +351,30 @@ class FantasyCog(commands.Cog):
                     self.report(error, "fantasy_duel_render")
                 if png:
                     embed.set_image(url="attachment://meyaya-duel.png")
+                boss_content = None
+                if cinematic and not intro:
+                    if state.dialogue:
+                        boss_comment = state.dialogue
+                    boss_content = f"## {safe(title if state.finished else state.boss_form)}"
+                    if not state.finished and boss_comment:
+                        boss_content += f"\n**{safe(boss_comment)}**"
+                    if state.finished:
+                        boss_content += "\n" + (
+                            f"**{safe(winner)} wins.**" if winner else "**Neither fighter yields.**"
+                        )
+                    elif state.history:
+                        boss_content += "\n" + "\n".join(safe(line) for line in state.history[-2:])
+                    boss_content = boss_content[:1950]
                 # The opening is a full-size attachment, not a thumbnail embed.
                 # Keep the intro separate; only the dedicated battle message changes.
                 kwargs = dict(
-                    content=history_note if outcome and png and history_note else None,
-                    embed=None if (intro or outcome) and png else embed,
+                    content=boss_content
+                    or (history_note if outcome and png and history_note else None),
+                    embed=(
+                        discord.Embed().set_image(url="attachment://meyaya-duel.png")
+                        if cinematic and not intro and png
+                        else None if (intro or outcome) and png else embed
+                    ),
                     view=controls,
                     attachments=(
                         [discord.File(BytesIO(png), filename="meyaya-duel.png")] if png else []
@@ -388,8 +408,6 @@ class FantasyCog(commands.Cog):
             while not state.finished:
                 engine.advance_move()
                 await frame()
-                if cinematic and not state.finished:
-                    await cinematic.speak(state)
                 if not state.finished:
                     await asyncio.sleep(1.5)
             note = ""

@@ -157,6 +157,11 @@ function renderHealthErrors(items) {
       ["Provider", item.provider ?? "None recorded"], ["Model", item.model ?? "None recorded"]];
     if (item.request_id) facts.push(["AI request ID", item.request_id]);
     if (item.reason) facts.push(["Reason", item.reason]);
+    if (item.diagnosis) {
+      facts.push(["Cause", item.diagnosis.cause], ["Next check", item.diagnosis.next_step]);
+      if (item.diagnosis.location) facts.push(["Cause location", item.diagnosis.location]);
+    }
+    if (item.causes?.length) facts.push(["Exception chain", item.causes.map(cause => cause.exception).join(" → ")]);
     for (const [label, value] of facts) row.append(element("p", `${label}: ${value}`, "operation-detail"));
     for (const [stage, value] of Object.entries(item.stages || {})) row.append(element("p", `${stage}: ${value} ms`, "details"));
     for (const frame of item.frames || []) row.append(element("p", `${frame.file}:${frame.line} · ${frame.function}`, "health-frame"));

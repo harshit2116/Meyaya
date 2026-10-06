@@ -160,6 +160,50 @@ class AdminCog(commands.Cog):
                 "Check DASHBOARD_PUBLIC_URL and DASHBOARD_TRUSTED_PROXIES: remote access needs HTTPS through an explicitly trusted proxy; local access must use localhost."
             )
 
+    @commands.command(name="errorlookup", hidden=True)
+    @commands.check(private_owner)
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    @commands.max_concurrency(1, per=commands.BucketType.default, wait=False)
+    async def errorlookup(self, ctx: commands.Context, error_id: str = ""):
+        """Privately retrieve an existing error ID, including retained logs."""
+        if not private_owner(ctx):
+            return
+        from bot.logging.health import health, find_retained_error
+
+        error_id = error_id.strip().upper()
+        if not re.fullmatch(r"MY-[A-F0-9]{8}", error_id):
+            await ctx.send("Usage: `uwu errorlookup MY-1234ABCD`")
+            return
+        items = health.search(error_id)
+        record = items[0] if items else await asyncio.to_thread(find_retained_error, error_id)
+        embed = discord.Embed(title=f"Error lookup · {error_id}", color=0xCF7195)
+        if record is None:
+            embed.description = "No matching error in this process or retained logs. It may have expired or belong to another bot instance."
+        else:
+            diagnosis = record["diagnosis"]
+            embed.description = diagnosis["cause"]
+            def field(name, value):
+                embed.add_field(name=name, value=discord.utils.escape_markdown(str(value or "Not recorded"))[:1024], inline=False)
+            field("Next check", diagnosis["next_step"])
+            field("Command / stage", f"{record.get('command')} / {record.get('stage')}")
+            field("Time (UTC)", record.get("timestamp"))
+            field("Server / channel", f"{record.get('guild_id')} / {record.get('channel_id')}")
+            field("Exception chain", " → ".join(item["exception"] for item in record.get("causes", [])) or record.get("exception"))
+            frames = record.get("frames") or []
+            location = diagnosis.get("location")
+            if not location and frames:
+                frame = frames[-1]
+                location = f"{frame['file']}:{frame['line']} · {frame['function']}"
+            field("Source location", location)
+            if record.get("reason"):
+                field("Recorded reason", record["reason"])
+            if record.get("request_id"):
+                field("AI request ID", record["request_id"])
+        try:
+            await ctx.author.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        except discord.Forbidden:
+            await ctx.send("Enable DMs for the private error report, or look up the ID in the owner dashboard.")
+
     @commands.hybrid_command(
         name="chatblacklist",
         description="Block or restore a member's access to Meyaya in this server.",

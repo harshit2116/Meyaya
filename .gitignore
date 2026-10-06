@@ -1,5 +1,4 @@
 # Secrets and local configuration
-/gemini_api_test.py
 .env
 /.dashboard.env
 /cloudflared-token.txt
@@ -9,9 +8,9 @@
 /bot/private/*
 !/bot/private/personality.v1.json
 !/bot/private/gemini_persona.txt
-/full_read_me.md
-/FULL_READ_ME.md
 /tests/
+/test_*.py
+/*_test.py
 
 # Local credentials and deployment-specific overrides
 /secrets/
@@ -31,10 +30,10 @@ __pycache__/
 /dist/
 
 # Tests and code analysis caches
-# Local-only visual preview helpers (keep regression simulators tracked)
-/scripts/preview_duel_stages.py
-/scripts/preview_fantasy_alignment.py
-/scripts/preview_fantasy_weapons.py
+# Local-only previews, diagnostics and balance simulations
+/scripts/preview_*.py
+/scripts/simulate_*.py
+/scripts/memory_smoke.py
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -57,6 +56,7 @@ coverage.xml
 .idea/
 .DS_Store
 Thumbs.db
+*.lnk
 *.swp
 *.swo
 .vscode/
@@ -71,5 +71,17 @@ node_modules/
 
 
 /docs/
-/tests/
-/.vscode/
+
+# Original asset download extras (runtime PNGs and licenses stay tracked)
+/bot/assets/celestial/kenney/fantasy-ui.zip
+/bot/assets/celestial/kenney/Preview.png
+/bot/assets/celestial/kenney/Sample.png
+/bot/assets/celestial/kenney/Vector/
+/bot/assets/celestial/kenney/*.url
+
+# Keep only the main project README in Git; other documentation stays local.
+*.[mM][dD]
+*.[mM][aA][rR][kK][dD][oO][wW][nN]
+[rR][eE][aA][dD][mM][eE]
+[rR][eE][aA][dD][mM][eE].*
+!/README.md

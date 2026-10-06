@@ -12,6 +12,56 @@ class ProviderUnavailable(Exception):
     """An AI call completed without a usable reply."""
 
 
+def exception_evidence(error):
+    """Keep bounded causal metadata, never exception messages or request bodies."""
+    chain, seen = [], set()
+    while isinstance(error, BaseException) and id(error) not in seen and len(chain) < 6:
+        seen.add(id(error))
+        item = {"exception": type(error).__name__}
+        for key in ("status", "code"):
+            value = getattr(error, key, None)
+            if type(value) is int:
+                item[key] = value
+        frames = traceback.extract_tb(error.__traceback__)
+        if frames:
+            frame = frames[-1]
+            item["location"] = f"{Path(frame.filename).name}:{frame.lineno} · {frame.name[:100]}"
+        chain.append(item)
+        error = (getattr(error, "original", None) or error.__cause__ or
+                 (error.__context__ if not error.__suppress_context__ else None))
+    return chain
+
+
+def explain_error(record):
+    """Explain recorded evidence; suggestions are not a claimed root cause."""
+    chain = record.get("causes") or [{"exception": record.get("exception", "Unknown")}]
+    root = chain[-1]
+    kind, status, code = root.get("exception"), root.get("status"), root.get("code")
+    if code == 10062:
+        cause, action = "Discord interaction expired or is no longer available.", "Check interaction deferral and response timing."
+    elif code == 10008:
+        cause, action = "Discord could not find the message.", "Check whether the battle message was deleted before an edit."
+    elif status == 403 or kind == "Forbidden":
+        cause, action = "Discord or the provider denied access.", "Check permissions and credentials for the recorded operation."
+    elif status == 429 or record.get("reason") == "http_429":
+        cause, action = "The service rejected the request due to a rate or quota limit.", "Check quota and retry backoff."
+    elif status in (500, 502, 503, 504) or record.get("reason") == "http_503":
+        cause, action = "The upstream service reported a server failure.", "Check service availability and retry after backoff."
+    elif kind in ("TimeoutError", "ServerTimeoutError", "ReadTimeout", "ConnectTimeout"):
+        cause, action = "The operation exceeded its time limit.", "Check latency and availability at the recorded stage."
+    elif kind == "ProviderUnavailable":
+        cause, action = "The AI provider returned no usable reply.", "Inspect the recorded reason and matching AI request ID."
+    else:
+        cause = f"{kind} at the recorded stage; the exact cause was not retained."
+        action = "Inspect the recorded source location and reproduce the failing operation."
+    return {"cause": cause, "next_step": action, "root_exception": kind,
+            "location": root.get("location")}
+
+
+def with_diagnosis(record):
+    return {**record, "diagnosis": explain_error(record)}
+
+
 class HealthTelemetry:
     def __init__(self, capacity=500):
         self.capacity = capacity
@@ -80,7 +130,7 @@ class HealthTelemetry:
                   "exception": type(error).__name__, "latency_ms": latency_ms,
                   "stages": dict(stages or {}), "provider": provider, "model": model,
                   "request_id": request_id, "reason": reason,
-                  "frames": frames}
+                  "frames": frames, "causes": exception_evidence(error)}
         self.errors[error_id] = record
         while len(self.errors) > self.capacity:
             self.errors.popitem(last=False)
@@ -95,8 +145,8 @@ class HealthTelemetry:
     def search(self, error_id=""):
         if error_id:
             record = self.errors.get(error_id.upper())
-            return [record] if record else []
-        return list(reversed(list(self.errors.values())[-30:]))
+            return [with_diagnosis(record)] if record else []
+        return [with_diagnosis(record) for record in reversed(list(self.errors.values())[-30:])]
 
 
 health = HealthTelemetry()
@@ -106,7 +156,7 @@ def find_retained_error(error_id):
     """Look up an exact ID in the existing bounded logs, never arbitrary files."""
     import json
     allowed = {'error_id', 'timestamp', 'command', 'guild_id', 'channel_id', 'invocation',
-               'stage', 'exception', 'latency_ms', 'stages', 'provider', 'model', 'frames', 'request_id', 'reason'}
+               'stage', 'exception', 'latency_ms', 'stages', 'provider', 'model', 'frames', 'request_id', 'reason', 'causes'}
     for suffix in ('', '.1', '.2', '.3'):
         try:
             with (Path('logs') / ('telemetry.jsonl' + suffix)).open(encoding='utf-8') as stream:
@@ -123,7 +173,7 @@ def find_retained_error(error_id):
                     except (ValueError, TypeError):
                         continue
                     if isinstance(item, dict) and item.get('event') == 'command_error' and item.get('error_id') == error_id:
-                        return {key: value for key, value in item.items() if key in allowed}
+                        return with_diagnosis({key: value for key, value in item.items() if key in allowed})
         except (OSError, UnicodeError):
             continue
     return None

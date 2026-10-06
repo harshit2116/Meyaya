@@ -100,7 +100,7 @@ def cinematic_card(state, portraits, palettes, *, intro):
             box = (index * 550, 0, (index + 1) * 550, 640)
             image.paste(toned.crop(box), box)
     else:
-        image = victory_background(colors)
+        image = cinematic_background("victory").convert("RGB")
     d = ImageDraw.Draw(image)
     # Solid translucent bands retain contrast independently of bright art/palettes.
     overlay = Image.new("RGBA", DUEL_SIZE)

@@ -15,3 +15,8 @@ bot/private/*
 !bot/private/gemini_persona.txt
 **/__pycache__/
 **/*.pyc
+bot/assets/celestial/kenney/fantasy-ui.zip
+bot/assets/celestial/kenney/Preview.png
+bot/assets/celestial/kenney/Sample.png
+bot/assets/celestial/kenney/Vector/
+bot/assets/celestial/kenney/*.url

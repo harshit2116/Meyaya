@@ -120,6 +120,11 @@ def encode(image):
 
 
 def render_boss_duel(state, portraits, palettes, *, intro=False):
+    if not intro:
+        from bot.services.boss_battle_cards import render_boss_arena, render_boss_defeat
+
+        renderer = render_boss_defeat if state.finished else render_boss_arena
+        return renderer(state, portraits, palettes)
     try:
         if state.left.is_boss:
             return render_patron_clash(state, intro=intro)
