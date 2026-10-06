@@ -52,7 +52,7 @@ exclude = ["bot.private", "bot.private.*"]
 [tool.setuptools.package-data]
 "bot.web" = ["*.html", "*.css", "*.js"]
 "bot.data" = ["*.json", "cards/*.json"]
-"bot" = ["assets/celestial/**/*.png", "assets/celestial/**/*.jpg", "assets/celestial/**/*.txt", "assets/celestial/*.md", "assets/duels/*.png", "assets/duels/*.md", "private/personality.v1.json", "private/gemini_persona.txt"]
+"bot" = ["assets/celestial/**/*.png", "assets/celestial/**/*.jpg", "assets/celestial/**/*.txt", "assets/celestial/*.md", "assets/duels/*.png", "assets/duels/*.md", "assets/awakening/**/*.png", "private/personality.v1.json", "private/gemini_persona.txt"]
 
 [tool.ruff]
 line-length = 100

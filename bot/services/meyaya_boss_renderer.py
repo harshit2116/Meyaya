@@ -344,6 +344,25 @@ def render_boss_encounter(state, portraits, palettes, *, intro=False):
 
 
 def render_patron_clash(state, *, intro=False):
+    if intro:
+        source = template("patron-clash-intro.png")
+        image = ImageOps.fit(source, DUEL_SIZE, Image.Resampling.LANCZOS)
+        ImageDraw.Draw(image).rectangle((0, 64, 1100, 553), fill="#0c0813")
+        artwork = ImageOps.contain(source, (1100, 489), Image.Resampling.LANCZOS)
+        image.paste(artwork, ((1100 - artwork.width) // 2, 64 + (489 - artwork.height) // 2))
+        overlay = Image.new("RGBA", DUEL_SIZE)
+        shade = ImageDraw.Draw(overlay)
+        shade.rectangle((0, 0, 1100, 64), fill=(10, 5, 18, 220))
+        shade.rectangle((0, 553, 1100, 640), fill=(12, 8, 19, 255))
+        image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
+        draw = ImageDraw.Draw(image)
+        fit(draw, (550, 31), "ORIGIN  /  ERASURE     —     WORLD COLLISION", 21,
+            width=1030, color="#fff0f7")
+        fit(draw, (550, 576), "TWO AUTHORITIES. ONE SURVIVING REALITY.", 21,
+            width=1040, color=PINK)
+        fit(draw, (550, 614), "THE SOUL INTERFACE CAN NO LONGER GUARANTEE REALITY.", 15,
+            width=1040, color="#f6e3ef")
+        return encode(image)
     image = Image.new("RGB", DUEL_SIZE, "#0b0813")
     for index, fighter in enumerate((state.left, state.right)):
         source = template(f"{fighter.boss_key}-profile.png")

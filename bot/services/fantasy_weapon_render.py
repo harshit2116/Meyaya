@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from bot.data.fantasy import RARITIES, RARITY_COLORS, WEAPONS
 from bot.services.card_renderer import font
 from bot.services.fantasy_render import blend, rgb, theme_for
+from bot.services.fantasy_awaken_art import weapon_sprite
 
 WEAPON_CARD_SIZE = (640, 420)
 MAX_WEAPON_BYTES = 4 * 1024 * 1024
@@ -171,7 +172,10 @@ def weapon_design(profile):
 
 
 def weapon_art(family, accent, rarity, design=0, seed=0):
-    """Thirty authored silhouettes, faceted metal, rune inlays and variant hilts."""
+    """Named AI illustrations, with authored silhouettes as the asset fallback."""
+    illustrated = weapon_sprite(family, design, accent, rarity, seed)
+    if illustrated is not None:
+        return illustrated
     if family not in WEAPONS:
         return _simple_weapon_art(family, accent, rarity)
     v = design % 3
@@ -545,8 +549,8 @@ def render_weapon_acquisition(profile):
     design, seed = weapon_design(profile)
     art = weapon_art(profile.weapon_family, theme.color, rarity, design, seed)
     halo = Image.new("RGBA", art.size, theme.color)
-    halo.putalpha(art.getchannel("A").point(lambda value: value // 3))
-    halo = halo.filter(ImageFilter.GaussianBlur(9))
+    halo.putalpha(art.getchannel("A").point(lambda value: round(value * (0.12 + tier * 0.08))))
+    halo = halo.filter(ImageFilter.GaussianBlur(5 + tier * 2))
     palette_sample = base.copy()
     palette_sample.paste(halo, (190, 58), halo)
     palette_sample.paste(art, (190, 58), art)
@@ -557,10 +561,23 @@ def render_weapon_acquisition(profile):
         frame = base.copy()
         d = ImageDraw.Draw(frame)
         d.ellipse((202, 70, 438, 306), outline=blend(dark, accent, 0.5), width=1)
-        for n in range(8):
-            angle = phase + n * math.tau / 8
+        count = 2 + tier * 2
+        for n in range(count):
+            angle = phase + n * math.tau / count + seed % 360 * math.pi / 180
             x, y = 320 + 119 * math.cos(angle), 188 + 119 * math.sin(angle)
-            d.ellipse((x - 2, y - 2, x + 2, y + 2), fill=rarity)
+            radius = 1 + tier // 2
+            d.polygon(
+                ((x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)), fill=rarity
+            )
+        if tier >= 2:
+            d.arc((190, 58, 450, 318), i * 3, i * 3 + 230, fill=rarity, width=1)
+        if tier >= 4:
+            d.arc((182, 50, 458, 326), -i * 3, 140 - i * 3, fill=theme.color, width=1)
+        if tier == 5:
+            for offset in (0, math.pi):
+                x, y = 320 + math.cos(phase + offset) * 147, 188 + math.sin(phase + offset) * 118
+                d.line((x - 5, y, x + 5, y), fill="#fff4fa", width=1)
+                d.line((x, y - 5, x, y + 5), fill="#fff4fa", width=1)
         position = (190, 58 + round(math.sin(phase) * 4))
         frame.paste(halo, position, halo)
         frame.paste(art, position, art)
