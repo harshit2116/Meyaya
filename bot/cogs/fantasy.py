@@ -8,9 +8,13 @@ from collections import OrderedDict
 from io import BytesIO
 from time import monotonic
 from types import SimpleNamespace
+from typing import Literal
 from bot.services.fantasy_boss import meyaya_boss_profile
 from bot.services.meyaya_boss_combat import BossDuelEngine, public_fighter
 from bot.services.meyaya_boss_presentation import BossPresentation
+from bot.services.fantasy_boss import veyra_boss_profile, VEYRA_BOSS_ID
+from bot.services.patron_boss_combat import VeyraDuelEngine, PatronClashEngine
+from bot.services.patron_boss_presentation import VeyraPresentation, PatronClashPresentation
 from bot.utils.fantasy_profile_target import FantasyProfileTarget
 
 import discord
@@ -84,6 +88,7 @@ class FantasyCog(commands.Cog):
         self.pending = {}
         self.duel_users = {}
         self.duel_cooldowns = OrderedDict()
+        self.clash_cooldowns = OrderedDict()
         self.render_slots = BoundedImageGate(capacity=3)
 
     def track_view(self, view):
@@ -211,8 +216,20 @@ class FantasyCog(commands.Cog):
         return embed, view
 
     async def run_duel(self, view, interaction):
-        is_boss = view.right.id == getattr(getattr(self.bot, "user", None), "id", None)
-        engine_type = BossDuelEngine if is_boss else DuelEngine
+        boss_key = getattr(view.profiles[view.right.id], "boss_key", "")
+        is_boss = bool(boss_key) or view.right.id == getattr(
+            getattr(self.bot, "user", None), "id", None
+        )
+        clash = getattr(view, "patron_clash", False)
+        engine_type = (
+            PatronClashEngine
+            if clash
+            else (
+                VeyraDuelEngine
+                if boss_key == "veyra"
+                else BossDuelEngine if is_boss else DuelEngine
+            )
+        )
         engine = engine_type(
             *(
                 Fighter.snapshot(view.profiles[m.id], m.display_name)
@@ -226,13 +243,27 @@ class FantasyCog(commands.Cog):
         portraits, palettes = [], []
         result_view = None
         battle_message = None
-        cinematic = BossPresentation(self, view, interaction.channel) if is_boss else None
+        presentation = (
+            PatronClashPresentation
+            if clash
+            else VeyraPresentation if boss_key == "veyra" else BossPresentation
+        )
+        cinematic = presentation(self, view, interaction.channel) if is_boss else None
         try:
             view.message = await interaction.edit_original_response(
+                content=None,
                 embed=meyaya_embed(
-                    "The author accepts" if is_boss else "Challenge accepted",
                     (
-                        "The Soul Interface's author accepts your challenge. Your awakening stays untouched."
+                        "The authorities collide"
+                        if clash
+                        else (
+                            "Hostile presence detected"
+                            if boss_key == "veyra"
+                            else "The author accepts" if is_boss else "Challenge accepted"
+                        )
+                    ),
+                    (
+                        "The encounter is temporary. Your awakening stays untouched."
                         if is_boss
                         else "The versus image, live battle and result will appear below. Both saved identities remain unchanged."
                     ),
@@ -241,7 +272,10 @@ class FantasyCog(commands.Cog):
                 view=view,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
+
             async def inspect_fighter(member):
+                if getattr(member, "patron_key", None) or clash:
+                    return b"", ()
                 try:
                     async with asyncio.timeout(8):
                         visual = await self.bot.build_profile_aesthetic_service().inspect(member)
@@ -252,8 +286,7 @@ class FantasyCog(commands.Cog):
 
             async with asyncio.TaskGroup() as group:
                 visuals = [
-                    group.create_task(inspect_fighter(member))
-                    for member in (view.left, view.right)
+                    group.create_task(inspect_fighter(member)) for member in (view.left, view.right)
                 ]
             for visual in visuals:
                 avatar, palette = visual.result()
@@ -281,7 +314,7 @@ class FantasyCog(commands.Cog):
                 lines = [
                     (
                         f"**{safe(f.name)}** · HP ??? / ??? · MP ??? / ???\n"
-                        f"✦ Soulweaver → **{safe(state.boss_form)}** · Soul Pressure: UNREADABLE"
+                        f"✦ **{safe(f.class_name)}** · Soul Pressure: UNREADABLE"
                         if f.is_boss
                         else f"**{safe(f.name)}** · HP {f.hp}/{f.max_hp} · MP {f.mp}/{f.max_mp}"
                     )
@@ -385,7 +418,7 @@ class FantasyCog(commands.Cog):
             )
             if is_boss:
                 summary.update(
-                    encounter="meyaya_boss",
+                    encounter="patron_clash" if clash else f"{boss_key or 'meyaya'}_boss",
                     boss_rules_version=2,
                     adaptive_class=state.boss_form,
                     memory_count=state.memory_count,
@@ -413,19 +446,21 @@ class FantasyCog(commands.Cog):
             except Exception as error:
                 error_id = self.report(error, "fantasy_duel_history")
                 note = f"Result history could not be saved. Error ID: `{error_id}`"
-            result_view = DuelResultView(self, view.left, view.right, view.profiles, state)
-            result_view.task = view.task
-            # Replace the consent controller rather than requiring an extra view slot.
-            self.release_view(view)
-            self.track_view(result_view)
             if cinematic:
-                await cinematic.finish(state)
-                result_view.cinematic_message = cinematic.message
-            result_view.message = await frame(outcome=True, controls=result_view, history_note=note)
+                await cinematic.finish(state, history_note=note)
+                message = cinematic.message
+            else:
+                result_view = DuelResultView(self, view.left, view.right, view.profiles, state)
+                result_view.task = view.task
+                self.release_view(view)
+                self.track_view(result_view)
+                result_view.message = await frame(
+                    outcome=True, controls=result_view, history_note=note
+                )
+                message = result_view.message
             outputs = getattr(self.bot, "_meyaya_command_outputs", None)
             if outputs is None:
                 outputs = self.bot._meyaya_command_outputs = OrderedDict()
-            message = result_view.message
             outputs[(message.channel.id, message.id)] = (
                 monotonic(),
                 CommandOutput(
@@ -535,8 +570,11 @@ class FantasyCog(commands.Cog):
     )
     @commands.guild_only()
     @commands.cooldown(1, 30, commands.BucketType.user)
-    async def versus(self, ctx, member: discord.Member):
+    async def versus(self, ctx, member: FantasyProfileTarget):
         await ctx.defer()
+        if isinstance(member, str):
+            await self.start_patron_encounter(ctx, member)
+            return
         embed, view = await self.create_duel(ctx.author, member)
         try:
             if member.id == getattr(getattr(self.bot, "user", None), "id", None):
@@ -575,6 +613,94 @@ class FantasyCog(commands.Cog):
         except BaseException:
             view.finish()
             raise
+
+    async def start_patron_encounter(self, ctx, patron, *, clash=False):
+        def available():
+            if ctx.author.id in self.pending or ctx.author.id in self.duel_users:
+                raise commands.CommandError("Finish your current fantasy activity first.")
+            if len(self.duel_users) >= 32 or len(self.views) >= MAX_VIEWS:
+                raise commands.CommandError("The arenas are busy. Try again shortly.")
+            if monotonic() - self.duel_cooldowns.get(ctx.author.id, -100) < 15:
+                raise commands.CommandError(
+                    "Let the arena settle for 15 seconds before another challenge."
+                )
+            if clash and monotonic() - self.clash_cooldowns.get(ctx.guild.id, -100) < 60:
+                raise commands.CommandError("Let this world's collision settle for 60 seconds.")
+
+        available()
+        meyaya = SimpleNamespace(
+            id=self.bot.user.id,
+            guild=ctx.guild,
+            bot=True,
+            display_name="Meyaya",
+            patron_key="meyaya",
+        )
+        veyra = SimpleNamespace(
+            id=VEYRA_BOSS_ID, guild=ctx.guild, bot=True, display_name="Veyra", patron_key="veyra"
+        )
+        left = meyaya if clash else ctx.author
+        right = veyra if clash or patron == "veyra" else meyaya
+        left_profile = meyaya_boss_profile(left.id) if clash else await self.get_profile(left.id)
+        if left_profile is None:
+            raise commands.CommandError(
+                "Awaken your soul with `/awaken` before challenging a patron."
+            )
+        profiles = {
+            left.id: left_profile,
+            right.id: veyra_boss_profile() if right is veyra else meyaya_boss_profile(right.id),
+        }
+        available()
+        view = DuelChallengeView(self, left, right, profiles)
+        view.owner = ctx.author.id
+        view.participant_ids = (ctx.author.id,)
+        view.patron_clash = clash
+        view.running = True
+        for child in view.children:
+            child.disabled = True
+        self.track_view(view)
+        self.duel_users[ctx.author.id] = view
+        self.duel_cooldowns[ctx.author.id] = monotonic()
+        self.duel_cooldowns.move_to_end(ctx.author.id)
+        while len(self.duel_cooldowns) > 512:
+            self.duel_cooldowns.popitem(last=False)
+        if clash:
+            self.clash_cooldowns[ctx.guild.id] = monotonic()
+            self.clash_cooldowns.move_to_end(ctx.guild.id)
+            while len(self.clash_cooldowns) > 512:
+                self.clash_cooldowns.popitem(last=False)
+        view.task = asyncio.current_task()
+        try:
+            view.message = await ctx.send(
+                "The Soul Interface is opening the arena…",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+            async with asyncio.timeout(90):
+                await self.run_duel(
+                    view,
+                    SimpleNamespace(channel=ctx.channel, edit_original_response=view.message.edit),
+                )
+        finally:
+            view.finish()
+
+    @commands.hybrid_command(
+        description="Challenge Meyaya or Veyra, or witness their world-shattering clash."
+    )
+    @commands.guild_only()
+    @commands.cooldown(1, 30, commands.BucketType.user)
+    async def bossfight(self, ctx, boss: Literal["meyaya", "veyra", "clash"] = "veyra"):
+        await ctx.defer()
+        await self.start_patron_encounter(
+            ctx, "veyra" if boss == "clash" else boss, clash=boss == "clash"
+        )
+
+    @commands.command(
+        hidden=True, description="Witness Meyaya versus Veyra: Origin clashes with Erasure."
+    )
+    @commands.guild_only()
+    @commands.cooldown(1, 60, commands.BucketType.guild)
+    async def bossbattle(self, ctx):
+        await ctx.defer()
+        await self.start_patron_encounter(ctx, "veyra", clash=True)
 
     @commands.hybrid_command(description="View the soul-bound guardian linked to an awakening.")
     @commands.cooldown(1, 8, commands.BucketType.user)

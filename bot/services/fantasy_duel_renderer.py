@@ -4,7 +4,8 @@ from io import BytesIO
 from pathlib import Path
 from functools import lru_cache
 import math
-from PIL import Image, ImageDraw, ImageEnhance, ImageOps
+from random import Random
+from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageOps
 from bot.services.card_renderer import font
 from bot.services.fantasy_render import portrait, rgb, blend
 from bot.data.fantasy import RARITIES
@@ -19,22 +20,87 @@ def cinematic_background(kind):
         return ImageOps.fit(source.convert("L"), DUEL_SIZE, method=Image.Resampling.LANCZOS)
 
 
+def victory_background(colors):
+    image = Image.new("RGB", DUEL_SIZE, (7, 9, 20))
+    glow = Image.new("RGB", DUEL_SIZE)
+    draw = ImageDraw.Draw(glow)
+    for center, color in zip((255, 845), colors):
+        draw.ellipse((center - 185, 180, center + 185, 520), fill=blend(color, (0, 0, 0), 0.62))
+    image = ImageChops.add(image, glow.filter(ImageFilter.GaussianBlur(85)))
+    draw = ImageDraw.Draw(image)
+    for offset in range(-5, 6):
+        draw.line((550, 380, 550 + offset * 210, 640), fill=(27, 30, 48), width=1)
+    for height in (414, 448, 498, 568):
+        draw.line((0, height, 1100, height), fill=(27, 30, 48), width=1)
+    rng = Random(42)
+    for _ in range(100):
+        horizontal, vertical = rng.randrange(35, 1065), rng.randrange(170, 493)
+        color = blend(colors[int(horizontal > 550)], (15, 18, 32), rng.uniform(0.4, 0.85))
+        draw.ellipse((horizontal, vertical, horizontal + 2, vertical + 2), fill=color)
+    draw.line((550, 230, 550, 465), fill=(62, 57, 80), width=1)
+    return image
+
+
+def shattered_portrait(image, art, mask, center, color):
+    rng = Random(73)
+    size = art.width
+    points = [
+        [
+            (
+                round(column * size / 4) + (rng.randrange(-16, 17) if 0 < column < 4 else 0),
+                round(row * size / 4) + (rng.randrange(-16, 17) if 0 < row < 4 else 0),
+            )
+            for column in range(5)
+        ]
+        for row in range(5)
+    ]
+    for row in range(4):
+        for column in range(4):
+            top_left, top_right = points[row][column:column + 2]
+            bottom_left, bottom_right = points[row + 1][column:column + 2]
+            for triangle in ((top_left, top_right, bottom_left), (top_right, bottom_right, bottom_left)):
+                shard_mask = Image.new("L", art.size)
+                ImageDraw.Draw(shard_mask).polygon(triangle, fill=255)
+                shard_mask = ImageChops.multiply(shard_mask, mask)
+                bounds = shard_mask.getbbox()
+                if bounds is None:
+                    continue
+                shard = ImageEnhance.Brightness(art).enhance(rng.uniform(0.65, 0.95)).convert("RGBA")
+                edge = Image.new("RGBA", art.size)
+                ImageDraw.Draw(edge).line((*triangle, triangle[0]), fill=(*color, 180), width=2)
+                shard = Image.alpha_composite(shard, edge)
+                shard.putalpha(shard_mask)
+                shard = shard.crop(bounds)
+                shard = shard.rotate(rng.uniform(-13, 13), Image.Resampling.BICUBIC, expand=True)
+                midpoint_x = (bounds[0] + bounds[2]) / 2
+                midpoint_y = (bounds[1] + bounds[3]) / 2
+                spread = rng.uniform(1.14, 1.30)
+                position = (
+                    round(center[0] + (midpoint_x - size / 2) * spread - shard.width / 2),
+                    round(center[1] + (midpoint_y - size / 2) * spread - shard.height / 2),
+                )
+                image.paste(shard, position, shard)
+
+
 def cinematic_card(state, portraits, palettes, *, intro):
     """Reusable illustrated backdrops with local, truthful player overlays."""
     colors = [rgb(p[0]) if p else rgb(state.arena[2]) for p in palettes]
-    base = cinematic_background("opening" if intro else "victory")
     image = Image.new("RGB", DUEL_SIZE)
     fighters = [state.left, state.right]
     if not intro and state.winner_id == state.right.user_id:
         fighters.reverse()
         portraits = tuple(reversed(portraits))
         colors.reverse()
-    for index in (0, 1):
-        toned = ImageOps.colorize(
-            base, blend((4, 5, 9), colors[index], 0.10), blend(colors[index], (255, 255, 255), 0.5)
-        )
-        box = (index * 550, 0, (index + 1) * 550, 640)
-        image.paste(toned.crop(box), box)
+    if intro:
+        base = cinematic_background("opening")
+        for index in (0, 1):
+            toned = ImageOps.colorize(
+                base, blend((4, 5, 9), colors[index], 0.10), blend(colors[index], (255, 255, 255), 0.5)
+            )
+            box = (index * 550, 0, (index + 1) * 550, 640)
+            image.paste(toned.crop(box), box)
+    else:
+        image = victory_background(colors)
     d = ImageDraw.Draw(image)
     # Solid translucent bands retain contrast independently of bright art/palettes.
     overlay = Image.new("RGBA", DUEL_SIZE)
@@ -52,17 +118,10 @@ def cinematic_card(state, portraits, palettes, *, intro):
         mask = Image.new("L", (274, 274))
         ImageDraw.Draw(mask).ellipse((1, 1, 272, 272), fill=255)
         if loser:
-            from PIL import ImageChops
-
-            cut = Image.new("L", (274, 274))
-            ImageDraw.Draw(cut).polygon(((0, 0), (274, 0), (274, 9), (0, 148)), fill=255)
-            upper = ImageChops.multiply(mask, cut)
-            lower = ImageChops.multiply(mask, ImageOps.invert(cut))
-            image.paste(art, (x - 128, 192), upper)
-            image.paste(art, (x - 146, 210), lower)
+            shattered_portrait(image, art, mask, (x, 338), colors[index])
         else:
             image.paste(art, (x - 137, 201), mask)
-        d.ellipse((x - 141, 197, x + 141, 479), outline=colors[index], width=5)
+            d.ellipse((x - 141, 197, x + 141, 479), outline=colors[index], width=5)
         fit(d, (x, 65), fighter.title or fighter.class_name, 27, width=470, color=colors[index])
         fit(d, (x, 111), fighter.name, 38, width=470)
         fit(d, (x, 546), fighter.class_name + f" · Lv {fighter.level}", 22, width=450)
@@ -86,13 +145,6 @@ def cinematic_card(state, portraits, palettes, *, intro):
         fit(d, (550, 322), "VS", 140, width=230)
         fit(d, (550, 455), "SOULS COLLIDE", 17, width=210)
     elif state.winner_id is not None:
-        # A bright diagonal finishing cut passes over the defeated avatar.
-        for offset, width in ((-10, 2), (10, 2), (0, 12), (0, 4)):
-            d.line(
-                (450, 480 + offset, 1010, 196 + offset),
-                fill=colors[0] if width != 4 else "#fff8ff",
-                width=width,
-            )
         fit(d, (550, 184), "VICTORY", 39, width=270)
         fit(d, (550, 520), state.finisher or "DECISIVE STRIKE", 17, width=260)
     else:

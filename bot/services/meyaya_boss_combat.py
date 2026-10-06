@@ -33,7 +33,7 @@ def public_fighter(fighter):
         user_id=fighter.user_id,
         name=fighter.name,
         class_name=fighter.class_name,
-        recorded_class="Soulweaver",
+        recorded_class="Void Revenant" if fighter.boss_key == "veyra" else "Soulweaver",
         title=fighter.title,
         weapon=fighter.weapon,
         affinity=fighter.affinity_name,
@@ -42,9 +42,9 @@ def public_fighter(fighter):
         mp="UNKNOWN",
         max_mp="UNKNOWN",
         potential="ANALYSIS FAILED",
-        passive="Spell Memory",
-        signature="Prism Cascade",
-        threat="BEYOND MEASUREMENT",
+        passive=fighter.passive_name,
+        signature=fighter.signature_name,
+        threat="ANNIHILATION CLASS" if fighter.boss_key == "veyra" else "BEYOND MEASUREMENT",
     )
 
 

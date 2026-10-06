@@ -58,6 +58,7 @@ class Fighter:
     alignment: str = ""
     resonance_used: bool = False
     erasure_hits: int = 0
+    boss_key: str = ""
 
     @classmethod
     def snapshot(cls, profile, name):
@@ -106,6 +107,7 @@ class Fighter:
             rule,
         )
         fighter.is_boss = bool(getattr(profile, "is_meyaya_boss", False))
+        fighter.boss_key = getattr(profile, "boss_key", "meyaya" if fighter.is_boss else "")
         from bot.data.fantasy_alignment import patron_for
 
         patron = patron_for(profile)

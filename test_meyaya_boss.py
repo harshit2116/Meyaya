@@ -288,6 +288,54 @@ async def test_cinematic_gif_failure_and_single_message_reuse(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_intro_is_overwritten_after_playback_and_victory_stays(monkeypatch):
+    from bot.services import meyaya_boss_presentation as presentation
+
+    monkeypatch.setattr(presentation.asyncio, "sleep", AsyncMock())
+    opening = NS(edit=AsyncMock())
+    opening.edit.return_value = opening
+    ending = NS(edit=AsyncMock())
+    channel = NS(send=AsyncMock(side_effect=[opening, ending]))
+    service = NS(exact_gif=AsyncMock(return_value=NS(url="https://cdn.klipy.com/boss.gif")))
+    cinema = BossPresentation(NS(bot=NS(build_klipy_service=lambda: service)), NS(), channel)
+    state = boss_engine().state
+    await cinema.intro(state)
+    assert presentation.asyncio.sleep.await_args_list[1].args == (
+        presentation.INTRO_GIF_DURATION_SECONDS + presentation.INTRO_GIF_LOAD_GRACE_SECONDS,
+    )
+    assert opening.edit.call_args_list[0].kwargs["embed"] is None
+    state.dialogue = "I understand it now."
+    await cinema.speak(state)
+    state.winner_id = state.right.user_id
+    await cinema.finish(state)
+    assert channel.send.await_count == 2
+    ending.edit.assert_not_awaited()
+    assert opening.edit.await_count == 3
+    assert channel.send.call_args.kwargs["embed"].image.url.endswith("boss.gif")
+    assert cinema.message is ending
+
+
+def test_boss_intro_has_distinct_versus_screen(monkeypatch):
+    from bot.services import meyaya_boss_renderer as renderer
+
+    original = renderer.fit
+    labels = []
+
+    def capture(draw, position, text, *args, **kwargs):
+        labels.append(text)
+        return original(draw, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(renderer, "fit", capture)
+    state = boss_engine().state
+    intro = render_duel(state, intro=True)
+    assert "VS" in labels
+    labels.clear()
+    battle = render_duel(state)
+    assert "VS" not in labels
+    assert intro != battle
+
+
+@pytest.mark.asyncio
 async def test_rejected_gif_embed_retries_as_dialogue(monkeypatch):
     from bot.services import meyaya_boss_presentation as presentation
 
@@ -348,7 +396,8 @@ async def test_boss_bypasses_db_canonical_id_and_details_masking():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["none", "gif", "render", "db", "message", "cache"])
-async def test_boss_full_flow_serialization_and_cleanup(monkeypatch, failure):
+@pytest.mark.parametrize("encounter", ["meyaya", "veyra", "clash"])
+async def test_boss_full_flow_serialization_and_cleanup(monkeypatch, failure, encounter):
     from bot.cogs import fantasy
 
     monkeypatch.setattr(fantasy.asyncio, "sleep", AsyncMock())
@@ -387,6 +436,23 @@ async def test_boss_full_flow_serialization_and_cleanup(monkeypatch, failure):
     left, right = member(1, guild), member(99, guild)
     right.bot = True
     view = DuelChallengeView(cog, left, right, {1: profile(), 99: meyaya_boss_profile(99)})
+    if encounter != "meyaya":
+        from bot.services.fantasy_boss import veyra_boss_profile
+
+        right = member(-1, guild)
+        right.bot = True
+        left = member(99, guild) if encounter == "clash" else left
+        view = DuelChallengeView(
+            cog,
+            left,
+            right,
+            {
+                left.id: meyaya_boss_profile(99) if encounter == "clash" else profile(),
+                -1: veyra_boss_profile(),
+            },
+        )
+        view.patron_clash = encounter == "clash"
+        view.participant_ids = (1,)
     cog.track_view(view)
     cog.duel_users[1] = view
     message = NS(id=9, channel=NS(id=5), edit=AsyncMock())
@@ -407,7 +473,12 @@ async def test_boss_full_flow_serialization_and_cleanup(monkeypatch, failure):
                 await cog.run_duel(view, inter)
         else:
             await cog.run_duel(view, inter)
-            result = next(v for v in cog.views if isinstance(v, DuelResultView))
+            assert not any(isinstance(active, DuelResultView) for active in cog.views)
+            ending = inter.channel.send.call_args.kwargs
+            assert "files" not in ending and "view" not in ending
+            if failure == "db":
+                assert "history could not be saved" in ending["content"]
+            assert not any(call.kwargs.get("outcome") for call in render.call_args_list)
             output = bot._meyaya_command_outputs[(5, 9)][1].result_summary
             assert '"hp": "UNKNOWN"' in output
             for call in inter.channel.send.call_args_list + message.edit.call_args_list:
@@ -422,7 +493,6 @@ async def test_boss_full_flow_serialization_and_cleanup(monkeypatch, failure):
             if recorded:
                 boss = recorded["fighters"][1]
                 assert boss["hp"] == "UNKNOWN" and "strength" not in boss
-            result.finish()
     finally:
         view.finish()
     assert not cog.duel_users and not cog.views

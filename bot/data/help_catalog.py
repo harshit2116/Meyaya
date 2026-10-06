@@ -109,7 +109,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
     "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "caught", "scramble", "mostlikely", "8ball", "warninglabel"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
-    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "rebirth", "versus", "guardianbattle"),
+    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "rebirth", "versus", "bossfight", "guardianbattle"),
     "Relationships": ("marry", "marriage", "renewvows", "divorce"),
     "Single Player Games": ("escape", "detective", "personalitytest"),
     "Multiplayer Games": ("showdown", "survive", "excuse", "endgame"),
@@ -227,6 +227,10 @@ COMMANDS: tuple[HelpCommand, ...] = (
     ),
     HelpCommand(
         "versus", "versus <member>", "Challenge a member, or face Meyaya's adaptive final-boss encounter.",
+        "Fantasy / Profile",
+    ),
+    HelpCommand(
+        "bossfight", "bossfight [meyaya|veyra|clash]", "Challenge Meyaya or Veyra, or witness their world-shattering clash.",
         "Fantasy / Profile",
     ),
     HelpCommand(

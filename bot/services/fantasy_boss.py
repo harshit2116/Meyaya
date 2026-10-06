@@ -39,5 +39,28 @@ def meyaya_boss_profile(user_id):
         weapon_trait="Crystalline petals orbit the Soul Interface's author.",
         description="The Girl at the End of Every Story",
         is_meyaya_boss=True,
+        boss_key="meyaya",
     )
     return SimpleNamespace(**values)
+
+
+VEYRA_BOSS_ID = -1
+
+
+def veyra_boss_profile():
+    profile = meyaya_boss_profile(1)
+    profile.user_id = VEYRA_BOSS_ID
+    profile.boss_key = "veyra"
+    profile.class_name = "Void Revenant"
+    profile.subclass_name = "Erasure Active"
+    profile.affinity_id = "void"
+    profile.affinity_name = "Void · Ruin · Ash"
+    profile.weapon_name = "Mournfang - Blade of the Last Silence"
+    profile.weapon_type = "Mythic Voidblade"
+    profile.passive_name = "Abyss Memory"
+    profile.passive_id = "boss:abyss_memory"
+    profile.signature_name = "World Sever"
+    profile.signature_id = "boss:world_sever"
+    profile.fantasy_title = "Enemy of All"
+    profile.description = "Where Veyra walks, even fate forgets its name."
+    return profile

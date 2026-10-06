@@ -1,18 +1,52 @@
 # Meyaya: Soul Interface Authority
 
-Use `/versus member:@Meyaya` or `uwu versus @Meyaya`. Only the logged-in
-`bot.user.id` selects this path, never a matching nickname. The player needs an
+Use `/versus member:@Meyaya`, `uwu versus @Meyaya`, or `/bossfight boss:meyaya`.
+Prefix `uwu versus Meyaya` also selects the authored patron. Mentions select the
+logged-in `bot.user.id`, never a matching member nickname. The player needs an
 awakening; Meyaya never queries/creates a player row. PvP keeps `DuelEngine`,
 human consent and existing v5 rules. No migration or reward economy is added.
+
+## Veyra and World Collision
+
+- `/bossfight boss:veyra` or `uwu versus Veyra`: challenge the Enemy of All.
+- `/bossfight boss:clash` or `uwu bossbattle`: watch Meyaya fight Veyra; no awakening required.
+- `/bossfight` defaults to Veyra. `/versus` retains its slash member picker.
+
+`bossbattle` is a text-only shortcut, keeping the bot within Discord's 100 global
+slash-command limit. The clash has a shared 60-second server cooldown across both routes.
+
+Veyra has Abyss Memory (three capped resistance stacks), Mournfang strikes,
+and World Sever every third action when MP permits. World Sever destroys most
+of the current ward and strips resistance. She uses her own crimson artwork,
+dialogue, masked vitals and distinct VS card. Entry uses
+`https://klipy.com/gifs/skadi-alter` (9.2-second cycle plus two-second load allowance);
+her victory uses `https://klipy.com/gifs/arknigh-skadi-arknights`.
+
+World Collision escalates through The First Fracture, Reality Unravels and
+The Last Possible World. Origin raises capped wards; Erasure breaks them.
+Both patrons can win under the seeded rules. It ends within 16 actions and
+uses the winning patron's victory GIF, with no extra result image. These phase
+changes are specific to this spectacle; normal Meyaya encounters stay continuous.
+
+All resources are encounter-local. User locks, cooldowns, cancellation and
+history-save fallbacks also apply to these modes. Veyra's authored NPC identifier
+is `-1` in result history; it is never queried or stored as a player profile.
+Clash history records the two patrons; the invoking user owns the active view
+and reservation. No rewards, XP or saved identity changes occur.
 
 ## One continuous encounter
 
 Challenge → auto-accept → intro GIF/dialogue → analysis → one class rewrite →
-opening card → edited live battle → victory dialogue/GIF → final card.
-The intro GIF remains visible for five seconds after sending. Intro/analysis and
-at most three in-battle remarks reuse the cinematic message. The complete victory
-dialogue and GIF are sent together as a NEW message; the final result card is
-also new. The live battle still edits its existing message.
+opening card → edited live battle → victory dialogue/GIF.
+The intro GIF message is overwritten by analysis after its measured 4.66-second
+cycle plus a two-second loading allowance. Discord has no client playback-complete
+event, so this is server-timed. At most three in-battle remarks reuse that message.
+The opening card has a distinct VS introduction before the live battle layout.
+The complete victory dialogue and GIF are sent together as a new final message;
+no result image or result controls follow it. GIF looping is controlled by Discord.
+History-save warnings are included in that final message when needed.
+The live battle edits its existing message and uses a dedicated artwork-led
+boss layout with challenger vitals, masked boss bars and recent combat events.
 No phases, resets, forced victory, permanent stat changes or Gemini requests.
 Large ordinary Discord Markdown headers keep dialogue prominent. Although
 discord.py 2.7.1 supports LayoutView, existing embeds/views remain more compatible
