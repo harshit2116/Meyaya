@@ -827,13 +827,24 @@ class FantasyCog(commands.Cog):
             if getattr(profile, "is_meyaya_boss", False):
                 return await image_work(render_soul_card, profile, member.display_name)
             avatar = b""
+            asset = None
             try:
                 asset = member.display_avatar.with_size(512).with_format("png")
-                async with asyncio.timeout(5):
+                async with asyncio.timeout(3):
                     avatar = await self.bot.build_profile_aesthetic_service()._download(str(asset))
             except Exception as error:
                 # A portrait outage must not stop an already saved identity.
                 self.report(error, "fantasy_avatar")
+            if not avatar and asset is not None:
+                # The shared downloader returns None on CDN/session failures.
+                # Discord's own client can still retrieve the same public asset.
+                read = getattr(asset, "read", None)
+                if callable(read):
+                    try:
+                        async with asyncio.timeout(2):
+                            avatar = await read()
+                    except Exception as error:
+                        self.report(error, "fantasy_avatar")
             return await image_work(render_soul_card, profile, member.display_name, avatar)
 
     async def weapon_bytes(self, profile):

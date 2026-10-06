@@ -4,7 +4,7 @@ from io import BytesIO
 import math
 from dataclasses import replace
 
-from PIL import Image, ImageDraw, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 
 from bot.data.fantasy import AFFINITIES, CLASSES, RARITIES, RARITY_COLORS
 from bot.services.card_renderer import font
@@ -271,61 +271,7 @@ def render_soul_card(profile, name, avatar=b""):
 
 
 def render_ritual(profile):
-    """Illustrated affinity core, slow orbiting sigils and a seamless soft glow."""
-    from bot.services.fantasy_awaken_art import affinity_sprite
+    """A quiet illustrated affinity reveal with a matching ambient environment."""
+    from bot.services.affinity_animation import render_affinity_ritual
 
-    theme = theme_for(profile)
-    base = Image.new("RGB", (560, 280), theme.dark)
-    glow = Image.new("RGBA", base.size)
-    gd = ImageDraw.Draw(glow)
-    gd.ellipse((173, 13, 387, 211), fill=(*rgb(theme.color), 55))
-    base = Image.alpha_composite(
-        base.convert("RGBA"), glow.filter(ImageFilter.GaussianBlur(24))
-    ).convert("RGB")
-    bd = ImageDraw.Draw(base)
-    bd.rounded_rectangle(
-        (9, 9, 550, 270), radius=17, outline=blend(rgb(theme.dark), rgb(theme.color), 0.4)
-    )
-    bd.text((280, 231), theme.name.upper(), font=font(21), fill=theme.color, anchor="mm")
-    bd.text((280, 254), "A DORMANT SIGNATURE ANSWERS", font=font(13), fill="#f7eefb", anchor="mm")
-    art = affinity_sprite(profile.affinity_id)
-    sample = base.copy()
-    if art is not None:
-        sample.paste(art, (193, 25), art)
-    sd = ImageDraw.Draw(sample)
-    sd.rectangle((0, 0, 100, 40), fill=theme.color)
-    sd.rectangle((110, 0, 210, 40), fill="#f7eefb")
-    palette = sample.quantize(colors=128)
-    frames = []
-    for i in range(24):
-        image = base.copy()
-        d = ImageDraw.Draw(image)
-        phase = math.tau * i / 24
-        for r in (89, 98):
-            box = (280 - r, 112 - r, 280 + r, 112 + r)
-            for start in (0, 120, 240):
-                d.arc(box, start + i * 2, start + 76 + i * 2, fill=theme.color, width=1)
-        if art is not None:
-            image.paste(art, (193, 25 + round(math.sin(phase) * 2)), art)
-        else:
-            glyph(d, (280, 112), 44, theme.motif, theme.color, 3)
-        for j in range(12):
-            angle = j * math.tau / 12 + phase
-            x, y = 280 + math.cos(angle) * 104, 112 + math.sin(angle) * 89
-            d.ellipse((x - 2, y - 2, x + 2, y + 2), fill="#f7eefb")
-        for x in (88, 472):
-            glyph(d, (x, 112), 18, theme.motif, theme.color, 1)
-        frames.append(image.quantize(palette=palette, dither=Image.Dither.NONE))
-    output = BytesIO()
-    durations = [70] * 24
-    frames[0].save(
-        output,
-        "GIF",
-        save_all=True,
-        append_images=frames[1:],
-        duration=durations,
-        loop=0,
-        disposal=1,
-        optimize=False,
-    )
-    return output.getvalue()
+    return render_affinity_ritual(profile)

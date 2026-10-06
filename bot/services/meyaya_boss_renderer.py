@@ -218,6 +218,10 @@ def render_boss_duel(state, portraits, palettes, *, intro=False):
 
 
 def render_boss_encounter(state, portraits, palettes, *, intro=False):
+    if not state.left.is_boss and state.right.boss_key == "meyaya":
+        from bot.services.boss_battle_cards import render_meyaya_scene
+
+        return render_meyaya_scene(state, portraits, intro=intro)
     player, boss = state.left, state.right
     erasure = boss.boss_key == "veyra"
     PINK, LILAC, CYAN = (
@@ -356,12 +360,23 @@ def render_patron_clash(state, *, intro=False):
         shade.rectangle((0, 553, 1100, 640), fill=(12, 8, 19, 255))
         image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
         draw = ImageDraw.Draw(image)
-        fit(draw, (550, 31), "ORIGIN  /  ERASURE     —     WORLD COLLISION", 21,
-            width=1030, color="#fff0f7")
-        fit(draw, (550, 576), "TWO AUTHORITIES. ONE SURVIVING REALITY.", 21,
-            width=1040, color=PINK)
-        fit(draw, (550, 614), "THE SOUL INTERFACE CAN NO LONGER GUARANTEE REALITY.", 15,
-            width=1040, color="#f6e3ef")
+        fit(
+            draw,
+            (550, 31),
+            "ORIGIN  /  ERASURE     —     WORLD COLLISION",
+            21,
+            width=1030,
+            color="#fff0f7",
+        )
+        fit(draw, (550, 576), "TWO AUTHORITIES. ONE SURVIVING REALITY.", 21, width=1040, color=PINK)
+        fit(
+            draw,
+            (550, 614),
+            "THE SOUL INTERFACE CAN NO LONGER GUARANTEE REALITY.",
+            15,
+            width=1040,
+            color="#f6e3ef",
+        )
         return encode(image)
     image = Image.new("RGB", DUEL_SIZE, "#0b0813")
     for index, fighter in enumerate((state.left, state.right)):
