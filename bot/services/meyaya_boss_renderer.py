@@ -218,7 +218,7 @@ def render_boss_duel(state, portraits, palettes, *, intro=False):
 
 
 def render_boss_encounter(state, portraits, palettes, *, intro=False):
-    if not state.left.is_boss and state.right.boss_key == "meyaya":
+    if not state.left.is_boss and state.right.boss_key in {"meyaya", "veyra"}:
         from bot.services.boss_battle_cards import render_meyaya_scene
 
         return render_meyaya_scene(state, portraits, intro=intro)

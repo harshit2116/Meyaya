@@ -37,6 +37,9 @@ def contextual_victory(state):
 
 
 class BossPresentation:
+    embed_colour = 0xEEB4E4
+    embed_title = "Everbloom"
+
     def __init__(self, cog, view, channel):
         self.cog, self.view, self.channel = cog, view, channel
         self.message = None
@@ -62,7 +65,7 @@ class BossPresentation:
         if gif:
             url = await self.gif(gif)
             if url:
-                embed = meyaya_embed("Everbloom", color=0xEEB4E4, icon="✦")
+                embed = meyaya_embed(self.embed_title, color=self.embed_colour, icon="✦")
                 embed.set_image(url=url)
         kwargs = dict(content=text, embed=embed, allowed_mentions=discord.AllowedMentions.none())
         sender = (

@@ -37,7 +37,7 @@ def fighter_colors(state, palettes):
 
 
 def render_boss_arena(state, portraits, palettes):
-    if not state.left.is_boss and state.right.boss_key == "meyaya":
+    if not state.left.is_boss and state.right.boss_key in {"meyaya", "veyra"}:
         return render_meyaya_scene(state, portraits, intro=False)
     colors = fighter_colors(state, palettes)
     image = victory_background(colors)
@@ -125,7 +125,7 @@ def render_boss_arena(state, portraits, palettes):
 def render_boss_defeat(state, portraits, palettes):
     if (
         not state.left.is_boss
-        and state.right.boss_key == "meyaya"
+        and state.right.boss_key in {"meyaya", "veyra"}
         and state.winner_id == state.right.user_id
     ):
         return render_meyaya_victory(state, portraits)
@@ -180,16 +180,22 @@ def render_boss_defeat(state, portraits, palettes):
     return encode(image)
 
 
-def meyaya_canvas(filename, title, lines=()):
-    image = template(filename).resize((1100, 640), Image.Resampling.LANCZOS)
-    overlay = Image.new("RGBA", image.size)
-    ImageDraw.Draw(overlay).rectangle((0, 0, 1100, 100), fill=(28, 12, 32, 216))
-    image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
-    draw = ImageDraw.Draw(image)
-    fit(draw, (550, 25), title, 25, width=1030, color="#ffe9f2")
+def patron_header(image, state, title, lines=()):
+    """Reserve a separate caption strip so artwork and portraits stay unobstructed."""
+    erasure = state.right.boss_key == "veyra"
+    canvas = Image.new("RGB", (1100, 640), "#140a10" if erasure else "#fff1ed")
+    canvas.paste(image.resize((1100, 548), Image.Resampling.LANCZOS), (0, 92))
+    draw = ImageDraw.Draw(canvas)
+    ink, accent = ("#ffe3e9", "#df4564") if erasure else ("#703044", "#c98a92")
+    draw.line((35, 86, 1065, 86), fill=accent, width=1)
+    for x in (35, 1065):
+        draw.polygon(((x, 80), (x + 5, 86), (x, 91), (x - 5, 86)), fill=accent)
+    fit(draw, (550, 20), title, 23, width=1010, color=ink)
     for index, line in enumerate(lines[:2]):
-        fit(draw, (550, 59 + index * 24), line, 14, width=1030, color="#fff4fa")
-    return image
+        # The card font has no emoji glyphs; retain the readable battle narration.
+        line = "".join(c for c in line if ord(c) < 0x2600 or c.isalnum()).strip()
+        fit(draw, (550, 49 + index * 21), line, 14, width=1010, color=ink)
+    return encode(canvas)
 
 
 def scene_portrait(image, fighter, avatar, center, size, bottom=None):
@@ -203,27 +209,34 @@ def scene_portrait(image, fighter, avatar, center, size, bottom=None):
 
 
 def render_meyaya_scene(state, portraits, *, intro):
-    image = meyaya_canvas(
-        "meyaya-encounter-v2.png" if intro else "meyaya-arena-v2.png",
-        "MEYAYA / BLOOM OF ORIGIN" if intro else state.boss_form.upper(),
-        (state.counter_pattern, state.dialogue) if intro else tuple(state.history[-2:]),
+    erasure = state.right.boss_key == "veyra"
+    key = "veyra" if erasure else "meyaya"
+    stage = "encounter" if intro else "arena"
+    image = template(f"{key}-{stage}-v2.png").resize((1100, 640), Image.Resampling.LANCZOS)
+    centers = (
+        (((269, 222), (890, 222)) if intro else ((235, 282), (866, 282)))
+        if erasure
+        else (((250, 216), (847, 216)) if intro else ((220, 244), (882, 244)))
     )
-    centers = ((250, 216), (847, 216)) if intro else ((220, 244), (882, 244))
     scene_portrait(
         image,
         state.left,
         portraits[0],
         centers[0],
-        230 if intro else 168,
-        bottom=None if intro else 320,
+        (246 if erasure else 230) if intro else (170 if erasure else 168),
+        bottom=None,
     )
     if not intro:
-        scene_portrait(image, state.right, portraits[1], centers[1], 168, bottom=320)
+        scene_portrait(image, state.right, portraits[1], centers[1], 170 if erasure else 168)
     draw = ImageDraw.Draw(image)
     for index, fighter in enumerate((state.left, state.right)):
         x = centers[index][0]
-        name_y, detail_y = (377, 432) if intro else (346, 387)
-        ink = "#652b48" if intro else "#fff0f7"
+        name_y, detail_y = (
+            ((394, 446) if intro else (407, 457))
+            if erasure
+            else ((377, 432) if intro else (346, 387))
+        )
+        ink = "#ffe5eb" if erasure else "#652b48" if intro else "#fff0f7"
         fit(draw, (x, name_y), fighter.name, 27, width=265, color=ink)
         fit(
             draw,
@@ -235,15 +248,17 @@ def render_meyaya_scene(state, portraits, *, intro):
         )
         panel = Image.new("RGBA", image.size)
         ImageDraw.Draw(panel).rounded_rectangle(
-            (x - 152, 462, x + 152, 581), radius=12, fill=(25, 12, 32, 208)
+            (x - 152, 487, x + 152, 610),
+            radius=8,
+            fill=(18, 8, 14, 195) if erasure else (48, 24, 45, 195),
         )
         image = Image.alpha_composite(image.convert("RGBA"), panel).convert("RGB")
         draw = ImageDraw.Draw(image)
         for y, label, value, maximum in (
-            (500, "HP", fighter.hp, fighter.max_hp),
-            (552, "MP", fighter.mp, fighter.max_mp),
+            (525, "HP", fighter.hp, fighter.max_hp),
+            (577, "MP", fighter.mp, fighter.max_mp),
         ):
-            tint = "#f3b2dc" if label == "HP" else "#c4a7ee"
+            tint = ("#ec5373" if erasure else "#f3b2dc") if label == "HP" else "#c4a7ee"
             if fighter.is_boss:
                 masked_bar(draw, x - 132, y, value, maximum, width=264, label=label, color=tint)
             else:
@@ -252,39 +267,84 @@ def render_meyaya_scene(state, portraits, *, intro):
                 length = round(264 * max(0, min(1, value / max(1, maximum))))
                 if length:
                     draw.rectangle((x - 132, y, x - 132 + length, y + 14), fill=tint)
-    draw.rounded_rectangle((490, 221, 610, 278), radius=12, fill="#26142d")
+    draw = ImageDraw.Draw(image)
+    badge_y = 330 if erasure else 300
+    draw.polygon(
+        ((550, badge_y - 40), (599, badge_y), (550, badge_y + 40), (501, badge_y)),
+        fill="#260d19" if erasure else "#41213b",
+        outline="#dc7e99",
+    )
     if intro:
         # Use the encounter renderer's text helper so the existing intro hook remains useful.
         from bot.services import meyaya_boss_renderer
 
-        meyaya_boss_renderer.fit(draw, (550, 249), "VS", 43, width=100)
+        meyaya_boss_renderer.fit(draw, (550, badge_y), "VS", 43, width=100)
     else:
-        fit(draw, (550, 249), f"MOVE {state.moves:02}", 19, width=105)
+        fit(draw, (550, badge_y), f"MOVE {state.moves:02}", 19, width=105)
     fit(
         draw,
-        (550, 420),
+        (550, 460),
         "AUTHORITY OVERRIDE" if intro else f"ROUND {state.round}",
         13,
         width=210,
-        color="#652b48",
+        color="#ffd6e0" if erasure else "#652b48",
     )
-    return encode(image)
+    return patron_header(
+        image,
+        state,
+        (
+            ("VEYRA / ENEMY OF ALL" if erasure else "MEYAYA / BLOOM OF ORIGIN")
+            if intro
+            else state.boss_form.upper()
+        ),
+        (state.counter_pattern, state.dialogue) if intro else tuple(state.history[-2:]),
+    )
 
 
 def render_meyaya_victory(state, portraits):
-    image = meyaya_canvas(
-        "meyaya-victory-v2.png",
-        "MEYAYA PREVAILS / SOUL FRACTURE",
-        (f"{state.left.name} falls before the Bloom of Origin.", state.finisher or state.verdict),
-    )
-    art = fighter_art(state.left, portraits[0], 226)
+    erasure = state.right.boss_key == "veyra"
+    key = "veyra" if erasure else "meyaya"
+    image = template(f"{key}-victory-v2.png").resize((1100, 640), Image.Resampling.LANCZOS)
+    if erasure:
+        scene_portrait(image, state.right, portraits[1], (173, 276), 156)
+    art = fighter_art(state.left, portraits[0], 156 if erasure else 208)
     art = ImageEnhance.Brightness(ImageOps.grayscale(art).convert("RGB")).enhance(0.75)
     mask = Image.new("L", art.size)
-    ImageDraw.Draw(mask).ellipse((1, 1, 224, 224), fill=255)
-    badges = image.crop((0, 474, 1100, 640))
-    shattered_portrait(image, art, mask, (943, 369), rgb("#e4acc4"))
-    image.paste(badges, (0, 474))
+    ImageDraw.Draw(mask).ellipse((1, 1, art.width - 2, art.height - 2), fill=255)
+    plate_y = 360 if erasure else 474
+    badges = image.crop((0, plate_y, 1100, 640))
+    shattered_portrait(
+        image,
+        art,
+        mask,
+        (932, 276) if erasure else (943, 369),
+        rgb("#ec5373" if erasure else "#e4acc4"),
+    )
+    image.paste(badges, (0, plate_y))
     draw = ImageDraw.Draw(image)
-    fit(draw, (180, 574), state.right.name, 23, width=280, color="#652b48")
-    fit(draw, (943, 574), state.left.name, 23, width=280, color="#fff0f7")
-    return encode(image)
+    for x, fighter, label in ((173, state.right, "VICTOR"), (932, state.left, "DEFEATED")):
+        if erasure:
+            fit(draw, (x, 381), fighter.name, 24, width=260, color="#ffe5eb")
+            fit(draw, (x, 428), label, 18, width=245, color="#ef8ca1")
+        else:
+            fit(
+                draw,
+                (180 if label == "VICTOR" else 943, 574),
+                fighter.name,
+                23,
+                width=280,
+                color="#652b48" if label == "VICTOR" else "#fff0f7",
+            )
+    return patron_header(
+        image,
+        state,
+        "VEYRA PREVAILS / ABSOLUTE ERASURE" if erasure else "MEYAYA PREVAILS / SOUL FRACTURE",
+        (
+            (
+                f"{state.left.name} falls before the Enemy of All."
+                if erasure
+                else f"{state.left.name} falls before the Bloom of Origin."
+            ),
+            state.finisher or state.verdict,
+        ),
+    )

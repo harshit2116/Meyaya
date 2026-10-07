@@ -340,6 +340,9 @@ class FantasyCog(commands.Cog):
                 if history_note:
                     lines.append(history_note)
                 embed = meyaya_embed(title, "\n".join(lines), icon="⚔")
+                boss_colour = 0xDC143C if state.right.boss_key == "veyra" else 0xEEB4E4
+                if cinematic:
+                    embed.colour = boss_colour
                 embed.set_footer(text=f"{state.arena[0]} · Temporary combat · identities unchanged")
                 png = None
                 try:
@@ -365,14 +368,15 @@ class FantasyCog(commands.Cog):
                     elif state.history:
                         boss_content += "\n" + "\n".join(safe(line) for line in state.history[-2:])
                     boss_content = boss_content[:1950]
-                # The opening is a full-size attachment, not a thumbnail embed.
-                # Keep the intro separate; only the dedicated battle message changes.
+                # Every boss frame uses a full-size image inside its themed embed.
                 kwargs = dict(
                     content=boss_content
                     or (history_note if outcome and png and history_note else None),
                     embed=(
-                        discord.Embed().set_image(url="attachment://meyaya-duel.png")
-                        if cinematic and not intro and png
+                        discord.Embed(colour=boss_colour).set_image(
+                            url="attachment://meyaya-duel.png"
+                        )
+                        if cinematic and png
                         else None if (intro or outcome) and png else embed
                     ),
                     view=controls,

@@ -9,6 +9,9 @@ VEYRA_INTRO_SECONDS = 9.2
 
 
 class VeyraPresentation(BossPresentation):
+    embed_colour = 0xDC143C
+    embed_title = "Mournfang"
+
     async def intro(self, state):
         await self.beat(
             "# Veyra.\n-# ENEMY OF ALL\n\n> **The Soul Interface did not invite her.**\n> **It cannot make her leave.**",
