@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     discord_token: str = Field(alias="DISCORD_TOKEN")
     discord_message_cache_size: int = Field(default=100, ge=1, le=1000, alias="DISCORD_MESSAGE_CACHE_SIZE")
     discord_chunk_on_startup: bool = Field(default=True, alias="DISCORD_CHUNK_ON_STARTUP")
+    presence_stream_url: str = Field(default="", alias="PRESENCE_STREAM_URL")
     database_url: str = Field(alias="DATABASE_URL")
     redis_url: str = Field(alias="REDIS_URL")
     redis_required: bool = Field(default=False, alias="REDIS_REQUIRED")
