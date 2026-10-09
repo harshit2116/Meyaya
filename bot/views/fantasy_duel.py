@@ -3,10 +3,11 @@
 import asyncio
 from uuid import uuid4
 import discord
+from bot.utils.components_v2 import MeyayaView
 from bot.utils.embeds import meyaya_embed
 
 
-class DuelView(discord.ui.View):
+class DuelView(MeyayaView):
     def __init__(self, cog, left, right, profiles, *, timeout=90):
         super().__init__(timeout=timeout)
         self.cog, self.left, self.right, self.profiles = cog, left, right, profiles

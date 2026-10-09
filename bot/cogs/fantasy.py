@@ -37,11 +37,9 @@ from bot.repositories.fantasy_duels import FantasyDuelRepository
 from bot.views.fantasy_duel import DuelChallengeView, DuelResultView
 from bot.services.fantasy_guardian import bound_guardian
 from bot.services.guardian_render import guardian_card
-from bot.views.guardian_battle import GuardianChallengeView, GuardianBattleView
-from bot.services.fantasy_guardian import GuardianBattle, GuardianFighter
 from bot.utils.command_context import CommandOutput, remember_command_result
 from bot.utils.embeds import meyaya_embed
-from bot.utils.image_work import BoundedImageGate, image_work
+from bot.utils.image_work import BoundedImageGate, image_work, animation_work
 from bot.views.fantasy import (
     AlreadyAwakenedView,
     AwakeningView,
@@ -96,7 +94,7 @@ class FantasyCog(commands.Cog):
         self.duel_users = {}
         self.duel_cooldowns = OrderedDict()
         self.clash_cooldowns = OrderedDict()
-        self.render_slots = BoundedImageGate(capacity=3)
+        self.render_slots = BoundedImageGate(capacity=4, concurrency=2)
 
     def track_view(self, view):
         if len(self.views) >= MAX_VIEWS:
@@ -660,7 +658,10 @@ class FantasyCog(commands.Cog):
 
     async def start_patron_encounter(self, ctx, patron, *, clash=False):
         def available():
-            if ctx.author.id in self.pending or ctx.author.id in self.duel_users:
+            activity = self.duel_users.get(ctx.author.id)
+            if ctx.author.id in self.pending or (
+                activity is not None and not isinstance(activity, DungeonView)
+            ):
                 raise commands.CommandError("Finish your current fantasy activity first.")
             if len(self.duel_users) >= 32 or len(self.views) >= MAX_VIEWS:
                 raise commands.CommandError("The arenas are busy. Try again shortly.")
@@ -672,7 +673,8 @@ class FantasyCog(commands.Cog):
                 raise commands.CommandError("Let this world's collision settle for 60 seconds.")
 
         available()
-        await self.check_dungeon_activity(ctx.author.id)
+        # Patron fights use temporary snapshots. A saved descent can be paused
+        # without abandoning it or changing its HP, progression, or rewards.
         meyaya = SimpleNamespace(
             id=self.bot.user.id,
             guild=ctx.guild,
@@ -702,8 +704,15 @@ class FantasyCog(commands.Cog):
         view.running = True
         for child in view.children:
             child.disabled = True
-        self.track_view(view)
-        self.duel_users[ctx.author.id] = view
+        dungeon = self.duel_users.get(ctx.author.id)
+        async with dungeon.lock if isinstance(dungeon, DungeonView) else nullcontext():
+            available()
+            if self.duel_users.get(ctx.author.id) is not dungeon:
+                raise commands.CommandError("Your activity changed. Try `/bossfight` again.")
+            self.track_view(view)
+            if isinstance(dungeon, DungeonView):
+                dungeon.finish()
+            self.duel_users[ctx.author.id] = view
         self.duel_cooldowns[ctx.author.id] = monotonic()
         self.duel_cooldowns.move_to_end(ctx.author.id)
         while len(self.duel_cooldowns) > 512:
@@ -792,63 +801,6 @@ class FantasyCog(commands.Cog):
                 raise
             await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.hybrid_command(description="Challenge a member to a turn-based guardian battle.")
-    @commands.guild_only()
-    @commands.cooldown(1, 30, commands.BucketType.user)
-    async def guardianbattle(self, ctx, member: discord.Member):
-        await ctx.defer()
-        _, previous = await self.create_duel(ctx.author, member)
-        if member.id == getattr(getattr(self.bot, "user", None), "id", None):
-            battle = GuardianBattle(
-                GuardianFighter(
-                    bound_guardian(previous.profiles[ctx.author.id]), ctx.author.display_name
-                ),
-                GuardianFighter(bound_guardian(previous.profiles[member.id]), member.display_name),
-                secrets.randbits(63),
-            )
-            view = GuardianBattleView(self, ctx.author, member, previous.profiles, battle)
-            previous.finish()
-            self.track_view(view)
-            self.duel_users[ctx.author.id] = view
-            view.task = asyncio.current_task()
-            try:
-                async with asyncio.timeout(25):
-                    await ctx.send(
-                        "Meyaya accepts with her overpowered Astral Dragon. Her moves are automatic; yours are manual. No rewards or permanent changes.",
-                        allowed_mentions=discord.AllowedMentions.none(),
-                    )
-                    await view.update(SimpleNamespace(channel=ctx.channel), initial=True)
-                view.schedule_turn()
-            except BaseException:
-                view.finish()
-                raise
-            return
-        view = GuardianChallengeView(self, ctx.author, member, previous.profiles)
-        previous.finish()
-        self.track_view(view)
-        for user_id in view.participant_ids:
-            self.duel_users[user_id] = view
-        guardians = [bound_guardian(view.profiles[m.id]) for m in (view.left, view.right)]
-        embed = meyaya_embed(
-            "Guardian battle challenge",
-            f"{ctx.author.mention} and {member.mention}\n**{guardians[0].name}** vs **{guardians[1].name}**\nOnly the challenged trainer can accept. Choose your own moves in this channel.\n60 seconds per turn · temporary HP/MP",
-            icon="✦",
-        )
-        embed.set_footer(text="Challenge expires in 90 seconds · requires saved awakenings")
-        remember_command_result(
-            ctx,
-            challenger_id=ctx.author.id,
-            opponent_id=member.id,
-            status="Guardian challenge awaiting consent.",
-        )
-        try:
-            view.message = await ctx.send(
-                embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
-            )
-        except BaseException:
-            view.finish()
-            raise
-
     async def card_bytes(self, profile, member):
         async with self.render_slots:
             if getattr(profile, "is_meyaya_boss", False):
@@ -876,8 +828,7 @@ class FantasyCog(commands.Cog):
 
     async def weapon_bytes(self, profile):
         try:
-            async with self.render_slots:
-                return await image_work(render_weapon_acquisition, profile)
+            return await animation_work(render_weapon_acquisition, profile)
         except Exception as error:
             self.report(error, "fantasy_weapon_render")
             return None
@@ -900,8 +851,7 @@ class FantasyCog(commands.Cog):
         self.pending[owner] = view
         gif = None
         try:
-            async with self.render_slots:
-                gif = await image_work(render_ritual, profile)
+            gif = await animation_work(render_ritual, profile)
         except Exception as error:
             self.report(error, "fantasy_reveal")
         try:

@@ -4,9 +4,11 @@ import asyncio
 import logging
 import math
 import re
+from time import perf_counter
 from contextlib import closing
-from functools import lru_cache, partial
+from functools import lru_cache
 from dataclasses import dataclass, field
+from io import BytesIO
 
 import discord
 
@@ -16,6 +18,8 @@ from bot.data.fantasy_memory_world import current_scene, ENDING_TITLES, ORIGIN_C
 from bot.models.fantasy_dungeon import ACTIVE_PHASES
 from bot.services.fantasy_dungeon import DungeonService, DungeonUnavailable, DungeonStale
 from bot.services.fantasy_dungeon_combat import enemy_intent
+from bot.services.fantasy_dungeon_renderer import render_scene_art
+from bot.logging.telemetry import event
 
 logger = logging.getLogger(__name__)
 PLAYER_HP = "<:purple_hp:1558053519133642812>"
@@ -103,7 +107,7 @@ def intent_caption(run, battle):
     return f"{icon} Preparing **{move}** · {detail[0].upper() + detail[1:]}"
 
 
-def recent_battle_log(events):
+def recent_battle_log(events, *, enemy_name=None):
     """Keep saved events untouched; only the last three distinct lines appear."""
     recent = []
     for event in events:
@@ -111,15 +115,17 @@ def recent_battle_log(events):
         if event and (not recent or event != recent[-1]):
             recent.append(event)
     lines = []
-    for index, event in enumerate(recent[-3:]):
+    for event in recent[-3:]:
+        if enemy_name:
+            # Drop the repeated epithet only in displayed log lines. Keep the
+            # full identity in the artwork, battle state and persisted history.
+            event = event.replace(enemy_name, enemy_name.partition(" · ")[0])
         # Preserve event wording and numbers; emphasize outcomes, not arithmetic.
         event = re.sub(r"\b(?:\d+ damage|No damage|DODGE|CRITICAL)\b", r"**\g<0>**", event)
-        if index == len(recent[-3:]) - 1:
-            lines.append("› " + event)
-        elif "**" in event:
-            lines.append(event)
-        else:
-            lines.append("-# " + event.replace("\n", "\n-# "))
+        if event[:1].isalnum():
+            icon = "🛡" if event.startswith("You guard") else "💧" if "MP" in event else "⚔" if "damage" in event else "✧"
+            event = icon + " " + event
+        lines.append(event)
     return "\n".join(lines)[-1000:] or "-# Choose your opening move."
 
 
@@ -172,7 +178,7 @@ def dungeon_presentation(profile, run, *, available_emojis=None):
             f"*{world.title}*\n"
             f"-# {'⚔ GUARDIAN' if run.encounter == 3 else '⚔ BATTLE'} · {run.encounter + 1}/4"
             f"　 ·　 TURN {turn} · **YOUR TURN**",
-            color=0xEC566C if run.encounter == 3 else 0xF27DA9,
+            color=world.color,
         )
         screen.fields = [
             (f"⚔ {enemy['name']}", vitality("HP", enemy["hp"], enemy["max_hp"], available_emojis=available_emojis)
@@ -183,8 +189,8 @@ def dungeon_presentation(profile, run, *, available_emojis=None):
              + vitality("HP", run.hp, profile.max_hp, filled_emoji=PLAYER_HP, available_emojis=available_emojis) + "\n"
              + vitality("MP", run.mp, profile.max_mp, filled_emoji=PLAYER_MP, available_emojis=available_emojis) + "\n"
              + f"-# ⚔ {profile.weapon_name} · WEAPON LV. {profile.weapon_level}"
-             + ("\n" + effects(player) if effects(player) else "")),
-            ("BATTLE LOG", recent_battle_log(battle.get("log", []))),
+             + (" · " + effects(player) if effects(player) else "")),
+            ("📜 BATTLE LOG", recent_battle_log(battle.get("log", []), enemy_name=enemy["name"])),
         ]
         return screen, asset
     elif phase == "defeated":
@@ -235,6 +241,7 @@ class DungeonView(discord.ui.LayoutView):
         self.profile, self.run = profile, run
         self.guild_id = guild_id
         self.asset = None
+        self.asset_key = None
         self.player_user = player_user
         self.ability_menu_open = False
         self.confirm_abandon = False
@@ -314,7 +321,6 @@ class DungeonView(discord.ui.LayoutView):
                 color=0xA63842, footer="Cancel to return to your current scene")
         self.display_asset = asset if asset.is_file() else None
         battle_screen = phase == "combat" and not self.landing and not self.confirm_abandon
-        self.combat_controls_outside = battle_screen
         self.container = discord.ui.Container(accent_color=screen.color)
         self.add_item(self.container)
         add = self.container.add_item
@@ -328,18 +334,30 @@ class DungeonView(discord.ui.LayoutView):
         if heading:
             add(discord.ui.TextDisplay(heading))
         if self.display_asset:
+            description = screen.title or "The final silence"
+            if battle_screen:
+                enemy = run.state["battle"]["enemy"]
+                description = f"{enemy['name']} · HP {enemy['hp']} / {enemy['max_hp']} · {intent_caption(run, run.state['battle'])} · {effects(enemy)}"
             add(discord.ui.MediaGallery(discord.MediaGalleryItem(
-                "attachment://dungeon.jpg", description=screen.title or "The final silence"
+                "attachment://dungeon.jpg", description=description[:1024]
             )))
         if battle_screen:
             for index, (name, value) in enumerate(screen.fields):
+                if index == 0:
+                    # Native live vitals keep attacks as small JSON edits. The
+                    # approved illustration stays attached for this encounter.
+                    # The static illustration already carries the enemy name.
+                    # Keep a native heading only when artwork is unavailable.
+                    add(discord.ui.TextDisplay(value if self.display_asset else f"**{name}**\n{value}"))
+                    continue
                 if index > 0:
                     add(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
                 if index == 2:
                     add(discord.ui.TextDisplay(f"**{name}**\n{value}"))
                     continue
-                secondary, _, body = value.partition("\n")
-                title = discord.ui.TextDisplay(f"### {name}\n{secondary}")
+                # Keep vitals beside the avatar. Splitting them into a separate
+                # display below the thumbnail leaves an avatar-height blank gap.
+                title = discord.ui.TextDisplay(f"**{name}**\n{value}")
                 avatar = getattr(self.player_user, "display_avatar", None)
                 portrait = ("attachment://dungeon.jpg" if self.display_asset else None) if index == 0 else str(avatar.url) if avatar else None
                 if portrait:
@@ -347,9 +365,6 @@ class DungeonView(discord.ui.LayoutView):
                         portrait, description=run.state["battle"]["enemy"]["name"] if index == 0 else "Your Discord avatar")))
                 else:
                     add(title)
-                # Full-width strips avoid squeezing twelve emojis into the
-                # narrow text column beside the portrait on mobile.
-                add(discord.ui.TextDisplay(body))
             if self.ability_menu_open:
                 player = run.state["battle"]["player"]
                 cost = 16 if player["passive"] == "discount" and player["skills_used"] == 0 else 22
@@ -401,7 +416,7 @@ class DungeonView(discord.ui.LayoutView):
         elif phase == "combat":
             actions = [("attack", "Attack", discord.ButtonStyle.primary),
                        ("ability", "Ability", discord.ButtonStyle.primary),
-                       ("guard", "Guard", discord.ButtonStyle.secondary)]
+                       ("guard", "Guard · +8 MP", discord.ButtonStyle.secondary)]
         else:
             label = "Face Guardian" if phase == "boss_intro" else "Continue"
             if phase == "cleared":
@@ -431,14 +446,12 @@ class DungeonView(discord.ui.LayoutView):
             actions = [("confirm_abandon", "Abandon Run", discord.ButtonStyle.danger),
                        ("cancel_abandon", "Keep Descending", discord.ButtonStyle.secondary)]
         row = discord.ui.ActionRow()
-        controls_parent = self if self.combat_controls_outside else self.container
-        controls_parent.add_item(row)
-        abandon_row = None
+        self.container.add_item(row)
         for action, label, style in actions:
             button = discord.ui.Button(label=label, style=style,
                                        custom_id=f"dungeon:{token or 'entry'}:{revision or 0}:{action}")
             if phase == "combat" and action in {"attack", "ability", "guard", "abandon"}:
-                button.emoji = {"attack": "⚔️", "ability": "✨", "guard": "🛡️", "abandon": "🏳️"}[action]
+                button.emoji = {"attack": "⚔️", "ability": "✨", "guard": "🛡️", "abandon": "🏃"}[action]
                 button.row = 0
             if action == "ability":
                 player = run.state["battle"]["player"]
@@ -455,10 +468,7 @@ class DungeonView(discord.ui.LayoutView):
                     await self.play(interaction, "abandon" if action == "confirm_abandon" else action, token, revision)
 
             button.callback = callback
-            if action == "abandon" and self.combat_controls_outside:
-                abandon_row = discord.ui.ActionRow(button)
-            else:
-                row.add_item(button)
+            row.add_item(button)
         if phase == "combat" and self.ability_menu_open and not self.confirm_abandon and not self.landing:
             player = run.state["battle"]["player"]
             if player.get("signature"):
@@ -473,9 +483,9 @@ class DungeonView(discord.ui.LayoutView):
                     await self.play(interaction, "ability", token, revision)
 
                 menu.callback = select_signature
-                controls_parent.add_item(discord.ui.ActionRow(menu))
-        if abandon_row:
-            controls_parent.add_item(abandon_row)
+                # Expanded ability details follow the main HUD in this same
+                # message; keep their selector directly beneath them.
+                self.add_item(discord.ui.ActionRow(menu))
 
     async def local_action(self, interaction, action, token, revision):
         if not await self.interaction_check(interaction):
@@ -505,23 +515,53 @@ class DungeonView(discord.ui.LayoutView):
         if not await self.interaction_check(interaction):
             return
         self.player_user = interaction.user
-        await interaction.response.defer()
+        started = perf_counter()
+        stages = {}
+
+        async def acknowledge():
+            began = perf_counter()
+            try:
+                await interaction.response.defer()
+            finally:
+                stages["ack_ms"] = round((perf_counter() - began) * 1000, 2)
+
+        # Start the acknowledgement immediately, but don't serialize its HTTP
+        # round trip ahead of the database transaction. Notifications/edits wait
+        # for it, and the existing per-run lock still serializes saved actions.
+        acknowledgement = asyncio.create_task(acknowledge())
+        status = "error"
+        try:
+            await self._play_acknowledged(interaction, action, token, revision, acknowledgement, stages)
+            status = "handled"
+        finally:
+            await asyncio.gather(acknowledgement, return_exceptions=True)
+            event("dungeon_action_timing", command="dungeon", action=action,
+                  total_ms=round((perf_counter() - started) * 1000, 2), stages=stages, status=status)
+
+    async def _play_acknowledged(self, interaction, action, token, revision, acknowledgement, stages):
+        async def notify(text):
+            await acknowledgement
+            await self.notice(interaction, text)
+
+        waiting = perf_counter()
         async with self.lock:
+            stages["lock_wait_ms"] = round((perf_counter() - waiting) * 1000, 2)
             if self.closed:
-                await self.notice(interaction, "Open `/dungeon` to resume your saved run.")
+                await notify("Open `/dungeon` to resume your saved run.")
                 return
             if action == "abandon" and not self.confirm_abandon:
-                await self.notice(interaction, "That confirmation has closed. Use Abandon Run to review the choice again.")
+                await notify("That confirmation has closed. Use Abandon Run to review the choice again.")
                 return
             if action == "begin":
                 busy = self.cog.duel_users.get(self.owner)
                 if self.owner in self.cog.pending or (busy is not None and busy is not self):
-                    await self.notice(interaction, "Finish your current fantasy activity first.")
+                    await notify("Finish your current fantasy activity first.")
                     return
                 if len(self.cog.duel_users) >= 32 and busy is None:
-                    await self.notice(interaction, "The arenas are busy. Try again shortly.")
+                    await notify("The arenas are busy. Try again shortly.")
                     return
                 self.cog.duel_users[self.owner] = self
+            database_started = perf_counter()
             try:
                 previous_phase = self.run.phase if self.run else None
                 async with asyncio.timeout(10):
@@ -533,71 +573,90 @@ class DungeonView(discord.ui.LayoutView):
             except DungeonStale as error:
                 if action == "begin" and self.cog.duel_users.get(self.owner) is self:
                     self.cog.duel_users.pop(self.owner, None)
-                await self.notice(interaction, str(error))
+                await notify(str(error))
                 return
             except DungeonUnavailable as error:
                 if action == "begin" and self.cog.duel_users.get(self.owner) is self:
                     self.cog.duel_users.pop(self.owner, None)
-                await self.notice(interaction, str(error))
+                await notify(str(error))
                 return
+            finally:
+                stages["database_ms"] = round((perf_counter() - database_started) * 1000, 2)
+            await acknowledgement
             self.ability_menu_open = False
             self.confirm_abandon = False
             self.landing = False
-            self.refresh_buttons()
             await self.present_transition(interaction, previous_phase)
             if self.run.phase not in ACTIVE_PHASES:
                 if self.cog.duel_users.get(self.owner) is self:
                     self.cog.duel_users.pop(self.owner, None)
 
     async def present_transition(self, interaction, previous_phase):
-        if previous_phase == "combat" and self.run.phase == "combat":
-            await self.deliver(interaction.edit_original_response)
-            return
-        previous = self.message or getattr(interaction, "message", None)
-        # Publish first. A failed send leaves the previous message recoverable.
-        # Store the new message before deletion so our deletion listener cannot
-        # mistake retiring the old scene for deleting the active dungeon view.
-        await self.deliver(partial(interaction.followup.send, wait=True), initial=True)
-        if previous is not None:
-            try:
-                async with asyncio.timeout(5):
-                    await previous.delete()
-            except discord.NotFound:
-                pass
-            except (discord.HTTPException, TimeoutError) as error:
-                self.cog.report(error, "dungeon_scene_cleanup")
-                # Keep the new scene usable even if Discord refuses cleanup.
-                try:
-                    async with asyncio.timeout(5):
-                        await previous.edit(view=None)
-                except (discord.HTTPException, TimeoutError):
-                    pass
+        # A component defer targets this same message. One edit updates story,
+        # battle and victory alike, retaining unchanged attachments and avoiding
+        # a followup upload plus deletion for every page of dialogue.
+        await self.deliver(interaction.edit_original_response)
 
     async def deliver(self, sender, *, initial=False):
-        async with asyncio.timeout(15):
-            return await self._deliver(sender, initial=initial)
+        started, api_ms = perf_counter(), 0
+        upload_bytes = 0
+
+        async def measured_sender(**kwargs):
+            nonlocal api_ms, upload_bytes
+            files = [kwargs["file"]] if "file" in kwargs else kwargs.get("attachments", [])
+            for image in files:
+                if isinstance(image, discord.File):
+                    position = image.fp.tell()
+                    image.fp.seek(0, 2)
+                    upload_bytes += image.fp.tell()
+                    image.fp.seek(position)
+            began = perf_counter()
+            try:
+                return await sender(**kwargs)
+            finally:
+                api_ms += (perf_counter() - began) * 1000
+
+        try:
+            async with asyncio.timeout(15):
+                return await self._deliver(measured_sender, initial=initial)
+        finally:
+            elapsed = (perf_counter() - started) * 1000
+            event("dungeon_delivery_timing", command="dungeon", initial=initial,
+                  render_ms=round(max(0, elapsed - api_ms), 2), delivery_ms=round(api_ms, 2),
+                  upload_bytes=upload_bytes)
 
     async def _deliver(self, sender, *, initial=False):
         self.refresh_buttons()
         asset = self.display_asset
+        hero = None
+        enemy_name = (self.run.state["battle"]["enemy"]["name"]
+                      if self.run and self.run.phase == "combat" and not self.landing else "")
+        asset_key = (str(asset), asset.stat().st_mtime_ns, enemy_name) if asset else None
         # discord.py sets IS_COMPONENTS_V2 from LayoutView. No classic content or
         # embeds may accompany the payload. Edits explicitly clear legacy text.
         kwargs = dict(view=self, allowed_mentions=discord.AllowedMentions.none())
         if not initial:
             kwargs.update(content=None, embeds=[])
         if asset:
-            if initial or asset != self.asset:
-                with closing(discord.File(str(asset), filename="dungeon.jpg")) as image:
+            if initial or asset_key != self.asset_key:
+                if hero is None:
+                    try:
+                        hero = await asyncio.to_thread(render_scene_art, *asset_key)
+                    except (OSError, ValueError):
+                        logger.warning("Dungeon image resize failed; uploading original artwork", exc_info=True)
+                with closing(discord.File(BytesIO(hero) if hero is not None else str(asset), filename="dungeon.jpg")) as image:
                     kwargs["file" if initial else "attachments"] = image if initial else [image]
                     result = await sender(**kwargs)
             else:
                 result = await sender(**kwargs)
             self.asset = asset
+            self.asset_key = asset_key
         else:
             # Text remains usable if an asset was damaged during deployment.
             if not initial:
                 kwargs["attachments"] = []
             result = await sender(**kwargs)
             self.asset = None
+            self.asset_key = None
         if initial:
             self.message = result

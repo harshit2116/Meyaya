@@ -28,8 +28,10 @@ from bot.services.klipy import KlipyService
 from bot.services.marriage import MarriageService
 from bot.repositories.guild_settings import GuildSettingsRepository
 from bot.utils.embeds import meyaya_embed
+from bot.utils.components_v2 import install_components_v2
 from bot.utils.image_work import ImageBusy
 from bot.utils.command_parameters import normalize_member_parameters
+from bot.utils.command_aliases import install_command_aliases
 from bot.services.usage import ChatLimitReached, UsageService, is_silence
 from bot.services.request_log import RequestLogService
 from bot.utils.command_context import TimedContext
@@ -77,6 +79,7 @@ class MeyayaBot(commands.Bot):
     """Discord bot configured for slash-command interaction."""
 
     def __init__(self, settings: Settings) -> None:
+        install_components_v2()
         intents = discord.Intents.default()
         intents.members = True
         intents.message_content = True
@@ -204,6 +207,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.moderation")
         await self.load_extension("bot.cogs.presence")
         await load_application_emojis(self)
+        install_command_aliases(self)
         install_command_loading(self)
         install_command_timing(self)
         normalize_member_parameters(self)

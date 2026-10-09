@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 import inspect
 import re
 
@@ -15,6 +16,7 @@ from bot.data.help_catalog import (
     commands_in_category,
 )
 from bot.utils.embeds import MeyayaColors, meyaya_embed
+from bot.utils.command_aliases import ALIAS_COMMANDS, command_aliases
 
 HELP_COLOR = MeyayaColors.PINK
 SUPPORT_INVITE = "https://discord.gg/e9bK5ZbUZS"
@@ -38,7 +40,13 @@ def build_help_embed(
                 category="Voice Chat",
                 bot=bot,
             )
-        command = COMMANDS_BY_NAME.get(command_name.casefold())
+        lookup = command_name.casefold()
+        registered_alias = bot.get_command(lookup) if bot else None
+        canonical = ALIAS_COMMANDS.get(lookup, lookup)
+        resolved_name = getattr(registered_alias, "name", None)
+        if lookup not in COMMANDS_BY_NAME and resolved_name in COMMANDS_BY_NAME:
+            canonical = resolved_name
+        command = COMMANDS_BY_NAME.get(canonical)
         if command is None:
             return meyaya_embed(
                 "Command not found",
@@ -142,6 +150,11 @@ def build_help_embed(
                 embed.add_field(
                     name="Permissions", value="\n".join(sorted(restrictions)), inline=False
                 )
+        aliases = command_aliases(command.name, bot)
+        if aliases:
+            embed.add_field(name="Short forms", value=" · ".join(
+                f"`{command_prefix} {alias}`" for alias in aliases
+            )[:1024], inline=False)
         return embed
 
     if category is not None and category in CATEGORY_DESCRIPTIONS:
@@ -152,7 +165,10 @@ def build_help_embed(
             icon=CATEGORY_EMOJIS[category],
         )
         lines = [
-            f"**/{command.usage}**\n> {command.description}"
+            f"**/{command.usage}**"
+            + (" · " + " / ".join(f"`{alias}`" for alias in command_aliases(command.name, bot))
+               if command_aliases(command.name, bot) else "")
+            + f"\n> {command.description}"
             for command in commands_in_category(category)
         ]
         embed.description += "\n\n" + "\n\n".join(lines)
@@ -162,7 +178,8 @@ def build_help_embed(
         "Meyaya's Command Garden",
         description=(
             "Every available command is listed below, grouped by category.\n\n"
-            f"**Quick lookup** · `/help command:profile` or `{command_prefix} help profile`\n"
+            f"**Quick lookup** · `/help command:profile` or `{command_prefix} h p`\n"
+            f"**Short forms** · `{command_prefix} pc` (profilecheck) · `{command_prefix} dg` (dungeon)\n"
             f"**Command styles** · `/command` · `{command_prefix} command` · {bot_mention}"
         ),
         color=HELP_COLOR,
@@ -217,7 +234,7 @@ class HelpCategorySelect(discord.ui.Select):
         await interaction.response.edit_message(embed=embed, view=self.help_view)
 
 
-class HelpView(discord.ui.View):
+class HelpView(MeyayaView):
     def __init__(
         self, *, owner_id: int, bot_mention: str, command_prefix: str = "uwu", bot=None
     ) -> None:

@@ -1,6 +1,7 @@
 """All supported studio voices, split into Discord-sized selectable menus."""
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 from bot.data.voices import GEMINI_LIVE_VOICES, VOICE_DESCRIPTIONS
 
 
@@ -25,7 +26,7 @@ class VoiceSelect(discord.ui.Select):
         await self.picker.select_voice(interaction, self.values[0])
 
 
-class VoicePicker(discord.ui.View):
+class VoicePicker(MeyayaView):
     def __init__(self, cog, owner_id, guild_id):
         super().__init__(timeout=180)
         self.cog, self.owner_id, self.guild_id = cog, owner_id, guild_id

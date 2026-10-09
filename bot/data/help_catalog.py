@@ -58,16 +58,17 @@ CATEGORY_EMOJIS: dict[str, str] = {
     "Server Admin": "⚙️",
 }
 
-# User-facing navigation order. Keep everyday commands first and operational tools last.
+# Keep Fantasy and Profile Studio on the first V2 overview page.
+# Everyday commands follow; operational tools stay last.
 CATEGORY_ORDER: tuple[str, ...] = (
     "Essentials",
+    "Fantasy / Profile",
     "Profile Studio",
     "Social",
     "Social Reactions",
     "Fun and Scores",
     "Daily Picks",
     "Fortune / Tarot",
-    "Fantasy / Profile",
     "Relationships",
     "Single Player Games",
     "Multiplayer Games",
@@ -106,10 +107,10 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
         "facepalm",
         "cry",
     ),
-    "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "caught", "scramble", "mostlikely", "8ball"),
+    "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "scramble", "mostlikely", "8ball"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
-    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "rebirth", "dungeon", "versus", "bossfight", "guardianbattle"),
+    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "rebirth", "dungeon", "versus", "bossfight"),
     "Relationships": ("marry", "marriage", "renewvows", "divorce"),
     "Single Player Games": ("escape", "detective", "personalitytest"),
     "Multiplayer Games": ("showdown", "survive", "excuse", "endgame"),
@@ -224,10 +225,6 @@ COMMANDS: tuple[HelpCommand, ...] = (
     ),
     HelpCommand(
         "bossfight", "bossfight [meyaya|veyra|clash]", "Challenge Meyaya or Veyra, or witness their world-shattering clash.",
-        "Fantasy / Profile",
-    ),
-    HelpCommand(
-        "guardianbattle", "guardianbattle <member>", "Challenge a member to a turn-based guardian battle.",
         "Fantasy / Profile",
     ),
     HelpCommand(
@@ -391,7 +388,6 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "Fun and Scores",
     ),
     HelpCommand("duck", "duck [@member]", "Send your avatar, or a member's, into the depths with an animated duck card.", "Fun and Scores"),
-    HelpCommand("caught", "caught [@member]", "Create a fictional CCTV card for a member, with evidence and an escape status.", "Fun and Scores"),
     HelpCommand("scramble", "scramble [@member]", "Rebuild a member's avatar in a clickable sliding puzzle before time runs out.", "Fun and Scores"),
     HelpCommand(
         "bestiescore",

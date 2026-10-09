@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 
 from bot.app import MeyayaBot
 from bot.models.court import CourtCase
@@ -201,7 +202,7 @@ class CourtStatementModal(discord.ui.Modal):
         await _send_next_stage(self.public_message, case, next_view)
 
 
-class CourtInvitationView(discord.ui.View):
+class CourtInvitationView(MeyayaView):
     def __init__(
         self, *, bot: MeyayaBot, case_id: int, defendant_id: int, judge_callback: CourtJudgeCallback
     ) -> None:
@@ -284,7 +285,7 @@ class CourtInvitationView(discord.ui.View):
                 pass
 
 
-class CourtCollectionView(discord.ui.View):
+class CourtCollectionView(MeyayaView):
     def __init__(self, *, bot: MeyayaBot, case_id: int, judge_callback: CourtJudgeCallback) -> None:
         super().__init__(timeout=1800)
         self.bot = bot
@@ -345,7 +346,7 @@ class CourtCollectionView(discord.ui.View):
                 pass
 
 
-class CourtClarificationView(discord.ui.View):
+class CourtClarificationView(MeyayaView):
     """Collect one targeted follow-up before the final judgement."""
 
     def __init__(self, *, bot: MeyayaBot, case_id: int, judge_callback: CourtJudgeCallback) -> None:

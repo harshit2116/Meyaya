@@ -5,6 +5,7 @@ import logging
 from io import BytesIO
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 
 from bot.data.fantasy import RARITIES
 from bot.logging.health import health
@@ -115,7 +116,7 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
         companion = bound_guardian(profile)
         embed.add_field(
             name="Soul-bound guardian",
-            value=f"{companion.name} · {companion.affinity_name}\nView `/guardian` · Battle `/guardianbattle`",
+            value=f"{companion.name} · {companion.affinity_name}\nView `/guardian`",
             inline=False,
         )
         embed.add_field(name="The dormant story", value=profile.description, inline=False)
@@ -192,7 +193,7 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
     return embed
 
 
-class OwnedFantasyView(discord.ui.View):
+class OwnedFantasyView(MeyayaView):
     command_name = "awaken"
 
     def __init__(self, cog, owner, *, timeout=180):

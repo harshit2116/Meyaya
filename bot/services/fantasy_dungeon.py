@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 import secrets
 from uuid import uuid4
+from sqlalchemy.exc import DBAPIError
 
 from bot.data.fantasy_dungeon import world_for
 from bot.data.fantasy_memory_world import OPENING, CORE, STORY_VERSION, CYCLE, ending_scenes
@@ -33,7 +34,13 @@ class DungeonService:
         self.runs = FantasyDungeonRepository(session)
 
     async def read(self, user_id):
-        return await self.profiles.get(user_id), await self.runs.get(user_id)
+        for attempt in range(2):
+            try:
+                return await self.runs.soul(user_id)
+            except DBAPIError as error:
+                if attempt or not error.connection_invalidated:
+                    raise
+                await self.session.rollback()
 
     async def owner_control(self, user_id, action, *, guild_id):
         if user_id != AYAYA_USER_ID:
@@ -71,13 +78,32 @@ class DungeonService:
             return profile, run
 
     async def transition(self, user_id, action, *, token=None, revision=None, guild_id=0):
+        for attempt in range(2):
+            try:
+                return await self._transition_once(user_id, action, token=token, revision=revision, guild_id=guild_id)
+            except DBAPIError as error:
+                if attempt or not error.connection_invalidated:
+                    raise
+                # A socket may drop just after its health check. Reconnect once
+                # with the SAME captured token/revision. If the prior commit
+                # reached Postgres, stale-action checks prevent a second turn
+                # or reward; never retry with a freshly fetched revision.
+                await self.session.rollback()
+
+    async def _transition_once(self, user_id, action, *, token=None, revision=None, guild_id=0):
         async with self.session.begin():
-            profile = await self.profiles.locked(user_id)
+            if action == "begin":
+                # A concurrent Begin may insert the first run while waiting for
+                # the profile lock. Its run lookup needs a fresh READ COMMITTED
+                # statement snapshot, so keep the two-step admission path.
+                profile = await self.profiles.locked(user_id)
+                run = await self.runs.get(user_id, lock=True) if profile is not None else None
+            else:
+                profile, run = await self.runs.soul(user_id, lock=True)
             if profile is None:
                 raise DungeonUnavailable("Use `/awaken` before beginning the descent.")
             if profile.alignment not in {"meyaya", "veyra"}:
                 raise DungeonUnavailable("Choose your patron through `/fantasyprofile` before entering.")
-            run = await self.runs.get(user_id, lock=True)
             if action == "begin":
                 # Start buttons are themselves versioned, including sanctuary
                 # after a failure. An old Begin cannot restart an abandoned run.

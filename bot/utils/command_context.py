@@ -7,6 +7,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from bot.utils.command_timing import add_stage
 from discord.ext import commands
+from bot.utils.components_v2 import v2_payload
 
 logger = logging.getLogger(__name__)
 _MAX_COMMAND_OUTPUTS = 512
@@ -52,10 +53,30 @@ class TimedContext(commands.Context):
         return await super().defer(ephemeral=ephemeral)
 
     async def send(self, *args, **kwargs):
+        if args:
+            kwargs["content"] = args[0]
+            args = args[1:]
+        kwargs = v2_payload(kwargs, force=True)
         loader = getattr(self, "_meyaya_loader", None)
         started = time.monotonic()
         try:
-            sent = await super().send(*args, **kwargs)
+            loading_message = getattr(loader, "message", None)
+            if (getattr(kwargs.get("view"), "command_name", None) == "dungeon"
+                    and loading_message is not None and not getattr(loading_message, "stickers", ())
+                    and set(kwargs) <= {"view", "allowed_mentions", "file", "files"}):
+                # Upgrade the already-visible loader into the dungeon card.
+                # This avoids a second channel POST and a later DELETE, while
+                # retaining the real returned message for view tracking.
+                edit = dict(kwargs, content=None, embeds=[])
+                uploads = edit.pop("files", [])
+                image = edit.pop("file", None)
+                if image is not None:
+                    uploads = [image]
+                edit["attachments"] = uploads
+                sent = await loading_message.edit(**edit)
+                loader.message = None
+            else:
+                sent = await super().send(*args, **kwargs)
             command = getattr(self, "command", None)
             if (command is not None and sent is not None
                     and not kwargs.get("ephemeral", False)

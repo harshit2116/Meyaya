@@ -8,6 +8,7 @@ import logging
 from time import monotonic
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 from discord.ext import commands
 
 from bot.logging.health import health
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 ICONS = {"escape": "🔑", "detective": "🔎", "personalitytest": "🎭"}
 
 
-class SoloView(discord.ui.View):
+class SoloView(MeyayaView):
     def __init__(self, owner, kind, release, *, acquire=None, forget=None):
         super().__init__(timeout=180)
         self.owner, self.kind, self.release = owner, kind, release

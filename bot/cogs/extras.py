@@ -1,6 +1,7 @@
 """Community support command."""
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 from discord.ext import commands
 
 from bot.utils.embeds import meyaya_embed
@@ -14,7 +15,7 @@ class ExtrasCog(commands.Cog):
 
     @commands.hybrid_command(name="feedback", description="Report a bug or suggest a feature in Pondside Lounge.")
     async def feedback(self, ctx):
-        view = discord.ui.View()
+        view = MeyayaView()
         view.add_item(discord.ui.Button(label="Join Pondside Lounge", url=LOUNGE_URL))
         await ctx.send(embed=meyaya_embed("Pondside Lounge", "Found a bug or have an idea? Join us to report an issue, suggest a feature, or try Meyaya without the server chat limit.", icon="🌸"), view=view)
 

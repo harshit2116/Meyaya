@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 
 from bot.app import MeyayaBot
 from bot.services.marriage import (
@@ -15,7 +16,7 @@ from bot.services.marriage import (
 from bot.utils.embeds import MeyayaColors, meyaya_embed
 
 
-class MarriageProposalView(discord.ui.View):
+class MarriageProposalView(MeyayaView):
     """Allow only the intended member to accept or decline a proposal."""
 
     def __init__(
@@ -156,7 +157,7 @@ class MarriageProposalView(discord.ui.View):
                 pass
 
 
-class DivorceConfirmationView(discord.ui.View):
+class DivorceConfirmationView(MeyayaView):
     """Require explicit confirmation before deleting a marriage."""
 
     def __init__(

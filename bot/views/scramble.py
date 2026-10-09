@@ -6,6 +6,7 @@ from io import BytesIO
 from time import monotonic, time
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 
 from bot.services.scramble import GOAL, neighbours, render_board, shuffled_board
 from bot.utils.image_work import image_work
@@ -22,7 +23,7 @@ class TileButton(discord.ui.Button):
         await self.view.move(interaction, self.position)
 
 
-class ScrambleView(discord.ui.View):
+class ScrambleView(MeyayaView):
     def __init__(self, owner_id, name, avatar, release):
         # Own one absolute clock, rather than discord.py's interaction-reset idle
         # timeout racing our five-minute deadline and removing callbacks first.

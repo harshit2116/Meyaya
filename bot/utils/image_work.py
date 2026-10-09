@@ -1,4 +1,4 @@
-"""Share one Pillow worker across commands to keep native image memory bounded."""
+"""Bound image work while keeping long animations out of the card queue."""
 
 import asyncio
 import logging
@@ -10,8 +10,10 @@ from weakref import WeakKeyDictionary
 from discord.ext import commands
 from bot.utils.command_timing import add_stage
 
-_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="meyaya-image")
+_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="meyaya-card")
+_animation_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="meyaya-animation")
 _slots = WeakKeyDictionary()
+_animation_slots = WeakKeyDictionary()
 
 
 class ImageBusy(commands.CommandError):
@@ -55,8 +57,17 @@ class BoundedImageGate:
 
 
 async def image_work(function, *args, **kwargs):
+    return await _image_work(_executor, _slots, 6, 2, function, args, kwargs)
+
+
+async def animation_work(function, *args, **kwargs):
+    """Serialize memory-heavy GIF jobs without holding up ordinary cards."""
+    return await _image_work(_animation_executor, _animation_slots, 3, 1, function, args, kwargs)
+
+
+async def _image_work(executor, slots, capacity, concurrency, function, args, kwargs):
     loop = asyncio.get_running_loop()
-    slot = _slots.setdefault(loop, BoundedImageGate())
+    slot = slots.setdefault(loop, BoundedImageGate(capacity, concurrency=concurrency))
     queued = monotonic()
     await slot.acquire()
     wait = monotonic() - queued
@@ -64,7 +75,7 @@ async def image_work(function, *args, **kwargs):
     if wait >= 0.5:
         logging.getLogger(__name__).info("image_queue function=%s wait_ms=%.0f", getattr(function, "__name__", "image"), wait * 1000)
     try:
-        future = loop.run_in_executor(_executor, partial(function, *args, **kwargs))
+        future = loop.run_in_executor(executor, partial(function, *args, **kwargs))
     except BaseException:
         slot.release()
         raise

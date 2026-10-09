@@ -4,6 +4,7 @@ from hashlib import sha256
 import logging
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 from discord.ext import commands
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -89,7 +90,7 @@ class CharacterCatalogCog(commands.Cog):
         else:
             embed.add_field(name="Artwork", value="Disabled for this roster entry.", inline=False)
         embed.set_footer(text=NOTICE)
-        view = discord.ui.View()
+        view = MeyayaView()
         view.add_item(
             discord.ui.Button(label="View on AniList", url=display.source_url, emoji="↗️")
         )

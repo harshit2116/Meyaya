@@ -16,7 +16,7 @@ class CelestialCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.cache = OrderedDict()
-        self.render_slots = BoundedImageGate()
+        self.render_slots = BoundedImageGate(concurrency=2)
         self.avatar_cache = OrderedDict()
 
     async def show(self, ctx, kind, member=None, question=""):

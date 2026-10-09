@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 
 from bot.app import MeyayaBot
 from bot.services.interactions import InteractionDefinition
 from bot.utils.embeds import build_interaction_embed
 
 
-class InteractionResponseView(discord.ui.View):
+class InteractionResponseView(MeyayaView):
     """Button view attached to interaction embeds."""
 
     def __init__(

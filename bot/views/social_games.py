@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 
 from bot.services.social_games import (
     COLLECTION_LIFETIME,
@@ -174,7 +175,7 @@ class GameSubmissionModal(discord.ui.Modal):
             await self.judge_callback(self.session_id, None, False, self.public_message, False)
 
 
-class GameLobbyView(discord.ui.View):
+class GameLobbyView(MeyayaView):
     def __init__(
         self,
         *,
@@ -279,7 +280,7 @@ class GameLobbyView(discord.ui.View):
                 pass
 
 
-class GameCollectionView(discord.ui.View):
+class GameCollectionView(MeyayaView):
     def __init__(
         self,
         *,

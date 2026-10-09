@@ -4,6 +4,7 @@ import asyncio
 import logging
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 from sqlalchemy.exc import SQLAlchemyError
 
 from bot.services.server_setup import save_setup
@@ -95,7 +96,7 @@ class SetupButton(discord.ui.Button):
             await view.save(interaction)
 
 
-class ServerSetupView(discord.ui.View):
+class ServerSetupView(MeyayaView):
     def __init__(self, bot, guild_id, owner_id, choices):
         super().__init__(timeout=300)
         self.bot, self.guild_id, self.owner_id = bot, guild_id, owner_id

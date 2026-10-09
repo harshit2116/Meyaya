@@ -3,9 +3,125 @@
 from io import BytesIO
 from functools import lru_cache
 
-from PIL import Image, ImageDraw, ImageOps
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from bot.services.card_renderer import font
+
+
+@lru_cache(maxsize=24)
+def _title_font(size):
+    for path in ("C:/Windows/Fonts/georgiab.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"):
+        if Path(path).is_file():
+            return ImageFont.truetype(path, size)
+    return font(size)
+
+
+@lru_cache(maxsize=8)
+def _encounter_base(path, modified_ns):
+    """Decode and resize once per approved asset; callers must copy before drawing."""
+    with Image.open(path) as source:
+        source.draft("RGB", (1024, 1024))
+        art = source.convert("RGB")
+    # Preserve the full illustration and its aspect ratio at a bounded size.
+    height = max(1, round(art.height * 1024 / art.width))
+    return art.resize((1024, height), Image.Resampling.LANCZOS).convert("RGBA")
+
+
+@lru_cache(maxsize=16)
+def render_scene_art(path, modified_ns, enemy_name=""):
+    """Cache static artwork, optionally with an encounter's unchanging name."""
+    art = _encounter_base(path, modified_ns)
+    if enemy_name:
+        overlay = Image.new("RGBA", art.size)
+        shade = ImageDraw.Draw(overlay)
+        for y in range(min(art.height, 90)):
+            shade.line((0, y, art.width, y), fill=(4, 10, 19, round((1 - y / 90) * 110)))
+        # Composite onto a new image: cached base pixels and approved files
+        # remain untouched. HP and intent never enter this static cache key.
+        art = Image.alpha_composite(art, overlay)
+        draw = ImageDraw.Draw(art)
+        size = 34
+        while size > 20 and draw.textlength(enemy_name, font=_title_font(size)) > 955:
+            size -= 1
+        draw.text((30, 18), enemy_name, font=_title_font(size), fill="#f2f6ff",
+                  stroke_width=1, stroke_fill="#173e58")
+        baseline = 34 + size
+        draw.line((32, baseline, 400, baseline), fill="#6795af", width=1)
+        draw.polygon([(212, baseline - 5), (217, baseline), (212, baseline + 5), (207, baseline)],
+                     outline="#a4d7f1")
+    output = BytesIO()
+    art.convert("RGB").save(output, format="JPEG", quality=85)
+    return output.getvalue()
+
+
+@lru_cache(maxsize=24)
+def render_encounter_art(path, modified_ns, name, hp, max_hp, intent, status):
+    """Decorate approved art with live enemy data; never alter the source file.
+
+    The timestamp invalidates replaced assets; the immutable base is shared
+    between turns so changing HP doesn't decode and resize the artwork again.
+    """
+    art = _encounter_base(path, modified_ns).copy()
+    height = art.height
+    overlay = Image.new("RGBA", art.size)
+    shade = ImageDraw.Draw(overlay)
+    # A light, shallow title scrim leaves the illustration's brightness intact.
+    # The opaque HP panel already provides its own contrast at the bottom.
+    for y in range(min(height, 116)):
+        shade.line((0, y, 1024, y), fill=(4, 10, 19, round((1 - y / 116) * 110)))
+    art = Image.alpha_composite(art, overlay)
+    draw = ImageDraw.Draw(art)
+    size = 34
+    while size > 24 and draw.textlength(name, font=_title_font(size)) > 955:
+        size -= 1
+    draw.text((30, 18), name, font=_title_font(size), fill="#f2f6ff", stroke_width=1, stroke_fill="#173e58")
+    title_end = 22 + size + 12
+    draw.line((32, title_end, 400, title_end), fill="#6795af", width=1)
+    draw.polygon([(212, title_end - 5), (217, title_end), (212, title_end + 5), (207, title_end)], outline="#a4d7f1")
+    # Wrap long telegraphs without clipping names or inventing combat details.
+    from bot.services.card_renderer import lines
+    intent = intent[2:] if intent[:1] in {"◈", "◇", "⚠"} else intent
+    cy = title_end + 24
+    draw.polygon([(42, cy - 9), (51, cy), (42, cy + 9), (33, cy)], outline="#f5729d", width=2)
+    draw.polygon([(42, cy - 3), (45, cy), (42, cy + 3), (39, cy)], fill="#f5729d")
+    for index, line in enumerate(lines(draw, intent, 18, 914)):
+        draw.text((63, title_end + 12 + index * 23), line, font=font(18), fill="#ffd1dc",
+                  stroke_width=1, stroke_fill="#252130")
+
+    top = height - (104 if status else 82)
+    draw.rounded_rectangle((18, top, 1006, height - 14), radius=14,
+                           fill=(8, 12, 20, 238), outline="#cb5277", width=2)
+    # Restrained diamond corners echo the reference's ornamental frame.
+    for x in (18, 1006):
+        cy = (top + height - 14) // 2
+        draw.polygon([(x, cy - 7), (x + 7, cy), (x, cy + 7), (x - 7, cy)], fill="#13131e", outline="#ef7098")
+    if status:
+        draw.text((38, top + 8), status, font=font(17), fill="#cdb3e9")
+    y = height - 62
+    draw.text((38, y), "♥", font=font(29), fill="#fa5688")
+    current = str(hp)
+    draw.text((78, y), current, font=font(28), fill="#ff6895")
+    offset = draw.textlength(current, font=font(28))
+    draw.text((78 + offset, y), f" / {max_hp}", font=font(28), fill="#f4f1fa")
+    x = max(238, round(88 + draw.textlength(f"{hp} / {max_hp}", font=font(28))))
+    right, bar_y, bar_h = 979, y + 4, 28
+    draw.rounded_rectangle((x, bar_y, right, bar_y + bar_h), radius=14, fill="#242a33", outline="#525664")
+    ratio = max(0, min(1, hp / max(1, max_hp)))
+    length = round((right - x - 2) * ratio)
+    if length:
+        fill = Image.new("RGBA", (right - x - 2, bar_h - 2))
+        gradient = ImageDraw.Draw(fill)
+        for px in range(length):
+            t = px / max(1, right - x - 2)
+            gradient.line((px, 0, px, bar_h), fill=(255, round(57 + 70 * t), round(105 + 55 * t), 255))
+        mask = Image.new("L", fill.size)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, length - 1, bar_h - 3), radius=min(13, length // 2), fill=255)
+        art.paste(fill, (x + 1, bar_y + 1), mask)
+    output = BytesIO()
+    art.convert("RGB").save(output, format="JPEG", quality=85)
+    return output.getvalue()
 
 
 @lru_cache(maxsize=16)

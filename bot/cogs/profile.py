@@ -11,6 +11,7 @@ from bot.utils.image_work import image_work
 from io import BytesIO
 
 import discord
+from bot.utils.components_v2 import MeyayaView
 from discord import app_commands
 from discord.ext import commands
 
@@ -20,7 +21,7 @@ from bot.services.profiles import ProfileService
 from bot.utils.embeds import build_profile_embed
 
 
-class ProfileReviewView(discord.ui.View):
+class ProfileReviewView(MeyayaView):
     """Open the target member's full visual profile review on demand."""
 
     def __init__(self, bot: MeyayaBot, target: discord.Member) -> None:
