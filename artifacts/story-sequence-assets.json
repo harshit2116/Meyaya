@@ -1,0 +1,82 @@
+{
+  "method": "Built-in image_gen; JPEG format conversion only. Two terminal black frames created as solid RGB black.",
+  "character_design": "Silver-white straight hair and soft bangs, pale violet eyes, pearl dress with charcoal cuffs/trim, gray cape, diamond brooch and dark boots. Clean 2D anime faces matching the supplied Meyaya/Veyra references. Later player scenes reference the initial generated image.",
+  "assets": [
+    {
+      "name": "player-field-awakening",
+      "path": "bot/assets/fantasy/dungeon/cinematic/player-field-awakening.jpg",
+      "prompt": "Use case: compositing / character design adaptation. Create ONE new landscape 16:9 opening illustration using the two attached images as strict 2D anime rendering references, not as layouts. Match their clean delicate anime facial linework, flat porcelain skin, large illustrated eyes, small simplified nose and mouth, fine hair strands, ornate high-detail fantasy fabrics. NOT a realistic human face, NOT western fantasy realism, NOT 3D, NOT photorealistic. The protagonist is a distinct young adult HUMAN woman with long SILVER-WHITE straight hair, soft bangs, pale violet eyes, slender adult anime proportions matching Meyaya and Veyra. Give her a consistent modest high-collared pearl-white dress with charcoal trim, fitted long sleeves, a small silver diamond brooch, a short pearl-gray shoulder cape and dark ankle boots; no crown, no deity insignia, no armor, no weapon. She has just awakened ALONE, seated in a strange grassy field, one hand supporting her, quietly confused and curious. A vast golden gothic Solenne settlement is visible in the distance beneath an unmoving crimson sun. Copper sunset atmosphere, crisp anime character against a lavish detailed environment. Silver-white hair stays visibly silver-white under sunset, not blonde. No Meyaya or Veyra in this scene, no floating soul or cosmic origin, no magical aura. Remove ALL UI, text, borders, profile panels, portraits, logos from references. Full-bleed single cinematic scene. This image will establish the protagonist's exact design for later scene edits.",
+      "references": [
+        "C:/Users/Harshit/AppData/Local/Temp/codex-clipboard-ec00b311-72aa-4852-875a-2da07f927a12.png",
+        "C:/Users/Harshit/AppData/Local/Temp/codex-clipboard-799075d5-3d03-4e95-ab87-b5bf2427f9e0.png"
+      ]
+    },
+    {
+      "name": "player-registration",
+      "path": "bot/assets/fantasy/dungeon/cinematic/player-registration.jpg",
+      "references": [
+        "C:/Users/Harshit/.codex/generated_images/01a11ed6-3daa-7bf2-b31c-c223eecd59f4/exec-3966a9e5-6d8c-409a-8518-c3303a04d6e4.png"
+      ],
+      "prompt": "Edit the supplied awakening image into the next cinematic beat. Preserve the SAME silver-white-haired adult anime woman exactly: same pale violet eyes, face, hairstyle, pearl dress with charcoal cuffs and trim, gray shoulder cape, diamond brooch, dark boots, the same 2D anime linework and proportions. Preserve the same field and distant Solenne settlement under a crimson sun. She raises a hand uncertainly as a thin scanning beam passes across it and her face. A few faint angular translucent panels flicker, empty except abstract tiny unreadable lines, then break apart. The system cannot register her; she remains a physical human, no floating soul or divine aura. No readable text, UI frames or portrait boxes. No new characters. Match the original rendering; no photorealistic face. Wide 16:9 single scene."
+    },
+    {
+      "name": "player-boundary-meeting",
+      "path": "bot/assets/fantasy/dungeon/cinematic/player-boundary-meeting.jpg",
+      "references": [
+        "C:/Users/Harshit/.codex/generated_images/01a11ed6-3daa-7bf2-b31c-c223eecd59f4/exec-3966a9e5-6d8c-409a-8518-c3303a04d6e4.png",
+        "C:/Users/Harshit/AppData/Local/Temp/codex-clipboard-799075d5-3d03-4e95-ab87-b5bf2427f9e0.png"
+      ],
+      "prompt": "Create a new cinematic scene from these two strict character references. Image 1 is the EXACT silver-haired player: preserve her face, violet eyes, hair, gray cape, diamond brooch, pearl-white long-sleeved dress with charcoal trim, dark boots and illustrated anime style. Image 2 is the EXACT pink-haired Meyaya disguise: preserve her face, pink eyes, long rose-pink hair, floral hair ornaments and white-gold-prismatic floral gown. Do not redesign either. Scene: two women at a cracked translucent vertical boundary in a damaged stone arch on a Solenne street under crimson sunset, unopened/dead flowers at its base. The player touches it; a narrow channel brightens under her fingertips. Across it Meyaya appears as a faint wavering projection, surprised and curious; her palm is visibly blocked by the barrier. Her identity is still entirely pink-haired Meyaya; no black-haired woman or disguise hints. No actual portal through to another world, no prison anchors. Camera medium-wide, both faces legible. Full-bleed 16:9. Remove all reference text, UI, portrait frames, victory panels. Strictly 2D anime character rendering, no realism."
+    },
+    {
+      "name": "first-creation",
+      "path": "bot/assets/fantasy/dungeon/cinematic/first-creation.jpg",
+      "references": [],
+      "prompt": "A single tiny brilliant rose-white point of first creation in absolute blackness, a subtle delicate initial radiance, no stars, galaxies, people, silhouettes or landscapes yet. This is the first event of a new universe, no memories within it. Restrained cinematic 2D fantasy illustration, wide 16:9, no text, logos or borders."
+    },
+    {
+      "name": "new-matter",
+      "path": "bot/assets/fantasy/dungeon/cinematic/new-matter.jpg",
+      "references": [],
+      "prompt": "Cinematic 2D fantasy anime background illustration. Rose-white primordial light expands from one center into newly forming space and matter, fine luminous gold and pale pink filaments, abstract early universe. No mature planets or galaxies yet, no people, face, goddess or surviving soul. Visually detailed and luminous, wide 16:9, no text or UI."
+    },
+    {
+      "name": "creator-sacrifice",
+      "path": "bot/assets/fantasy/dungeon/cinematic/creator-sacrifice.jpg",
+      "references": [
+        "C:/Users/Harshit/AppData/Local/Temp/codex-clipboard-799075d5-3d03-4e95-ab87-b5bf2427f9e0.png"
+      ],
+      "prompt": "Adapt the exact pink-haired Meyaya from the reference into her final sacrifice scene. Preserve her anime face, pink hair, floral ornaments, white-and-gold prismatic gown and 2D illustrated rendering, not realism. She is recognizable for one last moment as her outline dissolves completely into rose-white streams of creation, visibly disappearing, eyes quietly resolved. No throne or old palace remains, no companion, no surviving ghost or goddess hidden in the new universe. The image conveys complete loss of the person as she gives everything to creation. Wide 16:9, single cinematic scene. Remove every reference UI, portrait frame, text, victory label, black arm and border."
+    },
+    {
+      "name": "new-universe",
+      "path": "bot/assets/fantasy/dungeon/cinematic/new-universe.jpg",
+      "references": [],
+      "prompt": "Lavish cinematic 2D anime fantasy background, wide 16:9. A genuinely new universe with nascent galaxies, gold and rose-white stars, a distant young blue world with clouds and oceans. No recognizable former kingdom, no preserved memories, no people, no goddess face or silhouette in space. New lives can arise here, none of the former characters survives. Wonder and possibility without resurrection. No text, UI, borders or watermark."
+    },
+    {
+      "name": "world-continues",
+      "path": "bot/assets/fantasy/dungeon/cinematic/world-continues.jpg",
+      "references": [],
+      "prompt": "Lavish cinematic 2D anime fantasy background, wide 16:9. Quiet landscape of a new world at blue dawn, fresh green plants beside clear water, young distant mountains and warm first sunlight. Hope through new life; no returning old city, no people, ghost, deity, statue or memory of an old person. The old universe and every former protagonist are gone, only something new has a chance. No text, logos, UI or border."
+    },
+    {
+      "name": "creation-ceases",
+      "path": "bot/assets/fantasy/dungeon/cinematic/creation-ceases.jpg",
+      "references": [
+        "C:/Users/Harshit/AppData/Local/Temp/codex-clipboard-799075d5-3d03-4e95-ab87-b5bf2427f9e0.png"
+      ],
+      "prompt": "Adapt exact reference Meyaya into a tragic final instant. Preserve her 2D anime face and design, long pink hair, floral ornaments, prismatic white-gold gown. Her hand reaches for a tiny rose-white creation remnant which is going out; her body simultaneously dissolves away with the last possibility of creation. Light fades into complete black; no surviving soul or ghost, no new star or universe. No scenery survives. Wide 16:9 cinematic single scene, same clean anime facial illustration style, never realistic. Remove all UI, text, frames, throne, black foreground arm, victory panels and logos from reference."
+    },
+    {
+      "name": "black",
+      "path": "bot/assets/fantasy/dungeon/cinematic/black.jpg",
+      "method": "Solid RGB(0,0,0), 1024x576 JPEG; no generated scene or surviving figure."
+    },
+    {
+      "name": "absolute-erasure",
+      "path": "bot/assets/fantasy/dungeon/cinematic/absolute-erasure.jpg",
+      "method": "Solid RGB(0,0,0), 1024x576 JPEG; no generated scene or surviving figure."
+    }
+  ]
+}

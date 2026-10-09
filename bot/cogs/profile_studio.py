@@ -20,7 +20,6 @@ from bot.services.profile_cards import (
     aura_card,
     callingcard_card,
     duostyle_card,
-    palette_card,
     aura_details,
     duostyle_feedback,
     duostyle_reason,
@@ -136,27 +135,6 @@ class ProfileStudioCog(commands.Cog):
             "essence": energy, "signature": traits, "affinity": profile_affinity(visual),
             "class": profile_class(visual), "palette": visual.palette,
             "method": "Playful fantasy language derived from the visible profile palette.",
-        })
-
-    @commands.hybrid_command(
-        name="palette", description="Build a palette from a member's profile colors."
-    )
-    @commands.cooldown(1, 8, commands.BucketType.member)
-    @app_commands.describe(member="Member whose avatar and banner colors should be sampled")
-    @discord_context("profile_studio")
-    async def palette(
-        self,
-        ctx: commands.Context,
-        member: discord.Member | None = None,
-    ) -> None:
-        target = await self._member(ctx, member)
-        if target is None:
-            return
-        visual = await self.aesthetics.inspect(target)
-        rendered = await image_work(palette_card, visual)
-        await self._send_card(ctx, rendered, "meyaya-profile-palette.png", result={
-            "target_id": target.id, "name": visual.name, "palette": visual.palette,
-            "method": "Colors sampled from API-visible profile assets.",
         })
 
     @commands.hybrid_command(

@@ -5,6 +5,7 @@ import json
 import logging
 import secrets
 from collections import OrderedDict
+from contextlib import nullcontext
 from io import BytesIO
 from time import monotonic
 from types import SimpleNamespace
@@ -24,6 +25,10 @@ from bot.logging.health import health
 from bot.services.fantasy_profile import FantasyProfileService, REBIRTH_COOLDOWN, utc
 from datetime import UTC, datetime
 from bot.views.fantasy_rebirth import RebirthView
+from bot.repositories.fantasy_dungeon import FantasyDungeonRepository
+from bot.services.fantasy_dungeon import DungeonService, DungeonUnavailable
+from bot.data.private_identity import AYAYA_USER_ID
+from bot.views.fantasy_dungeon import DungeonView, dungeon_notice
 from bot.services.fantasy_render import render_ritual, render_soul_card
 from bot.services.fantasy_weapon_render import render_weapon_acquisition
 from bot.services.fantasy_duel import DuelEngine, Fighter, RULES_VERSION
@@ -47,6 +52,8 @@ from bot.views.fantasy import (
 
 logger = logging.getLogger(__name__)
 MAX_VIEWS = 64
+BOSS_ENCOUNTER_TIMEOUT = 180
+DUEL_DELIVERY_TIMEOUT = 15
 
 
 def result_summary(profile, member):
@@ -177,6 +184,7 @@ class FantasyCog(commands.Cog):
                 )
 
         available()
+        await self.check_dungeon_activity(*ids)
         members = (left, right)
         loaded = await asyncio.gather(
             *(self.get_profile(member.id) for member in members), return_exceptions=True
@@ -243,6 +251,7 @@ class FantasyCog(commands.Cog):
         portraits, palettes = [], []
         result_view = None
         battle_message = None
+        image_delivery_failed = False
         boss_comment = state.dialogue
         presentation = (
             PatronClashPresentation
@@ -297,7 +306,7 @@ class FantasyCog(commands.Cog):
                 await cinematic.intro(state)
 
             async def frame(*, intro=False, outcome=False, controls=None, history_note=""):
-                nonlocal battle_message, boss_comment
+                nonlocal battle_message, boss_comment, image_delivery_failed
                 if view.closed:
                     raise commands.CommandError("This duel has ended.")
                 safe = lambda text: discord.utils.escape_markdown(
@@ -346,10 +355,11 @@ class FantasyCog(commands.Cog):
                 embed.set_footer(text=f"{state.arena[0]} · Temporary combat · identities unchanged")
                 png = None
                 try:
-                    async with self.render_slots:
-                        png = await image_work(
-                            render_duel, state, tuple(portraits), tuple(palettes), intro=intro
-                        )
+                    if not image_delivery_failed or state.finished:
+                        async with self.render_slots:
+                            png = await image_work(
+                                render_duel, state, tuple(portraits), tuple(palettes), intro=intro
+                            )
                 except Exception as error:
                     self.report(error, "fantasy_duel_render")
                 if png:
@@ -394,14 +404,20 @@ class FantasyCog(commands.Cog):
                     return await battle_message.edit(**kwargs)
 
                 try:
-                    message = await deliver_frame()
-                except discord.HTTPException:
+                    async with asyncio.timeout(DUEL_DELIVERY_TIMEOUT):
+                        message = await deliver_frame()
+                except (discord.HTTPException, TimeoutError) as error:
                     if not png:
                         raise
+                    self.report(error, "fantasy_duel_delivery")
+                    # A stalled upload must not consume the whole encounter deadline.
+                    # Keep subsequent turns text-only, then retry the final result art.
+                    image_delivery_failed = True
                     embed.set_image(url=None)
                     kwargs["embed"] = embed
                     kwargs["attachments"] = []
-                    message = await deliver_frame()
+                    async with asyncio.timeout(DUEL_DELIVERY_TIMEOUT):
+                        message = await deliver_frame()
                 if not intro and not outcome:
                     battle_message = message
                 view.message = message
@@ -554,12 +570,18 @@ class FantasyCog(commands.Cog):
                 pass
             raise
 
+    @staticmethod
+    def view_guild_id(view):
+        return getattr(view, "guild_id", None) or getattr(
+            getattr(getattr(view, "left", None), "guild", None), "id", None
+        )
+
     @commands.Cog.listener()
     async def on_member_remove(self, member):
         for view in tuple(self.views):
             if (
                 member.id in getattr(view, "participant_ids", ())
-                and view.left.guild.id == member.guild.id
+                and self.view_guild_id(view) == member.guild.id
             ):
                 view.finish()
 
@@ -568,14 +590,14 @@ class FantasyCog(commands.Cog):
         for view in tuple(self.views):
             if (
                 payload.user.id in getattr(view, "participant_ids", ())
-                and view.left.guild.id == payload.guild_id
+                and self.view_guild_id(view) == payload.guild_id
             ):
                 view.finish()
 
     @commands.Cog.listener()
     async def on_guild_remove(self, guild):
         for view in tuple(self.views):
-            if getattr(getattr(getattr(view, "left", None), "guild", None), "id", None) == guild.id:
+            if self.view_guild_id(view) == guild.id:
                 view.finish()
 
     @commands.Cog.listener()
@@ -613,7 +635,7 @@ class FantasyCog(commands.Cog):
                 )
                 view.task = asyncio.current_task()
                 try:
-                    async with asyncio.timeout(75):
+                    async with asyncio.timeout(BOSS_ENCOUNTER_TIMEOUT):
                         await self.run_duel(
                             view,
                             SimpleNamespace(
@@ -650,6 +672,7 @@ class FantasyCog(commands.Cog):
                 raise commands.CommandError("Let this world's collision settle for 60 seconds.")
 
         available()
+        await self.check_dungeon_activity(ctx.author.id)
         meyaya = SimpleNamespace(
             id=self.bot.user.id,
             guild=ctx.guild,
@@ -696,7 +719,7 @@ class FantasyCog(commands.Cog):
                 "The Soul Interface is opening the arena…",
                 allowed_mentions=discord.AllowedMentions.none(),
             )
-            async with asyncio.timeout(90):
+            async with asyncio.timeout(BOSS_ENCOUNTER_TIMEOUT):
                 await self.run_duel(
                     view,
                     SimpleNamespace(channel=ctx.channel, edit_original_response=view.message.edit),
@@ -982,6 +1005,7 @@ class FantasyCog(commands.Cog):
         if ctx.author.id in self.duel_users or ctx.author.id in self.pending:
             await ctx.send("Finish your current battle, awakening or rebirth first.")
             return
+        await self.check_dungeon_activity(ctx.author.id)
         profile = await self.get_profile(ctx.author.id)
         if profile is None:
             await ctx.send("Your soul has not awakened yet. Use `/awaken` first.")
@@ -1004,15 +1028,95 @@ class FantasyCog(commands.Cog):
         embed = meyaya_embed(
             "Rebirth · a new soul",
             f"Replace **{safe(profile.class_name)} / {safe(profile.affinity_name)}** and **{safe(profile.weapon_name)}**?\n\n"
-            "Your class, stats, weapon, abilities, guardian and progression will be replaced across every server. "
+            "Your class, base stats, weapon identity, abilities, guardian and alignment will be replaced across every server. "
             "A new random build is saved immediately and revealed at your pace. There is no undo.\n\n"
-            "Your rebirth count and existing battle history remain. Next rebirth: 24 hours after confirmation.",
+            "Total XP, Soul Level, Weapon Level, Highest Floor, rebirth count and battle history remain. "
+            "Your new class receives your soul's existing level growth. Next rebirth: 24 hours after confirmation.",
             icon="✦",
         )
         try:
             view.message = await ctx.send(
                 embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
             )
+        except BaseException:
+            view.finish()
+            raise
+
+    async def check_dungeon_activity(self, *user_ids):
+        async with asyncio.timeout(10):
+            async with self.bot.db_session() as session:
+                repository = FantasyDungeonRepository(session)
+                for user_id in user_ids:
+                    if await repository.active(user_id):
+                        raise commands.CommandError("Resume `/dungeon` and finish or abandon your active run first.")
+
+    @commands.hybrid_command(description="Enter or resume the Tenfold Descent: ten worlds, one soul.")
+    @commands.guild_only()
+    @commands.cooldown(1, 5, commands.BucketType.user)
+    async def dungeon(self, ctx):
+        control = ""
+        if getattr(ctx, "interaction", None) is None and getattr(ctx, "view", None) is not None:
+            control = ctx.view.read_rest().strip().casefold()
+        if control and (ctx.author.id != AYAYA_USER_ID or (ctx.prefix or "").strip().casefold() != "uwu"):
+            await ctx.send(view=dungeon_notice("These dungeon controls are owner-only and use the `uwu` prefix."))
+            return
+        if control and control not in {"restart", "skip"}:
+            await ctx.send(view=dungeon_notice("Use `uwu dungeon restart` or `uwu dungeon skip`."))
+            return
+        await ctx.defer()
+        owner = ctx.author.id
+        existing = self.duel_users.get(owner)
+        if owner in self.pending or (existing is not None and not isinstance(existing, DungeonView)):
+            await ctx.send(view=dungeon_notice("Finish your current fantasy activity before opening the descent."))
+            return
+        if len(self.duel_users) >= 32 and existing is None:
+            await ctx.send(view=dungeon_notice("The arenas are busy. Try again shortly."))
+            return
+        async with asyncio.timeout(10):
+            async with existing.lock if control and isinstance(existing, DungeonView) else nullcontext():
+                try:
+                    async with self.bot.db_session() as session:
+                        service = DungeonService(session)
+                        if control:
+                            profile, run = await service.owner_control(owner, control, guild_id=ctx.guild.id)
+                        else:
+                            profile, run = await service.read(owner)
+                except DungeonUnavailable as error:
+                    await ctx.send(view=dungeon_notice(str(error)))
+                    return
+                if control and isinstance(existing, DungeonView):
+                    existing.finish()
+        if profile is None:
+            await ctx.send(view=dungeon_notice("Use `/awaken` before beginning the descent."))
+            return
+        if profile.alignment not in {"meyaya", "veyra"} and not getattr(profile, "ending_route", None):
+            await ctx.send(view=dungeon_notice("Choose your patron through `/fantasyprofile` first. Your oath matters here."))
+            return
+        # Revalidate admission after database awaits, then supersede old UI only.
+        if owner in self.pending or (self.duel_users.get(owner) is not None and not isinstance(self.duel_users[owner], DungeonView)):
+            await ctx.send(view=dungeon_notice("Finish your current fantasy activity first."))
+            return
+        if len(self.duel_users) >= 32 and owner not in self.duel_users:
+            await ctx.send(view=dungeon_notice("The arenas are busy. Try again shortly."))
+            return
+        for old in tuple(self.views):
+            if isinstance(old, DungeonView) and old.owner == owner:
+                old.finish()
+        view = DungeonView(self, owner, profile, run, guild_id=ctx.guild.id,
+                           player_user=ctx.author, show_landing=not control)
+        self.track_view(view)
+        if run is None or run.phase != "complete":
+            self.duel_users[owner] = view
+        try:
+            await view.deliver(ctx.send, initial=True)
+            if control and isinstance(existing, DungeonView) and existing.message:
+                try:
+                    async with asyncio.timeout(5):
+                        await existing.message.delete()
+                except discord.NotFound:
+                    pass
+                except (discord.HTTPException, TimeoutError) as error:
+                    self.report(error, "dungeon_owner_cleanup")
         except BaseException:
             view.finish()
             raise

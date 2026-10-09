@@ -1,0 +1,1487 @@
+{
+  "cinematic/real-universe": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\real-universe.jpg",
+    "scenes": [
+      {
+        "id": "universe",
+        "title": "BEFORE THEIR NAMES",
+        "dialogue": "Long before Meyaya or Veyra, the real universe lived. Stars formed, worlds ended, and their remnants became beginnings elsewhere. Origin and Erasure were processes of reality. Neither needed a face or a name.",
+        "asset": "cinematic/real-universe",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      },
+      {
+        "id": "outside",
+        "title": "THE UNIVERSE OUTSIDE",
+        "dialogue": "Beyond the construct, the real universe is alive. Stars have formed and died while these memories repeated. Its time was never frozen. Its people were never erased by these resets. The Memory World's existence did not halt or damage it.\n\nWhat happens when this containment opens is a different question.",
+        "asset": "cinematic/real-universe",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "real_universe"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Immense living natural universe, galaxies and star nurseries with distant planets, deep indigo space, no characters.",
+    "references": []
+  },
+  "cinematic/origin-force": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\origin-force.jpg",
+    "scenes": [
+      {
+        "id": "origin",
+        "title": "ORIGIN",
+        "dialogue": "Matter gathered. A star ignited. On a young world, something living reached toward light. Origin was the possibility of formation, present billions of years before anyone learned to channel it.",
+        "asset": "cinematic/origin-force",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Natural process of formation: luminous white-gold matter assembling into a newborn star, pink celestial filaments, no personification or characters.",
+    "references": []
+  },
+  "cinematic/erasure-force": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\erasure-force.jpg",
+    "scenes": [
+      {
+        "id": "erasure",
+        "title": "ERASURE",
+        "dialogue": "Elsewhere, structures unraveled and lives ended. Erasure belonged to the same reality. An ending could make room for a beginning, but nothing guaranteed that those who suffered would see what followed.",
+        "asset": "cinematic/erasure-force",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Natural cosmic dissolution: an ancient star and surrounding matter fading into clean absence, subtle crimson edge light, no explosion or characters.",
+    "references": []
+  },
+  "cinematic/emergence": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\emergence.jpg",
+    "scenes": [
+      {
+        "id": "beings",
+        "title": "TWO WHO COULD REACH IT",
+        "dialogue": "After billions of years, two extraordinary beings emerged. Meyaya could channel Origin; Veyra could channel Erasure. They had bodies, limits, and convictions. The forces were older than either of them.",
+        "asset": "cinematic/emergence",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya and Veyra as newly emerged adult channelers discovering rose-gold formation light and crimson dissolution in their open hands beneath ancient stars. Preserve both adult character designs. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/before-conflict": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\before-conflict.jpg",
+    "scenes": [
+      {
+        "id": "together",
+        "title": "WHAT THEY WATCHED",
+        "dialogue": "They watched cities rise and people grow old. Meyaya remembered the first flowers after a fire. Veyra remembered those who had burned. For a long time they stood together, looking at the same universe and carrying different parts of it away.",
+        "asset": "cinematic/before-conflict",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya and Veyra standing peacefully together on a high garden terrace watching a distant living city at sunset, thoughtful shared history, no combat. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/philosophical-conflict": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\philosophical-conflict.jpg",
+    "scenes": [
+      {
+        "id": "conflict",
+        "title": "ANOTHER CHANCE",
+        "dialogue": "Meyaya: ‘Something ending does not make it meaningless. Existence does not need to be perfect. It only needs another chance.’\n\nVeyra: ‘Another chance for whom? The next life does not spare the one that suffered.’",
+        "asset": "cinematic/philosophical-conflict",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Intimate emotional philosophical disagreement: Meyaya and Veyra facing each other in a quiet celestial garden, open expressive hands, concern and grief, no attack. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/veyra-decision": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\veyra-decision.jpg",
+    "scenes": [
+      {
+        "id": "decision",
+        "title": "NO MORE BEGINNINGS",
+        "dialogue": "Veyra resolved to stop the process itself. ‘There should be no more beginning. There should be no more ending. There should simply be silence.’ She did not ask the living whether they wished to lose their future.",
+        "asset": "cinematic/veyra-decision",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra alone overlooking innumerable stars, resolve mixed with sorrow, extremely long black hair, faint crimson erasure gathering toward her hand. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/first-confrontation": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\first-confrontation.jpg",
+    "scenes": [
+      {
+        "id": "confrontation",
+        "title": "THE FIRST REFUSAL",
+        "dialogue": "Meyaya stood in her path. She could not accept an end imposed on every life yet to exist. Their disagreement became a struggle between two people drawing upon powers far greater than themselves.",
+        "asset": "cinematic/first-confrontation",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya blocking Veyra in interstellar space before any prison exists, tense dynamic poses, pink origin barrier against restrained crimson erasure. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/containment": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\containment.jpg",
+    "scenes": [
+      {
+        "id": "containment",
+        "title": "WHAT COULD NOT BE KILLED",
+        "dialogue": "Meyaya stopped Veyra before she could end the universe. Destroying her body would release the Erasure already gathered within it. Containment was the only answer Meyaya could find that did not risk the catastrophe she was trying to prevent.",
+        "asset": "cinematic/containment",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya containing Veyra within a rose-gold crystalline restraint, both visibly strained, no death, accumulated crimson energy safely held. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/memory-construction": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\memory-construction.jpg",
+    "scenes": [
+      {
+        "id": "construction",
+        "title": "THE MEMORY WORLD",
+        "dialogue": "Meyaya made a sealed artificial reality outside the normal universe. She built it from her memories: a sunset kingdom, a drowned city, voices she could not bear to lose. It was a construct, not another natural universe.",
+        "asset": "cinematic/memory-construction",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya creates a separate enclosed artificial memory reality: a vast translucent geometric orb assembled from remembered cities, seas, gardens and ancient architecture, natural universe outside it. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/imprisonment": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\imprisonment.jpg",
+    "scenes": [
+      {
+        "id": "prison",
+        "title": "AT ITS CENTER",
+        "dialogue": "She bound Veyra at the center and distributed the prison's restraints through ten anchors. The seal restricted Veyra's access to her own accumulated power and to the Erasure beyond it. Outside, the real universe continued untouched.",
+        "asset": "cinematic/imprisonment",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra bound at the center of an artificial memory construct by ten luminous geometric anchor channels, extremely long black hair and established dark costume, serious cosmic prison scene. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/keeper": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\keeper.jpg",
+    "scenes": [
+      {
+        "id": "keeper",
+        "title": "THE KEEPER",
+        "dialogue": "Meyaya stayed to maintain the containment. Leaving would free Veyra. She had made a monument to what she loved, a prison for someone she could not safely destroy, and a place she could no longer leave.",
+        "asset": "cinematic/keeper",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya voluntarily taking position in the central keeper ring, ten rose-gold channels attaching to her hands and mantle, solemn responsibility, cosmic memory architecture. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/reconstruction": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\reconstruction.jpg",
+    "scenes": [
+      {
+        "id": "failsafe",
+        "title": "WHEN MEMORY FAILS",
+        "dialogue": "The construct could degrade. Meyaya gave it a failsafe: at catastrophic failure, reconstruct the regions and restore the anchors from stored memories. This automatic reconstruction belonged to the Memory World alone. Outside it, time and life went on.",
+        "asset": "cinematic/reconstruction",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Artificial memory realm automatically reconstructing: fragmented sunset towers and ocean streets reassembling along a luminous geometric lattice, no characters.",
+    "references": []
+  },
+  "cinematic/cycle-begin": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\cycle-begin.jpg",
+    "scenes": [
+      {
+        "id": "cycle",
+        "title": "CYCLE 33,550,336",
+        "dialogue": "Reconstruction begins. Towers assemble from light. Water finds the shapes of streets. The last grain of an extinguished sunset returns to its place. Something remains between the restored pieces.",
+        "asset": "cinematic/cycle-begin",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. An enormous artificial reality resetting, concentric luminous memory rings returning to alignment around an emerging crimson-sunset region, no text or numbers.",
+    "references": []
+  },
+  "cinematic/soul-awakening": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\soul-awakening.jpg",
+    "scenes": [
+      {
+        "id": "consciousness",
+        "title": "YOU",
+        "dialogue": "A sound arrives before there are ears to hear it. A surface catches your weight. You do not remember choosing to breathe, but you do. For a moment you feel grief without a face attached to it. Then the feeling becomes yours.",
+        "asset": "cinematic/soul-awakening",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. First-person mysterious consciousness awakening over still luminous water, faint anonymous hand silhouette and scattered memory lights, no identifiable player gender or face.",
+    "references": []
+  },
+  "cinematic/identity-not-found": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\identity-not-found.jpg",
+    "scenes": [
+      {
+        "id": "identity",
+        "title": "IDENTITY: NOT FOUND",
+        "dialogue": "REGISTRATION ATTEMPT 1 - NO MATCH\nREGISTRATION ATTEMPT 2 - NO MATCH\nRECONSTRUCTION RECORD - ABSENT\n\nThe light passes over you again. You are still here. Whatever was supposed to decide whether you exist has failed to make you disappear.",
+        "asset": "cinematic/identity-not-found",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Abstract registration mechanism failing to classify a tiny anonymous luminous soul: empty concentric frames and a broken geometric scan lattice, no text, no letters, no numbers.",
+    "references": []
+  },
+  "cinematic/unbound-awakening": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\unbound-awakening.jpg",
+    "scenes": [
+      {
+        "id": "oath",
+        "title": "AN ANSWER WITHOUT A RECORD",
+        "dialogue": "Your awakened identity gives shape to what you can do. Your chosen oath answers, though no record explains where you came from. It is a beginning you can claim. It is not yet an explanation.",
+        "asset": "cinematic/unbound-awakening",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Small anonymous emergent soul made of many faint mismatched memory traces coalescing into a subtle human silhouette, vulnerable and mysterious, not a god or powerful warrior.",
+    "references": []
+  },
+  "cinematic/first-memory-world": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\first-memory-world.jpg",
+    "scenes": [
+      {
+        "id": "companion",
+        "title": "THE WOMAN AT THE THRESHOLD",
+        "dialogue": "A woman with pink hair turns toward you. ‘Meyaya,’ she says. A damaged boundary brightens at her name. She cannot step through until you touch it.\n\n‘Ten worlds are suffering. Their fragments can open the Origin Gate. Help me reach it, and we can end what keeps them this way.’\n\nBeyond her waits a crimson sun.",
+        "asset": "cinematic/first-memory-world",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya appearance at a luminous threshold overlooking reconstructed Solenne, established pink-haired design, inviting hand, crimson sunset behind, subtle imperfect boundary. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/cycle-records": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\cycle-records.jpg",
+    "scenes": [
+      {
+        "id": "records",
+        "title": "THE RECORD VAULT",
+        "dialogue": "CYCLE 33,550,331 - RESET\nCYCLE 33,550,332 - RESET\nCYCLE 33,550,333 - RESET\nCYCLE 33,550,334 - RESET\nCYCLE 33,550,335 - RESET\nCYCLE 33,550,336 - ACTIVE\n\nMEYAYA - KEEPER\nVEYRA - BOUND\nRECONSTRUCTION - AUTOMATIC FAILSAFE\nANCHORS - RESTORED AFTER EACH FAILURE\n\nTravelers fill the intervening records. No completed attempt opened a way out.",
+        "asset": "cinematic/cycle-records",
+        "floor": 9,
+        "route": "shared",
+        "reveal_flags": [
+          "cycles"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Vast archive of innumerable repeating memory slabs with abstract marks but no readable text, near-total cosmic darkness around them, six highlighted recent records.",
+    "references": []
+  },
+  "cinematic/cycle-discovery": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\cycle-discovery.jpg",
+    "scenes": [
+      {
+        "id": "discovery",
+        "title": "SHE STOPS READING",
+        "dialogue": "The woman you know as Meyaya goes still. Her finger moves back to the first number, then to the last. ‘No...’\n\nShe searches a previous traveler's record as though it might tell her something different. ‘I would remember. I would remember this.’\n\nYou have never heard her voice sound small before.",
+        "asset": "cinematic/cycle-discovery",
+        "floor": 9,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Apparent Meyaya at the Nullis record vault freezing in disbelief, pink hair and established white-gold costume, trembling hand over an ancient record, no Veyra visual reveal yet. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/cycle-breakdown": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\cycle-breakdown.jpg",
+    "scenes": [
+      {
+        "id": "breakdown",
+        "title": "WHAT SHE CANNOT REMEMBER",
+        "dialogue": "‘33,550,335 times?’ Her hand will not stay steady. ‘How many times have you done this to me?’\n\nShe presses her palms against her eyes. There is no memory to meet the number-only the terror of discovering that her life has been taken from her again and again. When you reach for her, she flinches, then stays.",
+        "asset": "cinematic/cycle-breakdown",
+        "floor": 9,
+        "route": "shared",
+        "reveal_flags": [
+          "companion_fear"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Apparent Meyaya collapsing emotionally at the record vault, pink-haired established appearance, shaking hands and tears, fear grief and humiliation, no transformation or black hair yet. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/forgotten-cycles": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\forgotten-cycles.jpg",
+    "scenes": [
+      {
+        "id": "keeper-record",
+        "title": "TWO PRISONERS",
+        "dialogue": "The keeper's log never records a departure. The same presence remained through every reconstruction. ‘You stayed?’ your companion whispers. Rage gives way to something she cannot name.\n\nShe folds the page instead of destroying it. You notice she has stopped calling the vault mistaken.",
+        "asset": "cinematic/forgotten-cycles",
+        "floor": 9,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Apparent Meyaya alone beneath immense repeated memory records, pink-haired established appearance, folded page held to chest, grief mixed with realization that the keeper stayed too. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/traveler-traces": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\traveler-traces.jpg",
+    "scenes": [
+      {
+        "id": "anomaly-record",
+        "title": "AN ENTRY THAT DID NOT EXIST",
+        "dialogue": "The current cycle includes an exception: UNREGISTERED CONSCIOUSNESS - RESIDUAL SIGNATURES, MULTIPLE SOURCES. No earlier traveler has the same reading.\n\nBeside it, an anchor diagram shows restraint falling and contained power becoming accessible. Your companion reads the diagram before you do. ‘We need to reach the center,’ she says, and this time it sounds like a question she needs answered too.",
+        "asset": "cinematic/traveler-traces",
+        "floor": 9,
+        "route": "shared",
+        "reveal_flags": [
+          "anomaly_hint"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Ancient archive records with layered anonymous traveler silhouettes and different incomplete handprints joining into one anomalous trace, no readable text.",
+    "references": []
+  },
+  "cinematic/memory-core": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\memory-core.jpg",
+    "scenes": [
+      {
+        "id": "core",
+        "title": "THE MEMORY CORE",
+        "dialogue": "No sky remains above you. The path ends inside an immense mechanism whose surfaces carry pieces of every place you crossed. Nine fragments orbit an empty socket. A tenth anchor component waits beneath your hand.",
+        "asset": "cinematic/memory-core",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Premium Memory Core establishing shot: ten reconstructed memory regions suspended around a vast central artificial mechanism, white-gold lattice and crimson restricted center, no characters.",
+    "references": []
+  },
+  "cinematic/anchors-converge": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\anchors-converge.jpg",
+    "scenes": [
+      {
+        "id": "convergence",
+        "title": "TEN POINTS",
+        "dialogue": "The fragments move into a pattern. Solenne's light enters one channel; Nymora's voices enter another. They answer each other as parts of a single structure. Your companion cannot reach across its last boundary. You can.",
+        "asset": "cinematic/anchors-converge",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Nine distinct glowing memory fragments orbit a tenth empty central socket in an immense geometric Memory Core, cinematic close perspective, no text.",
+    "references": []
+  },
+  "cinematic/final-anchor": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\final-anchor.jpg",
+    "scenes": [
+      {
+        "id": "placement",
+        "title": "THE LAST COMPONENT",
+        "dialogue": "You set the final component in place. A doorway rises around it, magnificent and familiar. For one breath it looks exactly like the promise that brought you here.",
+        "asset": "cinematic/final-anchor",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": 10,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. An anonymous human hand placing the tenth luminous anchor component into a central socket, nine fragments around it, apparent golden doorway just beginning to form.",
+    "references": []
+  },
+  "cinematic/false-gate": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\false-gate.jpg",
+    "scenes": [
+      {
+        "id": "gate",
+        "title": "THE ORIGIN GATE",
+        "dialogue": "There is no distance through the doorway. Its far side is the same room. The frame flickers, exposing an instruction: EXIT INTERPRETATION - INCOMPLETE. A name was given to something nobody had successfully understood.",
+        "asset": "cinematic/false-gate",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. An immense luminous false gateway rising inside the Memory Core, beautiful deceptive promise, beyond the doorway is the same room, no text.",
+    "references": []
+  },
+  "cinematic/gate-collapse": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\gate-collapse.jpg",
+    "scenes": [
+      {
+        "id": "collapse",
+        "title": "THERE WAS NEVER AN ORIGIN GATE",
+        "dialogue": "The false doorway falls away. The fragments are restraints. The ten regions were never ten independent universes. They are reconstructed places inside one sealed artificial reality: the Memory World.\n\nIt was never a world waiting to be saved. It was a memory that refused to die.",
+        "asset": "cinematic/gate-collapse",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "memory_world",
+          "false_gate"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. The false golden gateway peeling away into memory filaments, revealing a geometric prison seal beneath, ten restraints connected to the center, dramatic revelation.",
+    "references": []
+  },
+  "cinematic/anchor-seal": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\anchor-seal.jpg",
+    "scenes": [
+      {
+        "id": "anchors",
+        "title": "WHAT YOUR HANDS OPENED",
+        "dialogue": "Each anchor kept a portion of Veyra's power beyond her reach. Each one you broke returned access to what was already hers. The fragments created nothing. You have dismantled the prison one restraint at a time.",
+        "asset": "cinematic/anchor-seal",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "anchors"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. The ten memory fragments visibly revealed as anchor restraints of one prison, crystalline mechanism seen at wide three-quarter angle, pink-gold to crimson conduits, no text.",
+    "references": []
+  },
+  "special/meyaya-imprisoned": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\special\\meyaya-imprisoned.jpg",
+    "scenes": [
+      {
+        "id": "real-meyaya",
+        "title": "THE REAL MEYAYA",
+        "dialogue": "At the center stands the actual keeper. Pink light binds her to every damaged region. She has maintained this prison through 33,550,336 cycles. She looks from you to the woman beside you. ‘You used my imprint.’",
+        "asset": "special/meyaya-imprisoned",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "real_meyaya"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": true
+  },
+  "cinematic/imprisoned-veyra": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\imprisoned-veyra.jpg",
+    "scenes": [
+      {
+        "id": "bound-veyra",
+        "title": "BEHIND THE KEEPER",
+        "dialogue": "A second presence moves beyond the keeper's ring. The seal carries Meyaya's identity through every boundary. Through its cracks, something imprisoned has learned to resonate along those same paths. It could borrow permission. It could not take an anchor.",
+        "asset": "cinematic/imprisoned-veyra",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Premium intimate view of real Veyra physically imprisoned behind the keeper ring, extremely long black hair flowing through constrained crimson light, pale skin, familiar dark costume. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "special/veyra-reveal": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\special\\veyra-reveal.jpg",
+    "scenes": [
+      {
+        "id": "identity-reveal",
+        "title": "VEYRA",
+        "dialogue": "Pink drains from your companion's hair. The imprint falls away. The woman beneath it is Veyra-the same presence that has walked beside you, using Meyaya's identity as a mask.\n\n‘I needed a hand the anchors would not refuse. I knew I was imprisoned. I did not know how many times.’ There is no second impostor standing behind her.",
+        "asset": "special/veyra-reveal",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "veyra_identity"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": true
+  },
+  "cinematic/core-records": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\core-records.jpg",
+    "scenes": [
+      {
+        "id": "testimony",
+        "title": "WHAT THE RECORDS PROVED",
+        "dialogue": "Veyra puts the folded record between them. ‘33,550,335 completed cycles. I remember none of them.’\n\nMeyaya: ‘The reconstruction strips away what the current world cannot carry. I could delay failures. I could not make a degrading memory last forever.’\n\nVeyra: ‘And neither of us was allowed to leave.’",
+        "asset": "cinematic/core-records",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "failsafe"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya and revealed Veyra facing each other surrounded by innumerable abstract cycle records within the broken Memory Core, Veyra holds a folded record, grief and tension. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/unbound-reveal": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\unbound-reveal.jpg",
+    "scenes": [
+      {
+        "id": "unbound",
+        "title": "AN UNBOUND SOUL",
+        "dialogue": "Meyaya studies your registration failure. Millions of reconstructions left tiny residues: grief, unfinished memories, traces of travelers, fragments of consciousness. They accumulated until something new became aware.\n\nYou are not a returned traveler, a hidden god, or either woman's equal in power. You are an emergent soul the reconstruction cannot completely erase. Familiar gestures belonged to your sources; the person making them now is you.",
+        "asset": "cinematic/unbound-reveal",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "unbound_soul"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. A small anonymous human soul at the Memory Core, many residual memory threads converge into it from ancient cycles, Meyaya and Veyra look on, vulnerable witness not cosmic fighter. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/meyaya-explains": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\meyaya-explains.jpg",
+    "scenes": [
+      {
+        "id": "keeper-explains",
+        "title": "THE COST OF PRESERVATION",
+        "dialogue": "Meyaya: ‘Destroying Veyra would have released what she had gathered. I made a separate place to contain her, from the memories I could preserve. I stayed because the seal needed a keeper.’\n\nShe looks at the regions suspended around her. ‘I remembered them so carefully that I stopped asking what living inside those memories would cost.’",
+        "asset": "cinematic/meyaya-explains",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Real Meyaya at the damaged keeper mechanism explaining her sacrifice, exhausted pink-haired established design, white gold and rose channels, Veyra listening at a distance. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/seal-break": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\seal-break.jpg",
+    "scenes": [
+      {
+        "id": "break",
+        "title": "THE SEAL BREAKS",
+        "dialogue": "The last restraint opens. Across the Core, the ten anchors go dark. This is the end of a containment system, not the creation of a new force. Veyra reaches for the power that was always hers.",
+        "asset": "cinematic/seal-break",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "seal_broken"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Ten anchor restraints around the artificial Memory Core breaking cleanly, central containment opens, crimson energy becomes accessible, no generic explosion.",
+    "references": []
+  },
+  "cinematic/veyra-release": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\veyra-release.jpg",
+    "scenes": [
+      {
+        "id": "release",
+        "title": "UNBOUND ERASURE",
+        "dialogue": "Her imprisoned presence and borrowed projection become one. Erasure flows through channels the seal kept closed. Meyaya no longer has to hold the mechanism together; Veyra no longer has to reach through its cracks.",
+        "asset": "cinematic/veyra-release",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra stepping free of the broken prison, extremely long black hair and same elegant black costume, projection and body reunited as one figure, no new armor. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/veyra-power": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\veyra-power.jpg",
+    "scenes": [
+      {
+        "id": "power",
+        "title": "WHAT THE PRISON WITHHELD",
+        "dialogue": "For the first time in this journey, Veyra can draw freely upon Erasure beyond the artificial world. Her restored access changes the scale of the danger. You have not become stronger than her by opening the lock.",
+        "asset": "cinematic/veyra-power",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "full_erasure"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra newly able to channel unrestricted erasure from outside the prison, vast dark-crimson cosmic currents gathering around her unchanged adult character design, solemn danger. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/real-transition": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\real-transition.jpg",
+    "scenes": [
+      {
+        "id": "passage",
+        "title": "OUTSIDE MEMORY",
+        "dialogue": "The broken boundary opens onto the real universe. Meyaya and Veyra pass beyond the structure that held them. You follow as the witness to what happened inside it. The worlds behind you will not secretly reconstruct after this.",
+        "asset": "cinematic/real-transition",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya and Veyra passing out through a broken artificial boundary into a living natural star-filled universe, shattered memory construct receding behind them. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/witness": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\witness.jpg",
+    "scenes": [
+      {
+        "id": "judge",
+        "title": "THE WITNESS",
+        "dialogue": "You have seen lives preserved beyond endurance and endings that took more than suffering away. Neither woman can claim you have seen only her side.\n\nYou cannot fight this battle for them. You can decide whose purpose you stand behind. Your first oath does not make that decision for you.",
+        "asset": "cinematic/witness",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [
+          "witness"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Tiny anonymous player silhouette distant from Meyaya and Veyra in the real universe, clearly an observer with no cosmic attacks, overwhelming scale and solemn judgment. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/final-choice": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\final-choice.jpg",
+    "scenes": [
+      {
+        "id": "choice",
+        "title": "CONTINUATION OR FINALITY",
+        "dialogue": "🌸 **STAND WITH MEYAYA**\nLet the world continue.\n\n⚫ **STAND WITH VEYRA**\nLet the cycle end.\n\nThis records your permanent worldline. It can differ from your awakening alignment. Rebirth will not change it.",
+        "asset": "cinematic/final-choice",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Dramatic choice tableau, Meyaya at left with rose white gold formation light and Veyra at right with black white crimson erasure, equal dignity, shared natural cosmic horizon, no lettering. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/cosmic-battlefield": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\cosmic-battlefield.jpg",
+    "scenes": [
+      {
+        "id": "battlefield",
+        "title": "BEYOND THE MEMORY WORLD",
+        "dialogue": "The real universe stretches around the two women. The player who opened a prison stands far from its former prisoners. Your choice has been heard. What follows belongs to Meyaya and Veyra.",
+        "asset": "cinematic/cosmic-battlefield",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Natural real-universe battlefield, immense galaxies and stellar distances, Meyaya and Veyra as two small distinct figures facing each other, no prison architecture. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Only the named characters.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/meyaya-origin": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\meyaya-origin.jpg",
+    "scenes": [
+      {
+        "id": "origin-strike",
+        "title": "WHAT MEYAYA MAKES",
+        "dialogue": "Meyaya channels Origin into structures that catch the first advance of Erasure. Light becomes matter. Broken paths become bridges. She is using a force that existed before her, giving it direction through the limits of her own body.",
+        "asset": "cinematic/meyaya-origin",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya channels Origin in real space, elegant pink-haired established character building crystalline bridges and luminous matter across a stellar rupture, no new costume design. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ]
+  },
+  "cinematic/veyra-erasure": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\veyra-erasure.jpg",
+    "scenes": [
+      {
+        "id": "erasure-strike",
+        "title": "WHAT VEYRA UNMAKES",
+        "dialogue": "Veyra passes through those structures. Their matter loses cohesion; their light ceases. She can destroy each thing Meyaya makes, but sees new things forming beyond them. Destroying worlds one by one will never end the process that makes more.",
+        "asset": "cinematic/veyra-erasure",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra channels Erasure in real space, black-haired established character dissolving crystalline structures into absence, dark crimson edges, not fire or explosion. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/cosmic-collision": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\cosmic-collision.jpg",
+    "scenes": [
+      {
+        "id": "collision",
+        "title": "A FUTURE AT EVERY EDGE",
+        "dialogue": "Creation meets destruction across distances you cannot comprehend. Meyaya tries to preserve a future beyond each rupture. Veyra sees another beginning carrying the possibility of another wound. Neither can make the other stop seeing what she sees.",
+        "asset": "cinematic/cosmic-collision",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Creation and destruction meeting across immense real-universe distances, Meyaya and Veyra directing contrasting forces, stars and space beginning to fracture, cinematic scale. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Only the named characters.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/erasure-medium": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\erasure-medium.jpg",
+    "scenes": [
+      {
+        "id": "fracture",
+        "title": "THE LIMIT OF A BODY",
+        "dialogue": "As reality begins to fracture, Veyra changes what she is doing. She stops throwing Erasure outward. She draws it inward, gathering the available force through herself. Her body becomes the medium for an ending no ordinary body can survive.",
+        "asset": "cinematic/erasure-medium",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra draws dark crimson Erasure inward into her own body, streams from surrounding reality converge on her, purposeful sacrifice rather than armor power-up. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/veyra-unstable": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\veyra-unstable.jpg",
+    "scenes": [
+      {
+        "id": "unstable",
+        "title": "SHE KNOWS",
+        "dialogue": "Dark fissures cross her skin. Portions of her outline cease before the rest can follow. Meyaya understands.\n\n‘Veyra... you'll tear yourself apart.’\n\n‘I know.’",
+        "asset": "cinematic/veyra-unstable",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra body progressively losing physical stability, portions of pale skin and black-haired outline breaking into absence and crimson light, fully clothed, poignant not gore. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/last-appeal": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\last-appeal.jpg",
+    "scenes": [
+      {
+        "id": "stop",
+        "title": "THE LAST APPEAL",
+        "dialogue": "Meyaya reaches for her. ‘You don't have to do this.’\n\nVeyra: ‘You spent 33,550,336 cycles trying to save everything. Let me save you from having to do it again.’\n\nShe accepts her own disappearance. The lives beyond her never consented to share it.",
+        "asset": "cinematic/last-appeal",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya desperately reaching toward unstable Veyra to stop her self-sacrifice, Veyra calm and grieving, familiar designs, universe beginning to fail behind them. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Only the named characters.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/final-release": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\final-release.jpg",
+    "scenes": [
+      {
+        "id": "release",
+        "title": "THE FINAL RELEASE",
+        "dialogue": "Veyra releases what her body can no longer contain. There is no fireball, no wreckage expanding through a surviving sky. The conditions that let the old universe continue begin to cease.",
+        "asset": "cinematic/final-release",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra final self-sacrificial release, her form disappearing as reality gradually ceases around it, no fireball and no expanding debris, immense restrained cosmic tragedy. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ]
+  },
+  "cinematic/stars-vanish": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\stars-vanish.jpg",
+    "scenes": [
+      {
+        "id": "stars",
+        "title": "THE STARS",
+        "dialogue": "One star disappears. Then there are fewer directions in which light can arrive. No ashes mark where they were. You witness until there is too little light left to see.",
+        "asset": "cinematic/stars-vanish",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Stars disappearing one after another from the old universe, sweeping areas of absolute absence replacing luminous galaxies, no surviving people, no explosion.",
+    "references": []
+  },
+  "cinematic/spacetime-ends": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\spacetime-ends.jpg",
+    "scenes": [
+      {
+        "id": "matter",
+        "title": "THE LAST DISTANCE",
+        "dialogue": "Matter ceases. The space between what remains contracts out of meaning. Time loses the events by which it could be measured. Veyra is gone. Your own awareness ends. No hidden fragment of you escapes the old universe.",
+        "asset": "cinematic/spacetime-ends",
+        "floor": 10,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Matter and the last spatial structure ceasing, a nearly empty frame with last vanishing filaments at its edges, no survivors and no new cosmos.",
+    "references": []
+  },
+  "cinematic/last-origin": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\last-origin.jpg",
+    "scenes": [
+      {
+        "id": "remnant",
+        "title": "THE LAST ORIGIN",
+        "dialogue": "The old universe is gone. The player and Veyra are gone. Meyaya barely remains with the last remnants of Origin. There is no old world waiting intact behind the darkness, and no way to return everyone to their places.",
+        "asset": "cinematic/last-origin",
+        "floor": 10,
+        "route": "meyaya",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "meyaya"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. After old universe ends, Meyaya barely remains as a fragile pink-white figure holding the last remnant of formation light, no player or Veyra, no intact old worlds. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ]
+  },
+  "cinematic/new-decision": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\new-decision.jpg",
+    "scenes": [
+      {
+        "id": "decision",
+        "title": "NOT A RESTORATION",
+        "dialogue": "She could spend the last of herself trying to remember every detail. She finally lets that demand go. ‘Something does not become meaningless because it ends.’\n\nWhat she offers is a beginning that will not be a copy of what was lost.",
+        "asset": "cinematic/new-decision",
+        "floor": 10,
+        "route": "meyaya",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "meyaya"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya gently releasing shattered memory shapes instead of rebuilding them, last tiny Origin light in her hands, poignant acceptance and resolution, no other survivors. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ]
+  },
+  "cinematic/first-creation": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\first-creation.jpg",
+    "scenes": [
+      {
+        "id": "point",
+        "title": "A FIRST POINT",
+        "dialogue": "Meyaya channels the remaining Origin. A point forms. It does not contain your memories or the blueprint of the prison. It is the first event of a genuinely new universe.",
+        "asset": "cinematic/first-creation",
+        "floor": 10,
+        "route": "meyaya",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "meyaya"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. One first point of new creation, a tiny white-gold light forming in absence with delicate rose filaments, no restored old universe and no recognizable character. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      null
+    ]
+  },
+  "cinematic/new-matter": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\new-matter.jpg",
+    "scenes": [
+      {
+        "id": "matter",
+        "title": "ROOM TO BECOME",
+        "dialogue": "Space expands. Matter forms. The energy that gives the new universe room to become comes from Meyaya. With every beginning, less of the person who chose it remains.",
+        "asset": "cinematic/new-matter",
+        "floor": 10,
+        "route": "meyaya",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "meyaya"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Genuinely new space and matter forming from the first light, luminous expanding nebula structures, different fresh universe, no memory architecture. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      null
+    ]
+  },
+  "cinematic/creator-sacrifice": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\creator-sacrifice.jpg",
+    "scenes": [
+      {
+        "id": "creator",
+        "title": "HER LAST FORM",
+        "dialogue": "For a final moment she is recognizable in the light. Then her outline dissolves into creation. She leaves no surviving mind within it, no hidden goddess, no waiting voice. Her sacrifice is complete.",
+        "asset": "cinematic/creator-sacrifice",
+        "floor": 10,
+        "route": "meyaya",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "meyaya"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Final transcendent Meyaya creator form dissolving entirely into new creation, recognizable pink hair and white-gold costume becoming light, no surviving ghost or face left behind. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ]
+  },
+  "cinematic/new-universe": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\new-universe.jpg",
+    "scenes": [
+      {
+        "id": "galaxies",
+        "title": "AFTER HER",
+        "dialogue": "Stars gather into galaxies. Worlds form. Much later, life begins without knowing the name of the woman whose last act made its existence possible. These are new lives, not returned ones.",
+        "asset": "cinematic/new-universe",
+        "floor": 10,
+        "route": "meyaya",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "meyaya"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Entirely new galaxies, young stars, forming planets and one distant blue-green early-life world, magnificent natural universe, no character silhouettes or divine faces.",
+    "references": []
+  },
+  "cinematic/world-continues": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\world-continues.jpg",
+    "scenes": [
+      {
+        "id": "continues",
+        "title": "THE WORLD THAT CONTINUES",
+        "dialogue": "Meyaya is gone. Veyra is gone. You are gone. The old universe is gone.\n\nSomething new has been given the chance to exist.\n\nWORLDLINE: CONTINUATION",
+        "asset": "cinematic/world-continues",
+        "floor": 10,
+        "route": "meyaya",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "meyaya"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Final vast establishing shot of a genuinely new living universe, young spiral galaxies and newborn stars, hopeful natural cosmic landscape, no surviving characters and no text.",
+    "references": []
+  },
+  "cinematic/creation-ceases": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\creation-ceases.jpg",
+    "scenes": [
+      {
+        "id": "refusal",
+        "title": "NO NEXT BEGINNING",
+        "dialogue": "Meyaya reaches for a remnant from which another beginning might form. Veyra's final release has reached the processes that would allow it. The attempt fails. Meyaya disappears with the last possibility of creation.",
+        "asset": "cinematic/creation-ceases",
+        "floor": 10,
+        "route": "veyra",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "veyra"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Last attempt at new creation failing, faint pink Origin light and Meyaya outline disappearing completely into absence, no seed remaining, no rebirth. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ]
+  },
+  "cinematic/absolute-erasure": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\absolute-erasure.jpg",
+    "scenes": [
+      {
+        "id": "all",
+        "title": "NO ONE BEYOND IT",
+        "dialogue": "There is no consciousness left to experience silence. No space survives as a void realm. No time waits for a future event. Veyra did not spare herself. No player, keeper, prisoner, soul, or secret fragment remains.",
+        "asset": "cinematic/absolute-erasure",
+        "floor": 10,
+        "route": "veyra",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "veyra"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Final disappearance of all matter consciousness time and space, the very last nearly invisible gray filament vanishing at edge of a near-black frame, no stars no figures no void realm.",
+    "references": []
+  },
+  "cinematic/black": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\black.jpg",
+    "scenes": [
+      {
+        "id": "silence",
+        "title": "THE LAST SILENCE",
+        "dialogue": "WORLDLINE: ERASURE\n\nNO WORLD\nNO LIFE\nNO SOUL\nNO ONE REMAINS.",
+        "asset": "cinematic/black",
+        "floor": 10,
+        "route": "veyra",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": "veyra"
+      }
+    ],
+    "exists": false,
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. A completely uniform pure black frame. Absolute absence. No gradients, no light, no stars, no figures, no texture, no text, no borders.",
+    "references": []
+  },
+  "cinematic/memory-construction-v2": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\memory-construction-v2.jpg",
+    "scenes": [
+      {
+        "id": "construction",
+        "title": "THE MEMORY WORLD",
+        "dialogue": "Meyaya made a sealed artificial reality outside the normal universe. She built it from her memories: a sunset kingdom, a drowned city, voices she could not bear to lose. It was a construct, not another natural universe.",
+        "asset": "cinematic/memory-construction",
+        "floor": 0,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Standalone cinematic anime illustration, landscape 16:9. Exactly ONE adult woman with long PINK hair, Meyaya's face and white-gold crystal dress from the reference. No other people, no black-haired person, no background figures or character portraits. Entirely new composition; reference for character identity only. She stands alone, constructing an artificial miniature world from floating memories of cities, oceans, sunsets and forests. Outstretched hands shaping a white-gold lattice. Monumental creative effort, wide shot. No text, no UI, no collage, preserve established character design.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ]
+  },
+  "cinematic/cycle-breakdown-v2": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\cycle-breakdown-v2.jpg",
+    "scenes": [
+      {
+        "id": "breakdown",
+        "title": "WHAT SHE CANNOT REMEMBER",
+        "dialogue": "‘33,550,335 times?’ Her hand will not stay steady. ‘How many times have you done this to me?’\n\nShe presses her palms against her eyes. There is no memory to meet the number-only the terror of discovering that her life has been taken from her again and again. When you reach for her, she flinches, then stays.",
+        "asset": "cinematic/cycle-breakdown",
+        "floor": 9,
+        "route": "shared",
+        "reveal_flags": [
+          "companion_fear"
+        ],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Standalone cinematic anime illustration, landscape 16:9. Exactly ONE adult woman with long PINK hair, Meyaya's face and white-gold crystal dress from the reference. No other people, no black-haired person, no background figures or character portraits. Entirely new composition; reference for character identity only. She kneels alone in a dark blue-gray archive, crying and trembling with her hands against her face after discovering a terrible record. Emotional grief and disbelief, dim solemn lighting, scattered unreadable records, medium shot. No throne, no palace. No text, no UI, no collage, preserve established character design.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ]
+  },
+  "cinematic/forgotten-cycles-v2": {
+    "path": "D:\\Peoject\\Meyaya\\bot\\assets\\fantasy\\dungeon\\cinematic\\forgotten-cycles-v2.jpg",
+    "scenes": [
+      {
+        "id": "keeper-record",
+        "title": "TWO PRISONERS",
+        "dialogue": "The keeper's log never records a departure. The same presence remained through every reconstruction. ‘You stayed?’ your companion whispers. Rage gives way to something she cannot name.\n\nShe folds the page instead of destroying it. You notice she has stopped calling the vault mistaken.",
+        "asset": "cinematic/forgotten-cycles",
+        "floor": 9,
+        "route": "shared",
+        "reveal_flags": [],
+        "anchor": null,
+        "encounter": null,
+        "boss": null,
+        "ending_route": null
+      }
+    ],
+    "exists": false,
+    "prompt": "Standalone cinematic anime illustration, landscape 16:9. Exactly ONE adult woman with long PINK hair, Meyaya's face and white-gold crystal dress from the reference. No other people, no black-haired person, no background figures or character portraits. Entirely new composition; reference for character identity only. She sits alone in a dark archive, holding one folded record close to her heart, exhausted and stunned. Countless identical environmental memory panels recede behind her, no faces or people in the panels. Solemn subdued blue and gold lighting. No text, no UI, no collage, preserve established character design.",
+    "references": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ]
+  }
+}

@@ -14,6 +14,8 @@ from bot.utils.embeds import meyaya_embed
 from bot.utils.loading import loading_indicator
 from bot.data.fantasy_alignment import PATRONS, PATRON_PROFILES, patron_for, ALIGNMENT_ART
 from bot.services.fantasy_profile import AlignmentUnavailable
+from bot.services.fantasy_progression import xp_progress
+from bot.data.fantasy_dungeon import ROMAN
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +90,7 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
         tier = RARITIES.index(profile.weapon_rarity) + 1 if profile.weapon_rarity in RARITIES else 1
         embed.add_field(
             name="Bound weapon",
-            value=f"**{profile.weapon_name}**\n{profile.weapon_rarity} · {profile.weapon_type}\n{'◆'*tier}",
+            value=f"**{profile.weapon_name} +{getattr(profile, 'weapon_level', 0)}**\n{profile.weapon_rarity} · {profile.weapon_type}\n{'◆'*tier}",
             inline=False,
         )
         embed.add_field(name="Its first promise", value=profile.weapon_lore, inline=False)
@@ -128,9 +130,16 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
         )
         embed.add_field(
             name="Growth",
-            value=f"Level {profile.level} · {profile.xp} XP\nOriginal identity follows this Discord user across servers.",
+            value=f"✦ Soul Level {profile.level}\n{xp_progress(profile)}\n{profile.xp:,} total XP\n"
+                  f"⚔ Weapon Level +{getattr(profile, 'weapon_level', 0)}\n"
+                  f"Highest Floor {ROMAN[getattr(profile, 'highest_floor', 0)] or '-'}\n"
+                  "Dungeon progression follows this soul across servers and rebirths.",
             inline=False,
         )
+        if getattr(profile, "ending_route", None):
+            from bot.data.fantasy_memory_world import ENDING_TITLES
+            embed.add_field(name="Permanent worldline", value=ENDING_TITLES[profile.ending_route]
+                            + (" · completed" if profile.ending_completed_at else " · choice sealed"), inline=False)
         embed.add_field(
             name="Original potential",
             value=" · ".join(

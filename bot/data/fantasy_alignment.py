@@ -59,8 +59,8 @@ PATRON_PROFILES = {
         "affinities": "Arcane · Bloom · Ego",
         "status": "Origin Protocol · Divine Presence acknowledged",
         "threat": "BEYOND MEASUREMENT",
-        "lore": "Where Meyaya blooms, reality remembers its beginning.",
-        "quote": "I already know how your story ends. I made sure it ends beautifully.",
+        "lore": "A being who channels Origin, the ancient process of creation. Her faith in another chance is both her strength and her burden.",
+        "quote": "A life deserves the chance to find what comes next.",
         "weapon": "Everbloom - Crown of the Last Wish",
     },
     "veyra": {
@@ -69,8 +69,8 @@ PATRON_PROFILES = {
         "affinities": "Void · Ruin · Ash",
         "status": "Erasure Active · Hostile Presence detected",
         "threat": "ANNIHILATION CLASS",
-        "lore": "Where Veyra walks, even fate forgets its name.",
-        "quote": "I have seen the end of every world. You will not be the exception.",
+        "lore": "A being who channels Erasure, the ancient process of ending. She questions the price of every new beginning.",
+        "quote": "I will not call suffering necessary just because it repeats.",
         "weapon": "Mournfang - Blade of the Last Silence",
     },
 }

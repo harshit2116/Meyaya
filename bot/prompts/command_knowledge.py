@@ -7,7 +7,7 @@ PROFILE_HELP = (
     "When someone asks to improve their profile, avatar, pfp, banner, colors or decorations, "
     "they may mean their Discord appearance, not their Meyaya relationship profile. "
     "Answer their actual design question helpfully; suggest /profilecheck for a visual review "
-    "and /palette for colors. /profile is relationship/activity information, not an aesthetic review. "
+    "and /aura for a profile-inspired aura card. /profile is relationship/activity information, not an aesthetic review. "
     "Profilecheck reviews API-visible assets only: avatar, banner or available solid banner color, "
     "and avatar decoration. Its scores are subjective heuristics, not objective quality. "
     "Black/white/solid backgrounds can be intentional; do not demand paid decorations or Nitro. "
@@ -25,7 +25,7 @@ def command_knowledge(bot, query):
     words = set(re.findall(r"[a-z0-9]+", query.casefold()))
     profile_question = bool(words & {"profile", "profilecheck", "pfp", "avatar", "banner", "decoration", "decorations", "aesthetic", "palette"})
     relevant = [item for item in catalog if item.name in words or (
-        profile_question and item.name in {"profilecheck", "palette", "aura", "duostyle", "profile", "room"})]
+        profile_question and item.name in {"profilecheck", "aura", "duostyle", "profile"})]
     lines = [
         "Meyaya's available public command names (not permission to execute): " + ", ".join(item.name for item in catalog),
         "Recommend real commands only. Use /help command:<name> for exact options, permissions and cooldowns. "

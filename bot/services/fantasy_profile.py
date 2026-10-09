@@ -4,6 +4,8 @@ from bot.repositories.fantasy_profiles import FantasyProfileRepository
 from bot.services.fantasy_generation import generate_identity
 from datetime import UTC, datetime, timedelta
 from bot.data.fantasy_alignment import PATRONS, patron_for, alignment_values
+from bot.repositories.fantasy_dungeon import FantasyDungeonRepository
+from bot.services.fantasy_progression import growth_values
 
 REBIRTH_COOLDOWN = timedelta(hours=24)
 
@@ -44,6 +46,8 @@ class FantasyProfileService:
                 raise AlignmentUnavailable(
                     "Your oath is already sealed. Only rebirth can change it."
                 )
+            if await FantasyDungeonRepository(self.session).active(user_id):
+                raise AlignmentUnavailable("Abandon or finish your dungeon before changing allegiance.")
             return await self.profiles.replace_identity(user_id, alignment_values(profile, choice))
 
     async def rebirth(self, user_id, expected_awakening, *, now=None):
@@ -54,6 +58,8 @@ class FantasyProfileService:
                 raise RebirthUnavailable(
                     "Your identity changed. Open `/rebirth` again before confirming."
                 )
+            if await FantasyDungeonRepository(self.session).active(user_id):
+                raise RebirthUnavailable("Abandon or finish your dungeon before rebirth.")
             current = utc(now) if now else datetime.now(UTC)
             last = profile.last_rebirth_at
             if last and current < utc(last) + REBIRTH_COOLDOWN:
@@ -62,6 +68,12 @@ class FantasyProfileService:
                     f"Your next rebirth is available <t:{ready}:R> (24-hour cooldown)."
                 )
             values = generate_identity(user_id, now=current)
+            values.update(level=profile.level, xp=profile.xp,
+                          weapon_level=profile.weapon_level, highest_floor=profile.highest_floor,
+                          ending_route=profile.ending_route, ending_chosen_at=profile.ending_chosen_at,
+                          ending_completed_at=profile.ending_completed_at)
+            values.update(growth_values(values, profile.level))
+            values.update(hp=values["max_hp"], mp=values["max_mp"])
             values.update(rebirth_count=(profile.rebirth_count or 0) + 1, last_rebirth_at=current)
             return await self.profiles.replace_identity(user_id, values)
 

@@ -251,7 +251,7 @@ def render_soul_card(profile, name, avatar=b""):
         if fill:
             d.rounded_rectangle((166, y + 6, 166 + max(18, fill), y + 25), radius=9, fill=color)
     centered(
-        d, 902, f"LEVEL {profile.level:02d}  ·  {profile.xp} XP  ·  SOULBOUND", 20, theme.color
+        d, 902, f"SOUL {profile.level:02d}  ·  {profile.xp} XP  ·  WEAPON +{getattr(profile, 'weapon_level', 0)}", 20, theme.color
     )
     centered(
         d,

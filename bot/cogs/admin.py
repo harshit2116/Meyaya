@@ -23,6 +23,7 @@ from bot.utils.command_parameters import normalize_member_parameters
 from bot.services.server_setup import load_setup
 from bot.services.server_dashboard import server_overview, dashboard_embed
 from bot.services.fantasy_profile import FantasyProfileService
+from bot.services.veyra_glitch_test import is_veyra_glitch_test, run_veyra_glitch
 from bot.views.server_setup import ServerSetupView
 
 PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9!?.$%&*+_-]{1,10}$")
@@ -56,6 +57,22 @@ class AdminCog(commands.Cog):
 
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
+        self._veyra_test_running = False
+        self._veyra_test_available_at = 0.0
+
+    async def handle_veyra_glitch_test(self, message: discord.Message) -> bool:
+        """Temporary uwu veyra hook; deliberately not a registered command."""
+        if not is_veyra_glitch_test(message) or not private_owner(message):
+            return False
+        if self._veyra_test_running or time.monotonic() < self._veyra_test_available_at:
+            return True
+        self._veyra_test_running = True
+        try:
+            await run_veyra_glitch(message.channel)
+        finally:
+            self._veyra_test_running = False
+            self._veyra_test_available_at = time.monotonic() + 15
+        return True
 
     @commands.command(name="fantasyreset", hidden=True)
     @commands.check(private_owner)

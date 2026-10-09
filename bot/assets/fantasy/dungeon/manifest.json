@@ -1,0 +1,1463 @@
+{
+  "solenne/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for Solenne: crimson eternal sunset kingdom, ruined gold architecture, dead flowers, burning horizon, melancholy luminous beauty. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-122c30ae-00e8-45ab-b6fa-8c81a7b1e400.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 212339,
+    "sha256": "7ecd9dbaef488e6341e2f953bc8d6ae7d880e6d30d2f46dd2bd3c46a9c4ae4d1"
+  },
+  "solenne/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Solenne: hollow gold-armored knight with a closed sun visor and a charred banner. Environment: crimson eternal sunset kingdom, ruined gold architecture, dead flowers, burning horizon, melancholy luminous beauty. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-8e0c1f12-dc2c-419c-8b38-04e14e7e9629.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 218822,
+    "sha256": "265ad4ff6fc8396b21b026b3a4f858163f67b9538d2e89a2763054af27cee7d7"
+  },
+  "solenne/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Solenne: lean black volcanic hound with ember ribs and a smoking mane. Environment: crimson eternal sunset kingdom, ruined gold architecture, dead flowers, burning horizon, melancholy luminous beauty. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-b3e95f48-48d8-4064-85d4-70f0f6c9f458.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 190649,
+    "sha256": "fd103343396ecce51db621df451fdbd7f15f0a23856d47c1e3b81051d789b2aa"
+  },
+  "solenne/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Solenne: winged celestial bird with eclipsed halo and burnt gold feathers. Environment: crimson eternal sunset kingdom, ruined gold architecture, dead flowers, burning horizon, melancholy luminous beauty. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-210febc6-a4ef-4473-a5b2-95f928032bb6.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 205251,
+    "sha256": "b432f8496fd8e3bdd2d2267d37fe2f3c90e0216fe4ac51d13f73ee0046c9727a"
+  },
+  "solenne/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: tragic regal sun queen, golden fractured crown, luminous spear, flowing white mantle burning at its edges, life flowing from her chest into an exhausted sun. Boss arena: crimson eternal sunset kingdom, ruined gold architecture, dead flowers, burning horizon, melancholy luminous beauty. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [],
+    "source_filename": "exec-1c14cf00-3117-4b62-b86c-aa0a8460b0e9.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 235489,
+    "sha256": "88f65bc22b25e73d29d8b7b0998a03e0aef16f1a20b617e199ec0e082f566608"
+  },
+  "nymora/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for Nymora: deep underwater civilization, colossal submerged temples, blue-black ocean, bioluminescent ruins, ghostly silhouettes, floating memories. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-1be23f40-8b39-4d0e-be20-e67750471b21.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 190395,
+    "sha256": "4d917edfd90da341a85b3e1a2541157d0980b9b9a89d484d1e99791e4128e0a1"
+  },
+  "nymora/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Nymora: blind oracle suspended underwater inside a cracked diving-bell halo. Environment: deep underwater civilization, colossal submerged temples, blue-black ocean, bioluminescent ruins, ghostly silhouettes, floating memories. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-40682dc9-507b-4cbf-acfb-2811381bee6e.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 210943,
+    "sha256": "78fee05a658233dac479d58e82edcc6cc0aa9d3c520ab7a2d88f9784f8c51d17"
+  },
+  "nymora/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Nymora: ribbonlike translucent deep-sea creature carrying tiny luminous memory pearls. Environment: deep underwater civilization, colossal submerged temples, blue-black ocean, bioluminescent ruins, ghostly silhouettes, floating memories. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-0d14137d-dd46-4290-aa33-0422928a64da.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 210613,
+    "sha256": "d894997c298b8977b688a933068bf4032958b4ed191ca2ed344a7fa7bdc917b1"
+  },
+  "nymora/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Nymora: coral-encrusted revenant knight with an anchor blade and streaming drowned robes. Environment: deep underwater civilization, colossal submerged temples, blue-black ocean, bioluminescent ruins, ghostly silhouettes, floating memories. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-2f579154-5111-4c01-b9e1-f17de5e78d28.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 233786,
+    "sha256": "0ad94b0345b94c473a4bd741e23f4c1faff3e84def675713fc45aff7121293dc"
+  },
+  "nymora/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: ocean mourning sovereign with translucent mourning veil, floating pearl reliquary, flowing spectral fins and submerged memories orbiting her. Boss arena: deep underwater civilization, colossal submerged temples, blue-black ocean, bioluminescent ruins, ghostly silhouettes, floating memories. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [],
+    "source_filename": "exec-6136525b-c8f3-4b58-8e80-e993f5eec662.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 242342,
+    "sha256": "5864452970f1434f4fc203061f92cd510d37fbe6543280fb7a8e84f622133d40"
+  },
+  "eidolon/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for Eidolon: pale gothic metropolis, silver mirrors, glass cathedrals, faceless marble statues, identity horror, cool monochrome. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-b28c32df-9604-4fa4-b2a9-9dc5dee6e663.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 189061,
+    "sha256": "8c67a522c866ba56413da54619e517091c47050a15790b42de5ec53e49f40a2b"
+  },
+  "eidolon/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Eidolon: elegant masked courtier with blank porcelain face and folded glass daggers. Environment: pale gothic metropolis, silver mirrors, glass cathedrals, faceless marble statues, identity horror, cool monochrome. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-be4f4178-f40c-4f4c-9671-bcc02a8ff654.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 215626,
+    "sha256": "01c8e74e53d561fc01f074cc15b8ddd17a88967db342010d8c549cf3677d54a1"
+  },
+  "eidolon/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Eidolon: ink-black moth creature with blank paper wings consuming empty nameplates. Environment: pale gothic metropolis, silver mirrors, glass cathedrals, faceless marble statues, identity horror, cool monochrome. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-1234ac57-1e33-438b-8156-21b3574b7cb7.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 222808,
+    "sha256": "e0204dc4b91512d8809984c17b2bf868827384959b49da0fc576eff58744546d"
+  },
+  "eidolon/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Eidolon: fractured mirrored humanoid reflecting incompatible identities through its crystalline body. Environment: pale gothic metropolis, silver mirrors, glass cathedrals, faceless marble statues, identity horror, cool monochrome. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-227023ef-2d4a-442f-b3e2-b443d93b4fc1.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 223388,
+    "sha256": "dcd90b4dc854b9e462b13ad49d4c49de1615ca85621c2b99be60296eed08dd5f"
+  },
+  "eidolon/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: nonhuman archivist composed of floating porcelain masks and silver book leaves, long ink-quill limbs, empty face under a gothic crown. Boss arena: pale gothic metropolis, silver mirrors, glass cathedrals, faceless marble statues, identity horror, cool monochrome. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [],
+    "source_filename": "exec-44d17709-c977-4e90-a703-2464a6387fd1.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 243819,
+    "sha256": "c601823888241f893c0beea917e703c158f5b3a6d42513a99075f5cf22da61fb"
+  },
+  "kharos/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for Kharos: war-torn continent, immense fortresses, weapons embedded in mountains, red skies, smoke seas, devastated epic battlefields. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-f9d44781-1873-42dc-b54a-7b43eb031ae0.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 178550,
+    "sha256": "f37a98c9d47fa40bb030bdda8957d8390b5a749e6b4f217e61410cbed23ef6c7"
+  },
+  "kharos/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Kharos: red armored exhausted legionnaire carrying a chipped poleaxe and generations of broken medals. Environment: war-torn continent, immense fortresses, weapons embedded in mountains, red skies, smoke seas, devastated epic battlefields. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-2ee1020d-69ae-4d32-ae43-b203a83ee7a9.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 199789,
+    "sha256": "bfda3203bcd0c5794cd5fa56826bd6ecf5a7b45f160cffff26731b1d373b239a"
+  },
+  "kharos/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Kharos: chain-bound penitential soldier with an iron bell shield and sealed helm. Environment: war-torn continent, immense fortresses, weapons embedded in mountains, red skies, smoke seas, devastated epic battlefields. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-34be29c2-9937-46df-8c84-61aa3b6ff160.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 209552,
+    "sha256": "98052e8100ac0cbe3587c86503ab49ca8efcf188439608c749cee877595bf03f"
+  },
+  "kharos/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Kharos: quadrupedal siege engine beast made from swords and battered cannons. Environment: war-torn continent, immense fortresses, weapons embedded in mountains, red skies, smoke seas, devastated epic battlefields. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-bba0f9e3-1e3b-40a7-82b1-84810541cb3d.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 200145,
+    "sha256": "e149822c5d1491ee67a87f4a104f68ade668a3fc1a7abc42f3ad3f5855457066"
+  },
+  "kharos/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: battle-scarred general fused into a colossal mobile siege bastion, broken command banners, iron greatblade, human eyes inside fortress armor. Boss arena: war-torn continent, immense fortresses, weapons embedded in mountains, red skies, smoke seas, devastated epic battlefields. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [],
+    "source_filename": "exec-023b1e52-0f63-4469-b064-94dc49d34e7d.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 210031,
+    "sha256": "92e1503216bc46cdc4ccce4d4c825ca896f4a72a2a61e733847315e4c7d350b5"
+  },
+  "morrow/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for Morrow: eternal ornate kingdom turned disturbing, ancient moonlit palace, undying figures, frozen decay, beautiful melancholic mortality horror. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-30c49962-0103-41ed-85ce-d72e2198cb06.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 204167,
+    "sha256": "1b60787988d11911edd1fc0f2b26635057300a94c20dc7e4edddebfe28532a41"
+  },
+  "morrow/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Morrow: beautiful tarnished silver knight with repaired porcelain joints and immortal exhausted eyes. Environment: eternal ornate kingdom turned disturbing, ancient moonlit palace, undying figures, frozen decay, beautiful melancholic mortality horror. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-69ee0218-e00d-4fa0-a3d7-4c4f79d73ce2.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 210174,
+    "sha256": "ab460bc25403527723866c548f710125bfe02eaa3e5b60c20e9b0f4e89fb717b"
+  },
+  "morrow/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Morrow: pale petrified giant with timeless skin and an overgrown miniature palace on its shoulders. Environment: eternal ornate kingdom turned disturbing, ancient moonlit palace, undying figures, frozen decay, beautiful melancholic mortality horror. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-b0cf4709-4264-45f5-8648-2816e6f2dcd9.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 206149,
+    "sha256": "92dcf6390b608cc1d2605fa086c358731666ec69517486f3dae44092005f34c0"
+  },
+  "morrow/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Morrow: ageless masked apostle suspended in funeral silk with a broken moon censer. Environment: eternal ornate kingdom turned disturbing, ancient moonlit palace, undying figures, frozen decay, beautiful melancholic mortality horror. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-4e2782fb-dac0-4a1a-af38-8848b33ce861.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 207675,
+    "sha256": "5c3cc4eea365435990516dc275e732042d3f451291b44dd5cb6231483b997dd0"
+  },
+  "morrow/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: ancient emaciated immortal emperor enthroned inside an enormous living mourning clock, moon-pale crown, royal robes woven from endless funeral ribbons. Boss arena: eternal ornate kingdom turned disturbing, ancient moonlit palace, undying figures, frozen decay, beautiful melancholic mortality horror. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [],
+    "source_filename": "exec-1a0f4c19-109f-4f74-9f15-eebd083210fa.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 257123,
+    "sha256": "6fc9aea8f51cf5a07503aa9facf21052c6433a5a0b360ef97a7affad754f97d7"
+  },
+  "astraeon/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for Astraeon: celestial graveyard made of colossal divine skeletons, cathedral ruins inside god bones, crimson divine rivers, astral darkness. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-44935910-16fb-4b01-9197-de3190751ef9.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 207846,
+    "sha256": "dbd0b5a82f8eb6526b08695e497069584158c377048a414f56c618b1592fec48"
+  },
+  "astraeon/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Astraeon: star-black many-jawed sacred parasite gnawing a divine bone shard. Environment: celestial graveyard made of colossal divine skeletons, cathedral ruins inside god bones, crimson divine rivers, astral darkness. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-1ad970c6-3f69-490a-a81e-fce6e1eea674.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 241528,
+    "sha256": "24176983ee7fab6c688354757a7c1a7c04a63c2f2aa52a5b6f52dab4bba58885"
+  },
+  "astraeon/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Astraeon: skeletal angel carrying a miniature cathedral inside its ribcage, stained-glass wings. Environment: celestial graveyard made of colossal divine skeletons, cathedral ruins inside god bones, crimson divine rivers, astral darkness. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-91be797b-f950-42fa-9976-c4e01b2e84d6.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 227167,
+    "sha256": "2fe7222b7b69b475bc4ee01829645037287f5904cf1c0f0aa73fae82e8f8005c"
+  },
+  "astraeon/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Astraeon: fragmented divine humanoid with floating luminous bones and a broken astronomical staff. Environment: celestial graveyard made of colossal divine skeletons, cathedral ruins inside god bones, crimson divine rivers, astral darkness. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-06d0ea25-91fe-4968-bc8b-2570654e00f4.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 233675,
+    "sha256": "5db444a167e67f2ea660ff6b5fdeca18f55d5c2dc415de680a5a06081b63f01f"
+  },
+  "astraeon/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: colossal nonhuman dead goddess consciousness inside a constellation of divine rib bones, shattered celestial halo, galaxies between bone fingers. Boss arena: celestial graveyard made of colossal divine skeletons, cathedral ruins inside god bones, crimson divine rivers, astral darkness. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [],
+    "source_filename": "exec-d47f2ab6-6d0a-4239-9248-d58acd368c61.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 225318,
+    "sha256": "8c3be403228169a807e28bd1c5d31923d80f4b07423b2be154815d4dbbfd664b"
+  },
+  "velis/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for Velis: peaceful impossible town, warm amber lamps, familiar welcoming faces, subtly repeated architecture, stopped clocks, surreal calm. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-2e56a738-6b24-4cc0-8d6e-117bea7a750f.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 220810,
+    "sha256": "f1ea21338978381d921feb49757e624f2317d0ad0b0b4af6ab19d1fc3844cf26"
+  },
+  "velis/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Velis: humanlike shadow repeating a traveler's pose with an impossible delay. Environment: peaceful impossible town, warm amber lamps, familiar welcoming faces, subtly repeated architecture, stopped clocks, surreal calm. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-f0b4fb06-503a-41f8-bf4d-60118c90c9fd.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 233029,
+    "sha256": "767ce723f76b5978f52508b9c7cdd96946869159067c29ba7a39041622fb1d32"
+  },
+  "velis/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Velis: knight trapped between two narrow mirror frames carrying a backwards shield. Environment: peaceful impossible town, warm amber lamps, familiar welcoming faces, subtly repeated architecture, stopped clocks, surreal calm. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-0fd6b819-d50f-4c62-8eb0-e54f256040cd.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 221607,
+    "sha256": "6490c88899b975320a2da5c4c0e737535b8dcccb99683a0cf05631661dd25226"
+  },
+  "velis/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Velis: faded soldier layered with translucent past selves and stopped clock talismans. Environment: peaceful impossible town, warm amber lamps, familiar welcoming faces, subtly repeated architecture, stopped clocks, surreal calm. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-39276e3b-1461-4644-8bb1-8ba105901102.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 237539,
+    "sha256": "03e3184543b08591d6ae2dcb935bb472afc205b7f8b0ce290c39434bfbb517d3"
+  },
+  "velis/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: weathered previous traveler in a patched star cloak, fractured compass sword, shadow showing many earlier versions of himself, tragic human silhouette. Boss arena: peaceful impossible town, warm amber lamps, familiar welcoming faces, subtly repeated architecture, stopped clocks, surreal calm. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [],
+    "source_filename": "exec-e44855fd-7622-4a2a-b335-e70fd1729f31.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 238142,
+    "sha256": "96875f01d70c7f9a66443e1aafffd428050668852f5ea2fd0ea5176ba8637996"
+  },
+  "nhal/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for Nhal: perfect dream paradise, impossible white architecture, gardens from incompatible worlds, hidden reality seams, false warm perfection. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-e6cec7c7-0459-423c-9c27-6f282401d463.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 216033,
+    "sha256": "c84318c13b1a665d6974e05976fbd762f003ec6c75bfe5198e01e69e697e1e6f"
+  },
+  "nhal/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Nhal: beautiful hollow human statue with a hairline reality seam and a vacant golden heart. Environment: perfect dream paradise, impossible white architecture, gardens from incompatible worlds, hidden reality seams, false warm perfection. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-8e28bbf7-6cc6-44a0-b773-68b57da407d2.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 207428,
+    "sha256": "4ec7a8d193f9b38ae254eb46d37f46715b0f81748a959b8764e33b0b4c91bb8a"
+  },
+  "nhal/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Nhal: white petal-armored knight with a living garden shield and seams in its silhouette. Environment: perfect dream paradise, impossible white architecture, gardens from incompatible worlds, hidden reality seams, false warm perfection. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-3800b9e7-000e-4101-ad3a-7b714340a045.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 222377,
+    "sha256": "93b08502905011f12ea65a6027d4afe5a7f2f183ea18ad215f4d2947357c46e7"
+  },
+  "nhal/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Nhal: serene porcelain saint with unnatural fixed smile and floating borrowed halos. Environment: perfect dream paradise, impossible white architecture, gardens from incompatible worlds, hidden reality seams, false warm perfection. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-dd413725-8b0b-44ea-8526-a2d3c8de0a9e.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 228100,
+    "sha256": "44fe90ff3d26e10bc0d2cece6378adc86dcc84efe6c46d0a3eabe1809030eadf"
+  },
+  "nhal/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: elegant many-armed maternal curator woven from flowering marble and stitched dream fabric, living miniature worlds suspended in her hands. Boss arena: perfect dream paradise, impossible white architecture, gardens from incompatible worlds, hidden reality seams, false warm perfection. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [],
+    "source_filename": "exec-f15a7896-b4a1-492a-a132-af2b4a8bd679.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 248402,
+    "sha256": "8c00168c9b33661dcc1e13d2b38a807efe813e3aec257eab2fa4f00034b158a0"
+  },
+  "nullis/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for Nullis: dying cosmic universe, almost no stars, vanishing cities, black void, minimal silver color, immense existential scale. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-5af8d045-3839-405a-a6ac-001c8b9724b9.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 146527,
+    "sha256": "dc0f23dcc945e19c2352244384ac63f93c68d9879aad19cc5290e4757aaa8df5"
+  },
+  "nullis/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Nullis: skeletal astronomer silhouette with a lens head and vanishing constellation bow. Environment: dying cosmic universe, almost no stars, vanishing cities, black void, minimal silver color, immense existential scale. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-eb4e4a85-93d1-4fb0-85b8-4196f013fc59.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 169705,
+    "sha256": "0776ee66a100201d67e041f4a06b818eac072900456d47d8c6750d9000aa40b6"
+  },
+  "nullis/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Nullis: silent robed witness carrying a tiny extinguished city in transparent hands. Environment: dying cosmic universe, almost no stars, vanishing cities, black void, minimal silver color, immense existential scale. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-af43ecac-b7a0-4222-af40-fda3474252ad.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 169786,
+    "sha256": "dc4ca2b6642a9cc164badfa12b993539542c3aa97f42becaaef22fbd25c50530"
+  },
+  "nullis/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from Nullis: abstract winged messenger with negative-space body and disintegrating star feathers. Environment: dying cosmic universe, almost no stars, vanishing cities, black void, minimal silver color, immense existential scale. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-48026633-8e56-42be-a12d-87f3b5ba76f8.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 182386,
+    "sha256": "30ca231ac43d5bc602912fde9b3417bc18584aa402b4d49238339807c3ef9b34"
+  },
+  "nullis/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: abstract cosmic witness, vast dark eye encircled by nine shattered observatory rings, threads of disappearing stars, nonhuman cosmic scale. Boss arena: dying cosmic universe, almost no stars, vanishing cities, black void, minimal silver color, immense existential scale. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [],
+    "source_filename": "exec-37d272b8-a3cc-4baf-8031-abb56cdcdb65.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 219112,
+    "sha256": "0796318df8b411ae085667056c16e7bf657c1fb68d121b7e3c0dfe4fd643def7"
+  },
+  "seal/world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. World environment establishing shot for The Seal: infinite abstract black-white void, enormous ancient geometric seal, ten floating components, cosmic prison, no dungeon architecture. No foreground combat characters. This is a separate universe with unique architecture.",
+    "reference_assets": [],
+    "source_filename": "exec-7307ac24-6034-4b72-ac35-1c98c7a05cd1.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 222894,
+    "sha256": "8c6ad6675b227906210d24e0767394e4627917d03f02937af5696996a7b2e717"
+  },
+  "seal/enemy-1.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from The Seal: abstract golden afterimage of the lost sunrise trapped in a seal prism. Environment: infinite abstract black-white void, enormous ancient geometric seal, ten floating components, cosmic prison, no dungeon architecture. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-b34bb4a6-377b-47f0-8e35-a9ad3a563ba2.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 227375,
+    "sha256": "32db0add148b2fd98d1d156322c3cff1fdd84ab7d95c133da1a0206f2ea42c3d"
+  },
+  "seal/enemy-2.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from The Seal: floating ocean memory sphere with mourning faces, inside a broken seal prism. Environment: infinite abstract black-white void, enormous ancient geometric seal, ten floating components, cosmic prison, no dungeon architecture. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-fe2fd63c-7347-4b58-b73e-a8c53720973d.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 213612,
+    "sha256": "7d60de741bdd114b5c7ab56c01130f96dad27f33fc8bd80d27e778fdc83d10b6"
+  },
+  "seal/enemy-3.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Single central enemy design, full silhouette, from The Seal: ghostly past traveler silhouette inside an ancient fractured cosmic seal prism. Environment: infinite abstract black-white void, enormous ancient geometric seal, ten floating components, cosmic prison, no dungeon architecture. Enemy should belong to this world, powerful but lesser than its floor guardian.",
+    "reference_assets": [],
+    "source_filename": "exec-836d55af-c23e-4f2a-bc36-3a33ef4a2008.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 230738,
+    "sha256": "885058e104a93524f08bf0e69409733e3a6a9d49aa7549eb6895c82b61071f62"
+  },
+  "seal/boss.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Cinematic floor guardian confrontation artwork: Meyaya and Veyra facing each other across a broken cosmic seal, rose-prismatic creation against elegant black-crimson erasure, cinematic duel. Boss arena: infinite abstract black-white void, enormous ancient geometric seal, ten floating components, cosmic prison, no dungeon architecture. Premium RPG boss presence and distinctive powerful silhouette.",
+    "reference_assets": [
+      "meyaya-profile.png",
+      "veyra-profile.png"
+    ],
+    "source_filename": "exec-1610b075-7039-4c63-82a3-80dc13e853c7.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 301303,
+    "sha256": "0a0f79e14d763892ac711e240d4fba42c0425af65a183a32287bb3b5b6559f55"
+  },
+  "special/meyaya-imprisoned.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Preserve the Meyaya character identity from the reference: exhausted pink-haired goddess with rose-petal celestial energy imprisoned inside a colossal black-white ancient cosmic geometric seal, bound by luminous seal ribbons, not sexualized, solemn anime RPG revelation.",
+    "reference_assets": [
+      "meyaya-profile.png"
+    ],
+    "source_filename": "exec-cbf504d3-4bee-4c7e-b35d-579d8d851045.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 277178,
+    "sha256": "f4b81e248386e4f75675771b5bce53ec4fe14317bdb45be09486f9a356670d36"
+  },
+  "special/veyra-reveal.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Preserve Veyra character identity from the reference: elegant black-haired crimson-eyed woman in dark gothic clothing, calmly revealed behind dissolving pink illusory light in infinite black-white seal void, no monster transformation, terrifying composure.",
+    "reference_assets": [
+      "veyra-profile.png"
+    ],
+    "source_filename": "exec-f2972fb3-3ba6-4381-9112-40eee25ef525.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 260691,
+    "sha256": "e9757d160a7dc9e9c206fe906ab7a48f4f53f640dadd7b43b09c217b953f8f40"
+  },
+  "special/seal-record.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Ancient cosmic seal record vault in a dying near-starless universe: fractured luminous geometric tablets and repeated ring patterns representing many cycles, intricate artifacts, no readable writing or text.",
+    "reference_assets": [],
+    "source_filename": "exec-42e01d35-325d-42bb-9c27-80ad9b4de29f.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 218918,
+    "sha256": "625a510fc57fd6289e4b8db95223622ace5e61a886cfa869f8b5ecefbb74bf03"
+  },
+  "special/confrontation.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-07",
+    "prompt": "High-end anime fantasy RPG production artwork, painterly detailed cinematic illustration, sophisticated lighting, consistent premium art direction, landscape 16:9 composition, no text, no lettering, no captions, no stats, no UI, no logos. Distinct readable silhouettes. Leave some calm negative space at upper left for Discord presentation. Preserve both reference character identities: Meyaya pink-haired celestial goddess with bloom and prismatic energy facing Veyra elegant black-haired red-eyed gothic woman with black-crimson erasure energy, powers collide across a shattered immense cosmic seal, balanced ideological confrontation, no monster transformation.",
+    "reference_assets": [
+      "meyaya-profile.png",
+      "veyra-profile.png"
+    ],
+    "source_filename": "exec-fdc18320-fc82-4e0c-9a1f-a467ef3fde0d.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 285616,
+    "sha256": "6b3caf439ff33c731a14d6a39b1b10cca4283e8a9eb1730a160ce15326c74e84"
+  },
+  "cinematic/real-universe.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Immense living natural universe, galaxies and star nurseries with distant planets, deep indigo space, no characters.",
+    "reference_assets": [],
+    "source_filename": "exec-e746fcb6-dd7a-44f9-820b-3d1ee46a9bc3.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 240674,
+    "sha256": "a00040b7c7dbf82a97daa80d0ed13ee60b3eab753ed5bd953ee28364b528cb12"
+  },
+  "cinematic/origin-force.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Natural process of formation: luminous white-gold matter assembling into a newborn star, pink celestial filaments, no personification or characters.",
+    "reference_assets": [],
+    "source_filename": "exec-8457d168-63e7-4586-85a5-3730ae71da12.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 210197,
+    "sha256": "681346b5239feba33440defc74bf8ac97a43f0995edcf8b2d9c0f27bb35f0b7e"
+  },
+  "cinematic/erasure-force.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Natural cosmic dissolution: an ancient star and surrounding matter fading into clean absence, subtle crimson edge light, no explosion or characters.",
+    "reference_assets": [],
+    "source_filename": "exec-6380eca9-9ecb-4c9e-8ad9-cffc5f1f68a2.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 169064,
+    "sha256": "79f3a15755660cb88519859cb86172f44ee6c29edb0f5f0ec7aab6504c302e74"
+  },
+  "cinematic/emergence.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya and Veyra as newly emerged adult channelers discovering rose-gold formation light and crimson dissolution in their open hands beneath ancient stars. Preserve both adult character designs. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-2addb875-5ddb-4f3b-aa38-c11ae1ce45f9.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 275062,
+    "sha256": "57706377f0d3cfd7d6d36b5f7dfb683e63d4b351dd7ac3c091ed68812a51ab98"
+  },
+  "cinematic/before-conflict.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya and Veyra standing peacefully together on a high garden terrace watching a distant living city at sunset, thoughtful shared history, no combat. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-31b401bb-4ac3-4546-8c0f-459885e15cb7.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 267177,
+    "sha256": "0228b8643bf6ebc837de19bc88c754392b07bfd578b3b3659148720bd461ffd4"
+  },
+  "cinematic/philosophical-conflict.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Intimate emotional philosophical disagreement: Meyaya and Veyra facing each other in a quiet celestial garden, open expressive hands, concern and grief, no attack. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-aa187717-c970-4dbc-bb89-6d1fdf021c8f.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 265488,
+    "sha256": "dd309d453d39b8aaebe43b98be90a5a4d0247196d9aeb009ebacc7b020c5ec2d"
+  },
+  "cinematic/veyra-decision.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra alone overlooking innumerable stars, resolve mixed with sorrow, extremely long black hair, faint crimson erasure gathering toward her hand. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-f27f7bc4-c531-4293-95c4-d45a32475000.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 281785,
+    "sha256": "3a85979ac8bc2cb06a4f7221ccd08478b8fd8a9cccf70e5c7c46cef8de7fa979"
+  },
+  "cinematic/first-confrontation.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya blocking Veyra in interstellar space before any prison exists, tense dynamic poses, pink origin barrier against restrained crimson erasure. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-2543444d-d5ad-4630-bd01-ede609760bd7.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 297017,
+    "sha256": "5cb911b95dc25b045154833d9b83cb6b80c4814d540c909360ad138e74aac91b"
+  },
+  "cinematic/containment.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya containing Veyra within a rose-gold crystalline restraint, both visibly strained, no death, accumulated crimson energy safely held. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-3fbcb9ef-85bc-4ae6-ac41-3d69886b22ce.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 304163,
+    "sha256": "c57de78628d6f4280afc641cda9d44e02685025cd8afa7961e099c80ae73baad"
+  },
+  "cinematic/memory-construction.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya creates a separate enclosed artificial memory reality: a vast translucent geometric orb assembled from remembered cities, seas, gardens and ancient architecture, natural universe outside it. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-6afc9efb-ca3c-463b-aff0-bd0bd77ba15e.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 299425,
+    "sha256": "662c1fd6f75a6c7398177baab923c5198f512e2fe3e022354be0464917cceacc"
+  },
+  "cinematic/imprisonment.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra bound at the center of an artificial memory construct by ten luminous geometric anchor channels, extremely long black hair and established dark costume, serious cosmic prison scene. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-9fd47184-bcff-43c8-a07e-24f78ad68854.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 314720,
+    "sha256": "3bb3f25bd373aec2eebf4bd697b5c6b1188bcd68a7c276d2bf5a066d2cf9c9cb"
+  },
+  "cinematic/keeper.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya voluntarily taking position in the central keeper ring, ten rose-gold channels attaching to her hands and mantle, solemn responsibility, cosmic memory architecture. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-4d0d5ee1-a695-4520-a793-4a9cc6062699.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 309539,
+    "sha256": "062aa1e870a207b6836e086744677385380e53dec90c7a0491288298af915614"
+  },
+  "cinematic/reconstruction.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Artificial memory realm automatically reconstructing: fragmented sunset towers and ocean streets reassembling along a luminous geometric lattice, no characters.",
+    "reference_assets": [],
+    "source_filename": "exec-7b20a363-62af-4c9e-8553-9b5813789748.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 260803,
+    "sha256": "7e47115f33c9854376bb0fcefc1281c60b9bd5a66dd148f0acbda41789fe3127"
+  },
+  "cinematic/cycle-begin.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. An enormous artificial reality resetting, concentric luminous memory rings returning to alignment around an emerging crimson-sunset region, no text or numbers.",
+    "reference_assets": [],
+    "source_filename": "exec-cc6f8c36-5e14-4a1e-a5e0-f9fbea2d662e.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 268519,
+    "sha256": "9af7f9d32bb5b672b6c922ddcb3f06d9c11508f966b59dd6902aa68326372492"
+  },
+  "cinematic/soul-awakening.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. First-person mysterious consciousness awakening over still luminous water, faint anonymous hand silhouette and scattered memory lights, no identifiable player gender or face.",
+    "reference_assets": [],
+    "source_filename": "exec-29be822f-2cbe-4e99-9ec8-0259634e9318.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 196158,
+    "sha256": "5d2fee59ea839f340f0c038ac5bd24ef6a8afaea0cfcecbcc253194e1e5ead62"
+  },
+  "cinematic/identity-not-found.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Abstract registration mechanism failing to classify a tiny anonymous luminous soul: empty concentric frames and a broken geometric scan lattice, no text, no letters, no numbers.",
+    "reference_assets": [],
+    "source_filename": "exec-2a198087-8c55-4525-a861-f9a88379d3e5.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 227492,
+    "sha256": "ea0bcc69f2d55d8d53e5c41c3a3971a82174cc16fa25e206e2068f3cf9c44988"
+  },
+  "cinematic/unbound-awakening.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Small anonymous emergent soul made of many faint mismatched memory traces coalescing into a subtle human silhouette, vulnerable and mysterious, not a god or powerful warrior.",
+    "reference_assets": [],
+    "source_filename": "exec-eb634bbc-36d2-4b24-8f42-70f84ce2efec.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 220725,
+    "sha256": "12128ba2a4d362bc8b22a96aa0f36bdbdbd24053459012328b022aed55f1a962"
+  },
+  "cinematic/first-memory-world.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya appearance at a luminous threshold overlooking reconstructed Solenne, established pink-haired design, inviting hand, crimson sunset behind, subtle imperfect boundary. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-394c1414-d400-403b-ad48-867537a16c6b.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 256903,
+    "sha256": "f8c1a9634f95e08b5d3f18f36c5ab5d8a0bfe5fce0e66f76b2d7540e747aff5c"
+  },
+  "cinematic/cycle-records.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Vast archive of innumerable repeating memory slabs with abstract marks but no readable text, near-total cosmic darkness around them, six highlighted recent records.",
+    "reference_assets": [],
+    "source_filename": "exec-0025bcc2-af18-4a12-84cc-06991b731910.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 201583,
+    "sha256": "d29850265bd3deee276e1f507d236ef1ad5a85c63e6db1238dc1fbaf8d98181c"
+  },
+  "cinematic/cycle-discovery.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Apparent Meyaya at the Nullis record vault freezing in disbelief, pink hair and established white-gold costume, trembling hand over an ancient record, no Veyra visual reveal yet. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ],
+    "source_filename": "exec-9222a8e7-9cf6-48ad-9fd2-71b3a3f04417.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 240302,
+    "sha256": "e7e0e16c0de9a55e8e33c1f7b4ca85351278df295efb93810bb23dac5c959879"
+  },
+  "cinematic/cycle-breakdown.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Apparent Meyaya collapsing emotionally at the record vault, pink-haired established appearance, shaking hands and tears, fear grief and humiliation, no transformation or black hair yet. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ],
+    "source_filename": "exec-ca5ea479-b310-4723-8a25-40f188c6c06d.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 254325,
+    "sha256": "bdc528405feb58a36e3de29e13f0cf947da29565ce6244cecc39999cce54b1e4"
+  },
+  "cinematic/forgotten-cycles.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Apparent Meyaya alone beneath immense repeated memory records, pink-haired established appearance, folded page held to chest, grief mixed with realization that the keeper stayed too. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ],
+    "source_filename": "exec-83f56f5b-0dc3-413f-889f-ac40565bd726.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 259471,
+    "sha256": "1bde804e0b57efd58a95af36db6ff19a7da1e00576388deaf2a31f1c05d37e3a"
+  },
+  "cinematic/traveler-traces.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Ancient archive records with layered anonymous traveler silhouettes and different incomplete handprints joining into one anomalous trace, no readable text.",
+    "reference_assets": [],
+    "source_filename": "exec-affe7408-b6dc-4b76-9710-ee8949550149.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 233538,
+    "sha256": "33b98aec7f871baf081d6921d533b797131875213c00506f7404e73c35888458"
+  },
+  "cinematic/memory-core.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Premium Memory Core establishing shot: ten reconstructed memory regions suspended around a vast central artificial mechanism, white-gold lattice and crimson restricted center, no characters.",
+    "reference_assets": [],
+    "source_filename": "exec-a0b24da0-00ef-4791-a912-301df734d3a8.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 283172,
+    "sha256": "821128d5c0e53f1947adb0c1e3379ee53ef24e27b62c880e22d9a8848a9fb282"
+  },
+  "cinematic/anchors-converge.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Nine distinct glowing memory fragments orbit a tenth empty central socket in an immense geometric Memory Core, cinematic close perspective, no text.",
+    "reference_assets": [],
+    "source_filename": "exec-59f135b3-3d10-41bb-a135-7a8a1489fbf6.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 297643,
+    "sha256": "7920877ea2f5665d81895530230a0b44caae7a3dc7990ca0eae9de9d865aaabd"
+  },
+  "cinematic/final-anchor.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. An anonymous human hand placing the tenth luminous anchor component into a central socket, nine fragments around it, apparent golden doorway just beginning to form.",
+    "reference_assets": [],
+    "source_filename": "exec-095d3dcf-c95f-4a11-9fe2-7bd4be3d756d.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 230954,
+    "sha256": "0e52ee5d18a01bd19f56a3c9dca121f39964fe5f45da91d070fae70fc64316de"
+  },
+  "cinematic/false-gate.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. An immense luminous false gateway rising inside the Memory Core, beautiful deceptive promise, beyond the doorway is the same room, no text.",
+    "reference_assets": [],
+    "source_filename": "exec-8f159ab7-8021-4c21-8646-5f477c50ca81.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 255231,
+    "sha256": "6cb05fdea35d25e326ef5a0436f23d716d4061b25dbba1cf33bfdddc49e76126"
+  },
+  "cinematic/gate-collapse.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. The false golden gateway peeling away into memory filaments, revealing a geometric prison seal beneath, ten restraints connected to the center, dramatic revelation.",
+    "reference_assets": [],
+    "source_filename": "exec-cd098094-e05d-437e-b0f1-d198762cc8e4.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 269517,
+    "sha256": "c672babcbde5a817c993627a46144017474f78a18186336bf846c4bb17ddc6f4"
+  },
+  "cinematic/anchor-seal.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. The ten memory fragments visibly revealed as anchor restraints of one prison, crystalline mechanism seen at wide three-quarter angle, pink-gold to crimson conduits, no text.",
+    "reference_assets": [],
+    "source_filename": "exec-376e4ad3-5653-492c-ae35-6fd7b3340684.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 264661,
+    "sha256": "5125e00109e931324aded0b70d97061a40592045e53b56fe077e79b0f6c73f76"
+  },
+  "cinematic/imprisoned-veyra.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Premium intimate view of real Veyra physically imprisoned behind the keeper ring, extremely long black hair flowing through constrained crimson light, pale skin, familiar dark costume. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-d224d1ee-3b6b-4eb9-9e3b-e06a67639c7a.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 278572,
+    "sha256": "6481378f6033fac4e51923034b6ec12792b9618913e012c05bcea695da57c541"
+  },
+  "cinematic/core-records.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya and revealed Veyra facing each other surrounded by innumerable abstract cycle records within the broken Memory Core, Veyra holds a folded record, grief and tension. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-73b29dc6-e566-4552-a768-f638edd38ca7.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 293305,
+    "sha256": "9d410f68f7daa512018456e10cc1c95807171986cf6b9b46b46bc366ad29f707"
+  },
+  "cinematic/unbound-reveal.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. A small anonymous human soul at the Memory Core, many residual memory threads converge into it from ancient cycles, Meyaya and Veyra look on, vulnerable witness not cosmic fighter. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-20d6b9a3-2828-40a1-a68e-5c5c4aa4463b.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 273710,
+    "sha256": "4fb9671383f835b0ffa3dca5894a90ad3c0dfae0599c438f07943b61abeb941f"
+  },
+  "cinematic/meyaya-explains.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Real Meyaya at the damaged keeper mechanism explaining her sacrifice, exhausted pink-haired established design, white gold and rose channels, Veyra listening at a distance. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-de56283b-85f9-4b9a-a5d8-fd90f41f9c71.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 276018,
+    "sha256": "fd5d9e294f7a454e80d8edca576fccd19513c9ca42dc851f36821550aa02947d"
+  },
+  "cinematic/seal-break.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Ten anchor restraints around the artificial Memory Core breaking cleanly, central containment opens, crimson energy becomes accessible, no generic explosion.",
+    "reference_assets": [],
+    "source_filename": "exec-2cbc5b73-c78b-444c-8c00-3a7158f6d109.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 265517,
+    "sha256": "b688ac34304f5e491cd3d58656f3c48d4deb976b490eea4f68d316f4709b3ea2"
+  },
+  "cinematic/veyra-release.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra stepping free of the broken prison, extremely long black hair and same elegant black costume, projection and body reunited as one figure, no new armor. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-f146f53d-8dd7-4f61-8e11-8b1d6b49e831.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 294430,
+    "sha256": "0d5f133fcc945fb05dd07dc374d84e697dbe7536f63de5e9fa57756c7ff66e71"
+  },
+  "cinematic/veyra-power.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra newly able to channel unrestricted erasure from outside the prison, vast dark-crimson cosmic currents gathering around her unchanged adult character design, solemn danger. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-8d67dd3a-0727-47e2-9551-e9a7e25599b1.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 287997,
+    "sha256": "ac6e404d96600529d13152294f072abefafbb79edb34a21bbe9ff11c26ec8d79"
+  },
+  "cinematic/real-transition.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya and Veyra passing out through a broken artificial boundary into a living natural star-filled universe, shattered memory construct receding behind them. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-a5b5fd12-f35a-4ffa-9fc8-15d729a9bfba.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 290037,
+    "sha256": "44b278fbc9978904ec9adb5a1a9bf1229344fe052506018f85734280de868d66"
+  },
+  "cinematic/witness.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Tiny anonymous player silhouette distant from Meyaya and Veyra in the real universe, clearly an observer with no cosmic attacks, overwhelming scale and solemn judgment. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-a4871f0b-3beb-4eb1-8c21-3b80233a1a1c.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 290629,
+    "sha256": "9a438b6c7e8d032db7fffe42152331f96c702f9e14be787c2f682626c33f036a"
+  },
+  "cinematic/final-choice.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Dramatic choice tableau, Meyaya at left with rose white gold formation light and Veyra at right with black white crimson erasure, equal dignity, shared natural cosmic horizon, no lettering. The two supplied images are CHARACTER DESIGN REFERENCES ONLY, not edit targets. Preserve the pink-haired adult Meyaya and very-long-black-haired adult Veyra faces, proportions and costumes when present; never copy the reference text or UI. Generate only characters explicitly named in this scene.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-c9fbc54a-c909-4aea-a097-37e2f5123bb6.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 314573,
+    "sha256": "2d63658a75bebc334fd74387c0279984b16459378e9acd9bd44e0066c7ed7acc"
+  },
+  "cinematic/cosmic-battlefield.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Natural real-universe battlefield, immense galaxies and stellar distances, Meyaya and Veyra as two small distinct figures facing each other, no prison architecture. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Only the named characters.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-b1a2af7a-4eb1-47a7-9a3a-12f8d66f6a42.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 293748,
+    "sha256": "56d6ebf5fc74a6dceacacc70070f0c418808e4f5ceec6194bb5faade7995f4aa"
+  },
+  "cinematic/meyaya-origin.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya channels Origin in real space, elegant pink-haired established character building crystalline bridges and luminous matter across a stellar rupture, no new costume design. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ],
+    "source_filename": "exec-33363ee3-243a-4d90-b2f5-4c8d3f1df3d6.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 266153,
+    "sha256": "d043c5a0218e4f86508f29a371c98bfa3df932971c633bfecebf28771fd49886"
+  },
+  "cinematic/veyra-erasure.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra channels Erasure in real space, black-haired established character dissolving crystalline structures into absence, dark crimson edges, not fire or explosion. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-56999ff5-e9e7-481d-87c3-97c03f7c4f1a.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 287270,
+    "sha256": "0a7fa885cd2f252cd6301c29a2394e7919831b5a9647906b0593ca54879356f1"
+  },
+  "cinematic/cosmic-collision.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Creation and destruction meeting across immense real-universe distances, Meyaya and Veyra directing contrasting forces, stars and space beginning to fracture, cinematic scale. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Only the named characters.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-78d3c8d7-f2c1-4d03-8ccf-5d413ba4e3d9.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 277749,
+    "sha256": "5176a9af2ace19cb0d13dbe982a08124917a21be18ab71fc62224ba675153119"
+  },
+  "cinematic/erasure-medium.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra draws dark crimson Erasure inward into her own body, streams from surrounding reality converge on her, purposeful sacrifice rather than armor power-up. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-982bad49-86b1-4a86-bc8b-3088ecf0060e.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 290334,
+    "sha256": "6ca2153e04c0f8f43fcb98cb5bbed162f6db12e22d1f267ed4fd18fa698197ed"
+  },
+  "cinematic/veyra-unstable.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra body progressively losing physical stability, portions of pale skin and black-haired outline breaking into absence and crimson light, fully clothed, poignant not gore. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-938c3eb4-0450-426b-8410-fc03265d53dd.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 291811,
+    "sha256": "ad40df9f73b07efaf62d1821060746ce19e5c551a10fddf267588379aca1787c"
+  },
+  "cinematic/last-appeal.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya desperately reaching toward unstable Veyra to stop her self-sacrifice, Veyra calm and grieving, familiar designs, universe beginning to fail behind them. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Only the named characters.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png",
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-308ad9b9-ec8f-479d-a181-1004f6dec737.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 265460,
+    "sha256": "e5559d5644abeb78d6a5eb30dd4d99f7516141b9402857329db9e7edbe606585"
+  },
+  "cinematic/final-release.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Veyra final self-sacrificial release, her form disappearing as reality gradually ceases around it, no fireball and no expanding debris, immense restrained cosmic tragedy. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/veyra-profile.png"
+    ],
+    "source_filename": "exec-9395afe2-5706-4713-9217-68b1e6875639.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 283012,
+    "sha256": "f6546217f1285535f222f20aba425f054c55f9964bc065fdf1e6b54de0493bfb"
+  },
+  "cinematic/stars-vanish.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Stars disappearing one after another from the old universe, sweeping areas of absolute absence replacing luminous galaxies, no surviving people, no explosion.",
+    "reference_assets": [],
+    "source_filename": "exec-8a7c268a-d98e-4cf8-a9c2-9259625c518f.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 142286,
+    "sha256": "a556d371595248d8e82e447e765d76816a38a488886b3455fade3c049a65e8f1"
+  },
+  "cinematic/spacetime-ends.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Matter and the last spatial structure ceasing, a nearly empty frame with last vanishing filaments at its edges, no survivors and no new cosmos.",
+    "reference_assets": [],
+    "source_filename": "exec-e4281de0-3789-4eb6-bde7-23321197a1f8.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 158680,
+    "sha256": "5fd7529721cd840ff5f515bd028500aa690623e128299e4ecb7db0cc9eeb1fb8"
+  },
+  "cinematic/last-origin.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. After old universe ends, Meyaya barely remains as a fragile pink-white figure holding the last remnant of formation light, no player or Veyra, no intact old worlds. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ],
+    "source_filename": "exec-d47b6cb8-a25a-43a3-b189-8137f84ab70f.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 239965,
+    "sha256": "decc850185ab48cb1e608c0ad4f84c4bb03ebf28a8610e3393e806cda7799102"
+  },
+  "cinematic/new-decision.jpg": {
+    "generator": "OpenAI built-in ImageGen",
+    "generated_on": "2026-10-08",
+    "prompt": "Use case: illustration-story. Standalone premium anime fantasy RPG cinematic artwork, painterly detailed illustration, landscape 16:9 composition, sophisticated lighting and same visual quality as approved campaign art. No text, no letters, no numbers, no captions, no UI, no watermarks, no collage. Meyaya gently releasing shattered memory shapes instead of rebuilding them, last tiny Origin light in her hands, poignant acceptance and resolution, no other survivors. Reference images supply character face/hair/clothing design ONLY. Create the scene described above in a NEW composition. No thrones, no cathedral, no standing portrait, no copied reference backgrounds. Exactly ONE character, the named character only.",
+    "reference_assets": [
+      "D:/Peoject/Meyaya/bot/assets/duels/meyaya-profile.png"
+    ],
+    "source_filename": "exec-a3871886-0304-4d61-b3ff-1fcbc70ee0eb.png",
+    "dimensions": [
+      1024,
+      576
+    ],
+    "bytes": 241605,
+    "sha256": "0c18cda641d3d9292749b07c6067b2e077905a8da7b96766c2b2067d98921e95"
+  }
+}

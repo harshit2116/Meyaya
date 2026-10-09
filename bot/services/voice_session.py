@@ -166,6 +166,7 @@ class VoiceChatSession:
         self.listening_enabled = True
         self._voice_budget_task = None
         self._voice_budget_registered = False
+        self._familiarity_task = None
 
     @property
     def connected_channel_id(self) -> int | None:
@@ -273,6 +274,10 @@ class VoiceChatSession:
                 logger.exception("Voice provider shutdown failed")
             self._gemini = None
 
+        if self._familiarity_task is not None:
+            self._familiarity_task.cancel()
+            await asyncio.gather(self._familiarity_task, return_exceptions=True)
+            self._familiarity_task = None
         self.play_source.close()
 
         if self._end_of_utterance_handle is not None:
@@ -492,10 +497,11 @@ class VoiceChatSession:
             return
         self._user_is_speaking = True
         self.diagnostics.increment("interruptions")
-        asyncio.create_task(
-            self._record_voice_conversation(user_id),
-            name=f"meyaya-voice-state-{user_id}",
-        )
+        if self._familiarity_task is None or self._familiarity_task.done():
+            self._familiarity_task = asyncio.create_task(
+                self._record_voice_conversation(user_id),
+                name=f"meyaya-voice-state-{user_id}",
+            )
 
         # Barge-in only needs to discard queued model audio. VoiceRecvClient.stop()
         # stops BOTH playback and inbound listening, which made the receiver go
@@ -528,6 +534,17 @@ class VoiceChatSession:
                 pcm24,
                 self._playback_state,
             )
+            client = self.voice_client
+            if (
+                client is not None
+                and client.is_connected()
+                and not client.is_playing()
+                and not client.is_paused()
+            ):
+                # A failed Discord audio thread otherwise leaves Gemini talking
+                # into a queue that nobody consumes for the rest of the call.
+                client.play(self.play_source)
+                self.diagnostics.increment("playback_restarts")
             self.play_source.push(pcm48)
             self.diagnostics.increment("gemini_output_chunks")
             if self.diagnostics.snapshot().get("gemini_output_chunks") == 1:
@@ -546,7 +563,7 @@ class VoiceChatSession:
 
         members = [(member.id, member.display_name) for member in channel.members if not member.bot]
         try:
-            async with self.bot.db_session() as session:
+            async with asyncio.timeout(3), self.bot.db_session() as session:
                 service = MeyayaSystemService(session)
                 lines = await service.voice_prompt_lines(self.guild_id, members)
                 lore = await ServerLoreRepository(session).list_current(self.guild_id, limit=12)
@@ -556,7 +573,7 @@ class VoiceChatSession:
                         "relevant:\n" + "\n".join(f"- {item.content}" for item in lore)
                     )
                 return lines
-        except SQLAlchemyError:
+        except (SQLAlchemyError, TimeoutError):
             logger.exception("Meyaya System state unavailable for voice; using base persona")
             return []
 
@@ -564,7 +581,7 @@ class VoiceChatSession:
         """Update familiarity once when a member begins a voice utterance."""
 
         try:
-            async with self.bot.db_session() as session:
+            async with asyncio.timeout(3), self.bot.db_session() as session:
                 service = MeyayaSystemService(session)
                 guild = self.bot.get_guild(self.guild_id)
                 member = guild.get_member(user_id) if guild else None
@@ -574,5 +591,5 @@ class VoiceChatSession:
                     display_name=member.display_name if member else None,
                 )
                 await session.commit()
-        except SQLAlchemyError:
+        except (SQLAlchemyError, TimeoutError):
             logger.exception("Failed to update Meyaya System voice familiarity")

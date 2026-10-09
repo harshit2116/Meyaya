@@ -358,7 +358,9 @@ class MeyayaBot(commands.Bot):
             raise ChatLimitReached("Meyaya chat commands are only available inside a server.")
         reserve_started = time.monotonic()
         with timing_stage('database_ms'), timing_stage('quota_ms'):
-            async with asyncio.timeout(8):
+            # Connection establishment, allowance lookup, reservation and commit
+            # all share this budget; cold connections need room for each step.
+            async with asyncio.timeout(15):
                 day = await self.usage.reserve(guild_id) if guild_id is not None else None
         reserve_ms = (time.monotonic() - reserve_started) * 1000
         if reserve_ms >= 250:
@@ -406,6 +408,10 @@ class MeyayaBot(commands.Bot):
         delay = time.monotonic() - checked_at
         if delay >= 1:
             logger.info("slow_message_gate moderation_ms=%.0f", delay * 1000)
+        # Temporary owner-only uwu veyra visual test; no command registration.
+        admin = self.get_cog("AdminCog")
+        if admin and await admin.handle_veyra_glitch_test(message):
+            return
         await self.process_commands(message)
 
     async def on_interaction(self, interaction):

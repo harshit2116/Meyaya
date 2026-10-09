@@ -81,7 +81,7 @@ CATEGORY_ORDER: tuple[str, ...] = (
 
 COMMAND_ORDER: dict[str, tuple[str, ...]] = {
     "Essentials": ("help", "profile", "nickname", "gif", "feedback"),
-    "Profile Studio": ("profilecheck", "aura", "palette", "duostyle", "callingcard", "room"),
+    "Profile Studio": ("profilecheck", "aura", "duostyle", "callingcard"),
     "Social": ("roast", "compliment", "rank", "impersonate"),
     "Social Reactions": (
         "hug",
@@ -106,10 +106,10 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
         "facepalm",
         "cry",
     ),
-    "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "caught", "scramble", "mostlikely", "8ball", "warninglabel"),
+    "Fun and Scores": ("ship", "bestiescore", "rate", "reddit", "duck", "caught", "scramble", "mostlikely", "8ball"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
-    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "rebirth", "versus", "bossfight", "guardianbattle"),
+    "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "rebirth", "dungeon", "versus", "bossfight", "guardianbattle"),
     "Relationships": ("marry", "marriage", "renewvows", "divorce"),
     "Single Player Games": ("escape", "detective", "personalitytest"),
     "Multiplayer Games": ("showdown", "survive", "excuse", "endgame"),
@@ -140,8 +140,6 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
 
 COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand("feedback", "feedback", "Join Pondside Lounge to report bugs or suggest features.", "Essentials"),
-    HelpCommand("warninglabel", "warninglabel [@member]", "Give a member fictional warnings, side effects, and handling instructions.", "Fun and Scores"),
-    HelpCommand("room", "room [@member]", "Imagine lighting, furniture, music, and a strange shelf object from profile colors.", "Profile Studio"),
     HelpCommand("serversetup", "serversetup", "Set up chat access, automatic replies, and moderation with a guided menu.", "Server Admin"),
     HelpCommand("serverdashboard", "serverdashboard", "See this server's daily allowance, remaining messages, activity, and settings.", "Server Admin"),
     HelpCommand(
@@ -154,12 +152,6 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "aura",
         "aura [member]",
         "Turn a member's profile colors into a personal aura card.",
-        "Profile Studio",
-    ),
-    HelpCommand(
-        "palette",
-        "palette [member]",
-        "Build a color palette from a member's avatar and banner.",
         "Profile Studio",
     ),
     HelpCommand(
@@ -225,6 +217,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "rebirth", "rebirth", "Replace your fantasy build after confirmation. Available once every 24 hours.",
         "Fantasy / Profile",
     ),
+    HelpCommand("dungeon", "dungeon", "Begin or resume the Tenfold Descent. Earn soul XP and weapon enhancement across ten worlds.", "Fantasy / Profile"),
     HelpCommand(
         "versus", "versus <member>", "Challenge a member, or face Meyaya's adaptive final-boss encounter.",
         "Fantasy / Profile",

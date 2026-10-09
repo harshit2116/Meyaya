@@ -10,6 +10,7 @@ from bot.logging.telemetry import event
 from typing import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
+SEND_TIMEOUT_SECONDS = 10
 
 genai = None
 types = None
@@ -28,6 +29,7 @@ def _load_sdk() -> None:
             "google-genai SDK is not installed. Install dependency `google-genai` to use voice chat."
         ) from exc
     genai, types = sdk, sdk_types
+
 
 AudioCallback = Callable[[bytes], Awaitable[None]]
 InterruptCallback = Callable[[], Awaitable[None]]
@@ -147,7 +149,8 @@ class GeminiLiveSession:
         conn_cm = self._client.aio.live.connect(model=self.model, config=self._config())
         started = time.perf_counter()
         try:
-            session = await conn_cm.__aenter__()
+            async with asyncio.timeout(20):
+                session = await conn_cm.__aenter__()
         except Exception as exc:
             self._metric(
                 "voice_connect",
@@ -174,7 +177,8 @@ class GeminiLiveSession:
         self._session = None
         if conn_cm is not None:
             try:
-                await conn_cm.__aexit__(None, None, None)
+                async with asyncio.timeout(5):
+                    await conn_cm.__aexit__(None, None, None)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -186,7 +190,8 @@ class GeminiLiveSession:
         if client is None:
             return
         try:
-            await client.aio.aclose()
+            async with asyncio.timeout(5):
+                await client.aio.aclose()
         except Exception:
             logger.debug("Error closing Gemini async client", exc_info=True)
         finally:
@@ -343,7 +348,8 @@ class GeminiLiveSession:
                     # The receiver may have replaced the socket while we waited.
                     if session is not self._session:
                         continue
-                    await session.send_realtime_input(**payload)
+                    async with asyncio.timeout(SEND_TIMEOUT_SECONDS):
+                        await session.send_realtime_input(**payload)
                 return
             except asyncio.CancelledError:
                 raise
@@ -393,13 +399,19 @@ class GeminiLiveSession:
         while self._running:
             session = await self._wait_for_session()
             try:
+                received = False
                 async for event in session.receive():
+                    received = True
                     if not self._running or session is not self._session:
                         break
                     await self._process_event(event)
                 # The Google SDK ends each ``receive()`` iterator when one model
                 # turn completes. The underlying Live socket remains open, so
                 # loop back and receive the next turn on the same session.
+                if not received and self._running and session is self._session:
+                    # A closed stream may end cleanly rather than raise. Avoid
+                    # a tight loop that starves Discord playback and all chat.
+                    await self._reconnect(session, "empty receive stream")
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

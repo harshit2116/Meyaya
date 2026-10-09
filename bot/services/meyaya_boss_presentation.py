@@ -74,12 +74,14 @@ class BossPresentation:
             else self.message.edit
         )
         try:
-            message = await sender(**kwargs)
-        except discord.HTTPException:
+            async with asyncio.timeout(15):
+                message = await sender(**kwargs)
+        except (discord.HTTPException, TimeoutError):
             if embed is None:
                 raise
             kwargs["embed"] = None
-            message = await sender(**kwargs)
+            async with asyncio.timeout(15):
+                message = await sender(**kwargs)
         self.message = message
         self.message_has_gif = kwargs["embed"] is not None
         self.view.cinematic_message = self.message

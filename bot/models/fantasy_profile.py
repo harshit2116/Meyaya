@@ -13,6 +13,8 @@ class FantasyProfile(Base):
     __table_args__ = (
         CheckConstraint("user_id > 0", name="ck_fantasy_user"),
         CheckConstraint("level >= 1 AND xp >= 0", name="ck_fantasy_progression"),
+        CheckConstraint("ending_route IS NULL OR ending_route IN ('meyaya','veyra')", name="ck_fantasy_worldline"),
+        CheckConstraint("weapon_level >= 0 AND weapon_level <= 10 AND highest_floor >= 0 AND highest_floor <= 10", name="ck_fantasy_campaign"),
         CheckConstraint(
             "max_hp > 0 AND hp >= 0 AND hp <= max_hp AND max_mp > 0 AND mp >= 0 AND mp <= max_mp",
             name="ck_fantasy_resources",
@@ -34,6 +36,11 @@ class FantasyProfile(Base):
     affinity_name: Mapped[str] = mapped_column(String(40), nullable=False)
     level: Mapped[int] = mapped_column(Integer, nullable=False)
     xp: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    weapon_level: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    highest_floor: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    ending_route: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    ending_chosen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ending_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rebirth_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )

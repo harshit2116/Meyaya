@@ -152,6 +152,12 @@ class ChatCog(commands.Cog):
     async def on_message(self, message: discord.Message) -> None:
         if self._closing_chats or message.author.bot:
             return
+        # Reserve the exact private-owner prototype trigger, including DMs,
+        # replies and active chat continuations. No AI work for this test.
+        from bot.services.veyra_glitch_test import is_veyra_glitch_test
+
+        if is_veyra_glitch_test(message):
+            return
         if self.bot.user is None:
             return
         if self.bot.chat_blacklist.is_blocked(

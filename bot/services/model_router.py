@@ -108,33 +108,54 @@ class ModelRouter(LLMProvider):
         try:
             async with asyncio.timeout(timeout_seconds if timeout_seconds is not None else 20):
                 return await self._generate_text_routed(
-                    system_instruction, user_message, history,
-                    max_output_tokens=max_output_tokens, timeout_seconds=timeout_seconds)
+                    system_instruction,
+                    user_message,
+                    history,
+                    max_output_tokens=max_output_tokens,
+                    timeout_seconds=timeout_seconds,
+                )
         except TimeoutError:
-            event("llm_route_deadline", timeout_seconds=timeout_seconds if timeout_seconds is not None else 20)
+            event(
+                "llm_route_deadline",
+                timeout_seconds=timeout_seconds if timeout_seconds is not None else 20,
+            )
             return None
 
     async def _generate_text_routed(
-        self, system_instruction, user_message, history=None, *,
-        max_output_tokens=None, timeout_seconds=None,
+        self,
+        system_instruction,
+        user_message,
+        history=None,
+        *,
+        max_output_tokens=None,
+        timeout_seconds=None,
     ) -> str | None:
         tier, provider = self.selected_provider()
-        result = await self._safe_text(
-            provider,
-            system_instruction,
-            user_message,
-            history,
-            max_output_tokens=max_output_tokens,
-            timeout_seconds=timeout_seconds,
-        )
-        if result is not None and result.strip():
-            return result
-
         fallback_tier = ModelTier.REASONING if tier is ModelTier.BALANCED else ModelTier.BALANCED
         fallback = self.fallback or self.providers[fallback_tier]
-        if fallback is provider or getattr(fallback, "model", None) == getattr(
-            provider, "model", None
-        ):
+        distinct = fallback is not provider and (
+            getattr(fallback, "provider_name", None),
+            getattr(fallback, "model", None),
+        ) != (getattr(provider, "provider_name", None), getattr(provider, "model", None))
+        budget = timeout_seconds if timeout_seconds is not None else 20
+        # Reserve time for recovery even when the primary socket never responds.
+        primary_budget = budget * 0.6 if distinct else budget
+        try:
+            async with asyncio.timeout(primary_budget):
+                result = await self._safe_text(
+                    provider,
+                    system_instruction,
+                    user_message,
+                    history,
+                    max_output_tokens=max_output_tokens,
+                    timeout_seconds=primary_budget,
+                )
+        except TimeoutError:
+            event("llm_primary_deadline", model=getattr(provider, "model", None))
+            result = None
+        if result is not None and result.strip():
+            return result
+        if not distinct:
             return result
         event(
             "llm_route_fallback",
