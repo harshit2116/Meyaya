@@ -35,7 +35,7 @@ from bot.services.fantasy_duel import DuelEngine, Fighter, RULES_VERSION
 from bot.services.fantasy_duel_renderer import render_duel
 from bot.repositories.fantasy_duels import FantasyDuelRepository
 from bot.views.fantasy_duel import DuelChallengeView, DuelResultView
-from bot.services.fantasy_guardian import bound_guardian
+from bot.services.fantasy_guardian import bound_guardian, GUARDIAN_PERSONALITIES
 from bot.services.guardian_render import guardian_card
 from bot.utils.command_context import CommandOutput, remember_command_result
 from bot.utils.embeds import meyaya_embed
@@ -758,34 +758,54 @@ class FantasyCog(commands.Cog):
 
     @commands.hybrid_command(description="View the soul-bound guardian linked to an awakening.")
     @commands.cooldown(1, 8, commands.BucketType.user)
-    async def guardian(self, ctx, member: discord.Member | None = None):
+    @discord.app_commands.describe(preview="Meet another companion without changing your bound guardian",
+                                   patron="View Meyaya or Veyra's exclusive sovereign summon")
+    async def guardian(self, ctx, member: FantasyProfileTarget | None = None,
+                       preview: Literal["hare", "cat", "axolotl", "kirin", "wolf", "serpent", "tanuki", "crane", "ferret", "bat", "fenrir", "seraph", "leviathan"] | None = None,
+                       patron: Literal["meyaya", "veyra"] | None = None):
         await ctx.defer()
-        member = member or ctx.author
-        profile = await self.get_profile(member.id)
+        if patron and member is not None:
+            raise commands.CommandError("Choose either a member or a patron to view.")
+        patron = patron or (member if isinstance(member, str) else None)
+        if patron:
+            profile = veyra_boss_profile() if patron == "veyra" else meyaya_boss_profile(self.bot.user.id)
+            member = SimpleNamespace(id=profile.user_id, display_name="Veyra" if patron == "veyra" else "Meyaya")
+        else:
+            member = member or ctx.author
+            profile = await self.get_profile(member.id)
         if profile is None:
             await ctx.send("Their soul has not awakened. Use `/awaken` before meeting a guardian.")
             return
-        g = bound_guardian(profile)
+        if preview and getattr(profile, "is_meyaya_boss", False):
+            raise commands.CommandError("Sovereign summons are exclusive to their patron. Preview with a player's awakening instead.")
+        g = bound_guardian(profile, preview_species=preview)
         remember_command_result(
             ctx,
             target_id=member.id,
             target_name=member.display_name,
             guardian=g.name,
+            summon_rarity=g.rarity,
+            summon_chance=g.summon_chance,
             affinity=g.affinity_name,
             guardian_hp=g.max_hp,
             guardian_mp=g.max_mp,
             blessing=g.blessing,
-            method="Stable companion derived from the saved awakening, not a daily draw.",
+            personality=GUARDIAN_PERSONALITIES[g.species][0],
+            preview=preview is not None,
+            method=("Companion preview only; the soul-bound guardian is unchanged." if preview else
+                    "Stable companion derived from the saved awakening, not a daily draw."),
         )
         embed = meyaya_embed(
             g.name,
-            f"{g.affinity_name} · {g.owner_class}\nHP {g.max_hp} · MP {g.max_mp}\nATK {g.attack} · DEF {g.defense} · SPD {g.speed}\n{g.blessing}: {g.blessing_text}\n{g.weakness}",
+            f"{g.affinity_name} · {g.owner_class}\nHP {g.max_hp} · MP {g.max_mp}\nATK {g.attack} · DEF {g.defense} · SPD {g.speed}\n{g.blessing}: {g.blessing_text}\n{g.weakness}\n\n{GUARDIAN_PERSONALITIES[g.species][0]}\n*{GUARDIAN_PERSONALITIES[g.species][1]}*"
+            + (f"\n\n**{g.rarity} · {g.summon_chance}**" if g.summon_chance else "")
+            + ("\n\nPreview only · Your bound companion is unchanged." if preview else ""),
             icon="✦",
         )
         data = None
         try:
             async with self.render_slots:
-                data = await image_work(guardian_card, g, member.display_name)
+                data = await image_work(guardian_card, g, member.display_name, preview=preview is not None)
         except Exception as error:
             self.report(error, "guardian_render")
         try:

@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     )
     gemini_voice: str = Field(default="Leda", alias="GEMINI_VOICE")
     ffmpeg_executable: str = Field(default="ffmpeg", alias="FFMPEG_EXECUTABLE")
+    badapple_cache_path: str = Field(
+        default="artifacts/badapple/frames.jsonl.gz", min_length=1, alias="BADAPPLE_CACHE_PATH"
+    )
+    badapple_fps: float = Field(default=1.0, ge=0.1, le=6, alias="BADAPPLE_FPS")
     jungkook_roleplay_avatar_url: str = Field(default="", alias="JUNGKOOK_ROLEPLAY_AVATAR_URL")
     alya_roleplay_avatar_url: str = Field(default="", alias="ALYA_ROLEPLAY_AVATAR_URL")
     gemini_live_system_instruction: str = Field(

@@ -2,32 +2,74 @@
   "version": 1,
   "guardians": [
     {
-      "id": "guardian_0",
-      "title": "Velvet Owl",
-      "type": "Dream spirit",
-      "blessing": "Reveals a fresh perspective",
-      "weakness": "Only gives advice in riddles"
+      "id": "guardian_hare",
+      "title": "Moonpetal Hare",
+      "type": "Moonlit messenger",
+      "blessing": "Recover HP, sharpen a strike and prepare evasion.",
+      "weakness": "No extra armour."
     },
     {
-      "id": "guardian_1",
-      "title": "Comet Fox",
-      "type": "Star companion",
-      "blessing": "Finds a clever shortcut",
-      "weakness": "Distracted by shiny things"
+      "id": "guardian_cat",
+      "title": "Cinder Kitten",
+      "type": "Hearth sentinel",
+      "blessing": "Focused strikes find weak spots; brief evasion.",
+      "weakness": "Lower physical defence."
     },
     {
-      "id": "guardian_2",
-      "title": "Moss Dragon",
-      "type": "Forest guardian",
-      "blessing": "Restores your patience",
-      "weakness": "Falls asleep in warm sunlight"
+      "id": "guardian_axolotl",
+      "title": "Tideglass Axolotl",
+      "type": "Tidepool healer",
+      "blessing": "A gentle blessing restores vitality.",
+      "weakness": "Lower attack power."
     },
     {
-      "id": "guardian_3",
-      "title": "Pearl Moth",
-      "type": "Moon guide",
-      "blessing": "Lights the next small step",
-      "weakness": "Refuses to work near loud music"
+      "id": "guardian_kirin",
+      "title": "Lantern Kirin",
+      "type": "Little oathkeeper",
+      "blessing": "Recover a little HP and raise a protective ward.",
+      "weakness": "Slower turn initiative."
+    },
+    {
+      "id": "guardian_wolf",
+      "title": "Rimefang Wolf",
+      "type": "Winter pathfinder",
+      "blessing": "Recover HP, sharpen a strike and prepare evasion.",
+      "weakness": "No extra armour."
+    },
+    {
+      "id": "guardian_serpent",
+      "title": "Ribbon Serpent",
+      "type": "Scarlet oathbinder",
+      "blessing": "Recover a little HP and raise a protective ward.",
+      "weakness": "Slower turn initiative."
+    },
+    {
+      "id": "guardian_tanuki",
+      "title": "Shrine Tanuki",
+      "type": "Keeper of small wishes",
+      "blessing": "A gentle blessing restores vitality.",
+      "weakness": "Lower attack power."
+    },
+    {
+      "id": "guardian_crane",
+      "title": "Duskfeather Crane",
+      "type": "Twilight wayfarer",
+      "blessing": "Focused strikes find weak spots; brief evasion.",
+      "weakness": "Lower physical defence."
+    },
+    {
+      "id": "guardian_ferret",
+      "title": "Starweft Ferret",
+      "type": "Thread of good fortune",
+      "blessing": "Recover HP, sharpen a strike and prepare evasion.",
+      "weakness": "No extra armour."
+    },
+    {
+      "id": "guardian_bat",
+      "title": "Velvet Bat",
+      "type": "Midnight listener",
+      "blessing": "Focused strikes find weak spots; brief evasion.",
+      "weakness": "Lower physical defence."
     }
   ]
 }

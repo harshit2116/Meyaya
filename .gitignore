@@ -9,6 +9,11 @@
 !/bot/private/personality.v1.json
 !/bot/private/gemini_persona.txt
 /tests/
+!/tests/
+/tests/*
+!/tests/test_badapple.py
+!/tests/test_help_catalog.py
+!/tests/test_command_presentation.py
 /test_*.py
 /*_test.py
 
@@ -43,6 +48,7 @@ htmlcov/
 coverage.xml
 
 # Runtime data and backups
+/artifacts/badapple/
 /tools/
 /logs/
 /backups/

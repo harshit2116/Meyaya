@@ -8,6 +8,7 @@ from random import Random
 import math
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from bot.services.celestial import definitions
+from bot.services.fantasy_guardian import COMMON_SPECIES
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets" / "celestial"
 SIZES = {
@@ -17,12 +18,7 @@ SIZES = {
     "summon": (1000, 740),
     "guardian": (1000, 620),
 }
-GUARDIANS = {
-    "Velvet Owl": "owl",
-    "Comet Fox": "fox-head",
-    "Moss Dragon": "dragon-head",
-    "Pearl Moth": "star-swirl",
-}
+GUARDIANS = {entry[0]: entry[1] for entry in COMMON_SPECIES}
 
 
 @lru_cache(maxsize=24)
@@ -277,7 +273,7 @@ def guardian(image, d, r):
     f = dict(r.fields)
     accent = "#94e1cd"
     label(d, (36, 124, 925, 58), r.title, 40, accent)
-    icon = load_art(ASSETS / "icons" / (GUARDIANS.get(r.title, "owl") + ".png"))
+    icon = load_art(ASSETS.parent / "guardians" / (GUARDIANS.get(r.title, "hare") + ".png"))
     d.ellipse((55, 198, 365, 508), outline=accent, width=2)
     d.ellipse((75, 218, 345, 488), outline="#37655f", width=1)
     if icon:
@@ -290,7 +286,7 @@ def guardian(image, d, r):
     label(
         d,
         (400, 577, 550, 22),
-        "Icon: Lorc / game-icons.net / CC BY 3.0 (resized)",
+        "Original anime companion illustration",
         14,
         "#8cb7ae",
         minimum=14,

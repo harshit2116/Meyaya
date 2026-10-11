@@ -6,11 +6,12 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageOps
 from bot.services.fantasy_duel_renderer import fit
 from bot.services.fantasy_render import rgb, blend
+from bot.services.fantasy_guardian import ART_SPECIES, GUARDIAN_PERSONALITIES
 
 
-@lru_cache(maxsize=4)
+@lru_cache(maxsize=len(ART_SPECIES))
 def _illustration(species):
-    if species not in {"owl", "fox", "dragon", "moth"}:
+    if species not in ART_SPECIES:
         raise ValueError("Unknown guardian species")
     path = Path(__file__).resolve().parents[1] / "assets" / "guardians" / f"{species}.png"
     with Image.open(path) as source:
@@ -19,16 +20,13 @@ def _illustration(species):
     if not bounds:
         raise ValueError("Empty guardian illustration")
     art = art.crop(bounds)
-    # The fox illustration faces right; normalise the arena's enemy-facing view.
-    if species == "fox":
-        art = ImageOps.mirror(art)
     art.thumbnail((512, 512), Image.Resampling.LANCZOS)
     return art
 
 
 def creature(guardian, size=280, *, back=False):
     # The arena mirrors the local portrait to face the other creature.
-    # Copy before resizing: the four cached masters are never mutated.
+    # Copy before resizing: cached masters are never mutated.
     try:
         art = _illustration(guardian.species).copy()
     except (OSError, ValueError):
@@ -37,7 +35,7 @@ def creature(guardian, size=280, *, back=False):
         art = ImageOps.mirror(art)
     art.thumbnail((size - 12, size - 12), Image.Resampling.LANCZOS)
     alignment = getattr(guardian, "alignment", "")
-    if alignment in {"meyaya", "veyra"}:
+    if alignment in {"meyaya", "veyra"} and guardian.rarity != "Sovereign":
         # Local material tint; preserve the illustrated anatomy and alpha edges.
         alpha = art.getchannel("A")
         tinted = ImageOps.colorize(
@@ -70,7 +68,7 @@ def _fallback_creature(guardian, size=280, *, back=False):
     c = rgb(guardian.color)
     light, dark = blend(c, (255, 248, 235), 0.5), blend(c, (25, 20, 43), 0.5)
     # Authored silhouettes per species; rendered at 360 then antialiased.
-    if guardian.species == "fox":
+    if guardian.species in {"wolf", "ferret", "fenrir"}:
         d.polygon(((110, 205), (20, 210), (25, 130), (100, 160)), fill=dark)
         d.ellipse((105, 165, 282, 309), fill=c, outline=dark, width=5)
         d.polygon(
@@ -81,14 +79,14 @@ def _fallback_creature(guardian, size=280, *, back=False):
         )
         d.ellipse((112, 99, 282, 232), fill=c, outline=dark, width=5)
         d.polygon(((120, 170), (196, 210), (274, 170), (227, 230), (164, 230)), fill=light)
-    elif guardian.species == "dragon":
+    elif guardian.species in {"bat", "seraph", "origin_sovereign", "erasure_sovereign"}:
         d.polygon(((125, 175), (34, 72), (26, 228), (120, 245)), fill=dark)
         d.polygon(((248, 175), (328, 72), (335, 228), (248, 245)), fill=dark)
         d.ellipse((114, 154, 269, 321), fill=c, outline=dark, width=5)
         d.ellipse((133, 185, 250, 298), fill=light)
         d.polygon(((127, 133), (121, 45), (165, 94), (240, 86), (285, 45), (275, 150)), fill=dark)
         d.ellipse((116, 87, 279, 211), fill=c, outline=dark, width=5)
-    elif guardian.species == "owl":
+    elif guardian.species == "tanuki":
         d.ellipse((57, 140, 161, 290), fill=dark)
         d.ellipse((223, 140, 327, 290), fill=dark)
         d.ellipse((102, 110, 280, 312), fill=c, outline=dark, width=5)
@@ -96,22 +94,50 @@ def _fallback_creature(guardian, size=280, *, back=False):
         for x in (149, 232):
             d.ellipse((x - 42, 112, x + 42, 197), fill=light)
         d.polygon(((179, 178), (198, 178), (188, 201)), fill="#dfb76b")
+    elif guardian.species in {"hare", "cat", "kirin"}:
+        d.ellipse((102, 170, 280, 315), fill=c, outline=dark, width=5)
+        if guardian.species == "hare":
+            for x in (155, 225):
+                d.ellipse((x - 22, 20, x + 22, 170), fill=c, outline=dark, width=4)
+                d.ellipse((x - 11, 38, x + 11, 146), fill=light)
+        elif guardian.species == "cat":
+            d.arc((224, 164, 340, 310), 250, 490, fill=dark, width=20)
+            for x in (130, 235):
+                d.polygon(((x - 20, 145), (x, 70), (x + 45, 140)), fill=c, outline=dark)
+        else:
+            for x, direction in ((145, -1), (235, 1)):
+                d.line((x, 135, x + direction * 15, 45), fill=light, width=8)
+                d.line((x + direction * 10, 90, x + direction * 38, 62), fill=light, width=6)
+        d.ellipse((110, 110, 274, 240), fill=c, outline=dark, width=5)
+        d.ellipse((151, 192, 232, 247), fill=light)
+        if guardian.species == "kirin":
+            d.ellipse((161, 258, 220, 302), fill=light, outline=dark, width=3)
+    elif guardian.species == "axolotl":
+        d.arc((172, 172, 329, 332), 270, 490, fill=c, width=36)
+        d.ellipse((111, 165, 260, 312), fill=c, outline=dark, width=5)
+        for x, direction in ((111, -1), (260, 1)):
+            for y in (124, 153, 182):
+                d.line((x, 165, x + direction * 55, y), fill=light, width=12)
+        d.ellipse((104, 108, 271, 226), fill=c, outline=dark, width=5)
+        for x in (114, 237):
+            d.ellipse((x - 14, 267, x + 14, 316), fill=light)
+    elif guardian.species in {"serpent", "leviathan"}:
+        d.arc((65, 160, 296, 325), 0, 300, fill=c, width=38)
+        d.arc((110, 90, 240, 235), 150, 360, fill=c, width=32)
+        d.ellipse((105, 55, 225, 135), fill=c, outline=dark, width=4)
+        d.polygon(((205, 110), (285, 150), (240, 183)), fill=light)
+    elif guardian.species == "crane":
+        d.ellipse((130, 163, 277, 245), fill=c, outline=dark, width=4)
+        d.line((151, 191, 128, 89), fill=c, width=23)
+        d.ellipse((108, 65, 153, 105), fill=light)
+        d.polygon(((110, 82), (58, 98), (109, 100)), fill=dark)
+        d.polygon(((178, 185), (288, 65), (315, 171), (250, 213)), fill=light)
+        for x in (177, 222):
+            d.line((x, 235, x - 14, 322), fill=dark, width=6)
     else:
-        for bounds in (
-            (18, 61, 176, 232),
-            (193, 61, 351, 232),
-            (38, 210, 178, 318),
-            (191, 210, 332, 318),
-        ):
-            d.ellipse(bounds, fill=c, outline=light, width=5)
-        for x in (97, 272):
-            d.ellipse((x - 21, 143, x + 21, 185), fill=dark)
-        d.ellipse((164, 124, 209, 307), fill=dark)
-        d.ellipse((151, 97, 221, 168), fill=light)
-        d.line((169, 111, 137, 57), fill=light, width=5)
-        d.line((203, 111, 235, 57), fill=light, width=5)
+        raise ValueError("Unknown guardian species")
     if not back:
-        for x in ((172, 199) if guardian.species == "moth" else (150, 235)):
+        for x in ((127,) if guardian.species == "crane" else (150, 235)):
             d.ellipse((x - 7, 147, x + 7, 169), fill="#221f35")
             d.ellipse((x - 3, 149, x + 1, 154), fill="white")
     else:
@@ -128,13 +154,16 @@ def png(image):
     return data
 
 
-def guardian_card(g, owner):
+def guardian_card(g, owner, *, preview=False):
     image = Image.new("RGB", (1000, 660), "#151626")
     d = ImageDraw.Draw(image)
     for y in range(660):
         d.line((0, y, 1000, y), fill=blend((17, 20, 35), rgb(g.color), 0.08 + 0.18 * (1 - y / 660)))
     d.rounded_rectangle((20, 20, 980, 640), radius=24, outline=g.color, width=2)
-    fit(d, (500, 53), "MEYAYA / SOUL-BOUND GUARDIAN", 22, width=900)
+    header = "MEYAYA / COMPANION PREVIEW" if preview else "MEYAYA / SOUL-BOUND GUARDIAN"
+    if g.summon_chance:
+        header += f" · {g.rarity.upper()} · {g.summon_chance}"
+    fit(d, (500, 53), header, 22, width=900)
     art = creature(g, 340)
     image.paste(art, (60, 180), art)
     fit(d, (245, 127), owner, 28, width=375)
@@ -147,8 +176,8 @@ def guardian_card(g, owner):
         (337, g.blessing),
         (375, g.blessing_text),
         (430, f"Trade-off: {g.weakness}"),
-        (490, "Strike / Affinity Pulse / Guard / Blessing"),
-        (540, "Challenge a member with /guardianbattle"),
+        (490, GUARDIAN_PERSONALITIES[g.species][0]),
+        (540, '"' + GUARDIAN_PERSONALITIES[g.species][1] + '"'),
     ):
         fit(
             d,
@@ -161,7 +190,9 @@ def guardian_card(g, owner):
     fit(
         d,
         (500, 611),
-        "One awakening · one companion · temporary battle resources",
+        ("Preview only · Your bound companion is unchanged" if preview else
+         f"Exclusive sovereign · Bound to {g.alignment.title()} alone" if g.rarity == "Sovereign" else
+         "One awakening · one companion · A little courage beside your soul"),
         17,
         color="#bcb5cc",
         width=920,

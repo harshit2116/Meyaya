@@ -202,8 +202,8 @@ COMMANDS: tuple[HelpCommand, ...] = (
     ),
     HelpCommand(
         "guardian",
-        "guardian [member]",
-        "View the soul-bound guardian linked to an awakening.",
+        "guardian [member/patron] [preview]",
+        "View your soul-bound summon, rare previews, or a patron's exclusive guardian.",
         "Fantasy / Profile",
     ),
     HelpCommand(

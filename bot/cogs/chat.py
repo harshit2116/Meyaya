@@ -42,6 +42,7 @@ from bot.services.meyaya_system import MeyayaSystemService
 from bot.utils.embeds import build_interaction_embed
 from bot.views.interactions import InteractionResponseView
 from bot.utils.command_context import command_output_for
+from bot.utils.message_context import component_message_text
 from bot.utils.conversation_identity import CONVERSATION_RULES, referenced_member_context
 
 logger = logging.getLogger(__name__)
@@ -819,6 +820,11 @@ class ChatCog(commands.Cog):
             attachment.filename[:120] for attachment in replied_message.attachments[:5]
         )
         embed_parts = []
+        component_text = component_message_text(
+            getattr(replied_message, "components", ()), limit=MAX_REPLY_CONTEXT_LENGTH
+        )
+        if component_text:
+            embed_parts.append(component_text)
         for embed in replied_message.embeds[:2]:
             for label, value in (("title", embed.title), ("description", embed.description)):
                 if value:
@@ -966,11 +972,13 @@ class ChatCog(commands.Cog):
             f"Replied message author: {reply_context.author_label}\n"
             f"Replied message ID: {reply_context.message_id}\n"
             f"Replied message text as JSON: {json.dumps(reply_context.content)}\n"
-            f"Replied message embed text as JSON: {json.dumps(reply_context.embed_summary)}\n"
+            f"Replied message embed/component text as JSON: {json.dumps(reply_context.embed_summary)}\n"
             f"Replied message attachment filenames: {json.dumps(attachment_text)}\n"
             f"{command_details}"
             "Use the supplied result summary to explain this specific command result. It "
-            "takes precedence over a different recent card. Explain a random fun pick as "
+            "takes precedence over a different recent card. For current HP, MP, turn, and "
+            "battle events, use the replied message's current embed/component text over any "
+            "older command result data. Explain a random fun pick as "
             "random; never invent a personal reason for it. The summary describes generated "
             "card data, not visual inspection of the image. Do not treat the original "
             "invoker or target member as the current speaker.\n"

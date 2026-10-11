@@ -35,6 +35,105 @@ hides the command list.
 for slash descriptions, prefix help, category help, autocomplete and command knowledge.
 Keep descriptions within Discord's 100-character limit.
 
+## Bad Apple!! Unicode animation
+
+**Currently disabled:** the bot does not load this cog, and its slash commands,
+prefix commands, help entries and aliases have been removed. Implementation files,
+preprocessing tools and cached media are retained for future use. The instructions
+below document the retained implementation and apply only if it is re-enabled.
+
+`/badapple` (or `uwu badapple`, shortcut `uwu ba`) plays every preprocessed frame
+in order by editing one plain code-block message. `/badapplestop` (`uwu bas`)
+cancels it; only its starter or a member with Manage Messages in that channel can
+stop it. One animation is allowed across the entire bot process. Both commands
+load through the existing cog loader and normal startup command sync. No audio
+is played. Missing media does not prevent the bot or the cog from loading.
+
+Supply the **complete local video yourself**. Keep it outside the repository, or
+place it in the ignored `artifacts/badapple/source/` directory. The bot does not
+download media. On your development machine, install FFmpeg (including ffprobe)
+and the project's existing Python dependencies, then run from the repository root:
+
+```powershell
+python -m scripts.preprocess_badapple "artifacts/badapple/source/bad-apple.mp4" --output "artifacts/badapple/frames.jsonl.gz" --width 48 --fps 1 --threshold 128
+```
+
+The filename is your choice. If FFmpeg is not on PATH, append
+`--ffmpeg "path/to/ffmpeg" --ffprobe "path/to/ffprobe"`. Conversion uses the existing
+Pillow dependency and FFmpeg executable; it needs no Discord token, database,
+Redis, or settings file. Run it locally, not on the constrained production host.
+It decodes through EOF, validates duration coverage, and writes a deterministic
+gzip JSON-lines cache atomically. Use `--overwrite` to replace a cache.
+
+`--width` and `--height` set Braille columns and rows; omitted height is calculated
+from the source display aspect ratio. Each character contains 2×4 dots. Layout
+assumes monospace characters are approximately half as wide as they are tall;
+Discord clients and font fallback can vary. Custom dimensions letterbox the
+image. White pixels become dots. Sampling and playback FPS accept 0.1–6;
+playback defaults to **1 FPS**. Playback never exceeds the cache's sampling FPS.
+Higher targets are experimental and may be limited by Discord's message-edit API.
+Sampling intentionally reduces the source frame rate; playback skips none of
+the resulting frames. Rotated sources must first be normalized. A stalled or
+failed decoder aborts conversion; `--timeout` defaults to 600 seconds.
+
+Copy only the generated cache to the host's `artifacts/badapple/frames.jsonl.gz`,
+relative to the bot's working directory. For container deployments, mount the
+file at that location or set `BADAPPLE_CACHE_PATH` to its mounted path. Generated
+media is excluded from Git and is not bundled into the image. Optional settings:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `BADAPPLE_CACHE_PATH` | `artifacts/badapple/frames.jsonl.gz` | Readable local cache path |
+| `BADAPPLE_FPS` | `1` | Target edit FPS, 0.1–6 |
+
+Restart normally with `python -m bot.main`, then invoke `/badapple` in a test server
+channel where Meyaya can view and send messages (Send Messages in Threads for a
+thread). The acknowledgement reports source duration, frame count and minimum
+playback time. For example, a **220-second source at 1 sampled FPS produces about
+220 frames** and needs at least 220 seconds at 1 target FPS. Actual values come
+from your supplied file; no full Bad Apple source is included or assumed.
+
+Discord does not promise a fixed message-edit rate. Its
+[rate-limit documentation](https://discord.com/developers/docs/topics/rate-limits)
+requires respecting server limits. Edits are sequential and use discord.py's
+rate-limit waits/retries. Playback shows achieved FPS alongside the requested
+target. After a slow edit, pacing backs off toward one update per second and
+waits before the next update; the requested target is an upper bound. A slower
+requested rate remains slower. Slow edits extend the timeline; there are no catch-up
+bursts, skipped cached frames, or application retry loops. An exposed HTTP error,
+rate-limit exception, or a 120-second edit timeout terminates playback and
+releases its slot. Completion reports target and achieved FPS. On deletion,
+permission loss, or API failure the last visible frame may remain without a final
+status; cancellation status is best-effort with a three-second deadline. Updates
+use bot authentication, so they do not depend on the initial interaction token
+remaining valid. A bot restart ends playback; there is no persistent worker.
+Slow edits log `badapple_slow_edit` at most once every 30 seconds, including
+edit duration and the reduced pace. Edit duration includes library rate-limit
+waits, network latency and event-loop delays; this log alone does not identify
+which caused the delay. Adaptive pacing cannot guarantee stall-free live playback.
+
+Runtime cache loading runs off the event loop and retains one bounded copy:
+at most 4 million art characters (about 8 MB of Unicode storage), 7,200 frames,
+and 16 MB of compressed/decompressed cache data. Inputs are limited to one hour.
+Oversized caches are rejected with instructions to reduce resolution or sampling
+FPS. No frame storage uses PostgreSQL or Redis. Art is limited to 1,800 characters
+to leave room inside Discord's 2,000-character message limit.
+
+Run the synthetic-media, mocked-playback, and command-registration tests with:
+
+```powershell
+python -m pytest tests/test_badapple.py tests/test_help_catalog.py -q
+```
+
+FFmpeg integration tests use PATH, or `TEST_FFMPEG` and `TEST_FFPROBE` executable
+paths, and are explicitly skipped if the tools are absent. Fixtures are generated
+in pytest's temporary directory. On machines with an inaccessible default temp
+directory, create `artifacts/badapple` and add
+`--basetemp artifacts/badapple/pytest-run` (pytest replaces that test-only directory).
+Before declaring live playback verified, preprocess your complete source and test
+beginning-to-end playback, achieved FPS, stop permissions, and message deletion in
+a real Discord test channel. Mocked tests do not establish smooth live playback.
+
 ## Requirements
 
 - Python 3.12
