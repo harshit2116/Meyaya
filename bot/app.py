@@ -31,7 +31,7 @@ from bot.utils.embeds import meyaya_embed
 from bot.utils.components_v2 import install_components_v2
 from bot.utils.image_work import ImageBusy
 from bot.utils.command_parameters import normalize_member_parameters
-from bot.utils.command_aliases import install_command_aliases
+from bot.utils.command_aliases import ALIAS_COMMANDS, install_command_aliases
 from bot.services.usage import ChatLimitReached, UsageService, is_silence
 from bot.services.request_log import RequestLogService
 from bot.utils.command_context import TimedContext
@@ -54,14 +54,21 @@ DEFAULT_COMMAND_PREFIX = "uwu"
 
 
 def resolve_command_prefix(bot: commands.Bot, message: discord.Message) -> list[str]:
-    """Accept mentions plus the current server's case-insensitive prefix."""
+    """Accept mention commands, reserving generated shortcuts for written prefixes."""
 
     prefixes = list(commands.when_mentioned(bot, message))
+    content = message.content or ""
+    # Words such as "im", "my" and "at" are conversation after a mention.
+    # Use the same prefix decision for command processing and the chat listener.
+    for prefix in tuple(prefixes):
+        if content.startswith(prefix):
+            words = content[len(prefix):].split(maxsplit=1)
+            if words and words[0].casefold() in ALIAS_COMMANDS:
+                prefixes.remove(prefix)
     guild = message.guild
     guild_id = guild.id if guild is not None else None
     getter = getattr(bot, "prefix_for_guild", None)
     candidate = getter(guild_id) if getter is not None else DEFAULT_COMMAND_PREFIX
-    content = message.content or ""
     length = len(candidate)
     if content[:length].casefold() != candidate.casefold() or len(content) <= length:
         return prefixes

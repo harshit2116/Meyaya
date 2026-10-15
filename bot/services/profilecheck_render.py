@@ -5,17 +5,17 @@ import logging
 from time import monotonic
 
 from bot.services.profile_aesthetic import profilecheck_analysis
-from bot.services.profile_cards import profilecheck_media
-from bot.utils.image_work import BoundedImageGate, image_work
+from bot.services.profile_cards import profilecheck_media, PROFILE_MEDIA_BYTES
+from bot.utils.image_work import BoundedImageGate, animation_work
 
 logger = logging.getLogger(__name__)
 
 
-def _render(visual):
+def _render(visual, max_bytes):
     started = monotonic()
     visual = profilecheck_analysis(visual)
     analyzed = monotonic()
-    data, extension = profilecheck_media(visual)
+    data, extension = profilecheck_media(visual, max_bytes=max_bytes)
     logger.debug("profilecheck analysis_ms=%.1f render_ms=%.1f", (analyzed-started)*1000, (monotonic()-analyzed)*1000)
     return visual, data, extension
 
@@ -40,10 +40,11 @@ class ProfileCheckRenderer:
         self.cache.move_to_end(key)
         return result
 
-    async def render(self, visual):
+    async def render(self, visual, *, max_bytes=PROFILE_MEDIA_BYTES):
         # Fingerprint includes name, asset URLs, accent and scoring metadata.
         # Content hashes distinguish a failed download from a later recovery.
-        key = (visual.asset_fingerprint, hash(visual.avatar), hash(visual.banner), hash(visual.decoration))
+        max_bytes = min(max_bytes, PROFILE_MEDIA_BYTES)
+        key = (visual.asset_fingerprint, hash(visual.avatar), hash(visual.banner), hash(visual.decoration), max_bytes)
         cached = self._cached(key)
         if cached is not None:
             return cached
@@ -57,7 +58,7 @@ class ProfileCheckRenderer:
             if cached is not None:
                 return cached
             # Waiting callers recheck the cache after the first render finishes.
-            result = await image_work(_render, visual)
+            result = await animation_work(_render, visual, max_bytes)
             size = len(result[1]) + sum(len(asset) for asset in (visual.avatar, visual.banner, visual.decoration) if asset)
             if size <= self.max_bytes:
                 while self.cache and (self.bytes + size > self.max_bytes or len(self.cache) >= 16):

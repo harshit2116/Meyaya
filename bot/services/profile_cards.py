@@ -5,6 +5,10 @@ from __future__ import annotations
 from hashlib import sha256
 from io import BytesIO
 from collections import OrderedDict
+from bisect import bisect_right
+from math import lcm
+import logging
+from time import monotonic
 
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
@@ -97,7 +101,7 @@ def _open(data: bytes | None) -> Image.Image | None:
                 return None
             image.thumbnail((1024, 1024))
             return image.convert("RGBA")
-    except (OSError, ValueError):
+    except (OSError, ValueError, Image.DecompressionBombError):
         return None
 
 
@@ -373,19 +377,65 @@ def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True) -
     return image
 
 
-def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
-    """Preview only the opening 12 frames, without scanning the full animation."""
+PROFILE_ANIMATION_MS = 8_000
+PROFILE_ANIMATION_FRAMES = 120
+PROFILE_ANIMATION_DECODE_BYTES = 64 * 1024 * 1024
+PROFILE_MEDIA_BYTES = 8 * 1024 * 1024
+
+
+def _animation_timeline(sources):
+    """Loop assets by elapsed time, preserving exact frame boundaries when bounded."""
+    duration = min(PROFILE_ANIMATION_MS, lcm(*(ends[-1] for _, ends in sources.values())))
+    boundaries = {0, duration}
+    for _, ends in sources.values():
+        for offset in range(0, duration, ends[-1]):
+            boundaries.update(offset + end for end in ends if offset + end < duration)
+    times = sorted(boundaries)
+    if len(times) - 1 > PROFILE_ANIMATION_FRAMES:
+        # Sample dense animations without speeding up or slowing down playback.
+        step = max(20, ((duration + PROFILE_ANIMATION_FRAMES * 10 - 1)
+                        // (PROFILE_ANIMATION_FRAMES * 10)) * 10)
+        times = [*range(0, duration, step), duration]
+    return times
+
+
+def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) -> tuple[bytes, str]:
+    """Render bounded full cycles; complex/oversized assets fall back to a static card."""
     sources = {}
+    frames = []
+    deadline = monotonic() + 12
+    decoded_bytes = 0
     try:
         for key in ("avatar", "banner", "decoration"):
             data = getattr(visual, key)
             if not data:
                 continue
-            source = Image.open(BytesIO(data))
-            if source.width * source.height > 4_000_000 or not getattr(source, "is_animated", False):
-                source.close()
-                continue
-            sources[key] = source
+            with Image.open(BytesIO(data)) as source:
+                if not getattr(source, "is_animated", False):
+                    continue
+                if source.width * source.height > 4_000_000:
+                    raise ValueError("animated asset exceeds pixel budget")
+                decoded, ends = [], []
+                sources[key] = (decoded, ends)
+                # Store at delivery resolution, not full CDN resolution.
+                size = {"avatar": (203, 203), "banner": (660, 123), "decoration": (231, 231)}[key]
+                for index in range(300):
+                    if monotonic() > deadline:
+                        raise ValueError("animation exceeded render time budget")
+                    try:
+                        source.seek(index)
+                    except EOFError:
+                        break
+                    frame = source.convert("RGBA")
+                    frame.thumbnail(size)
+                    decoded.append(frame)
+                    decoded_bytes += frame.width * frame.height * 4
+                    if decoded_bytes > PROFILE_ANIMATION_DECODE_BYTES:
+                        raise ValueError("animation exceeded decoded memory budget")
+                    delay = max(20, round(float(source.info.get("duration", 100) or 100) / 10) * 10)
+                    ends.append(min(PROFILE_ANIMATION_MS, (ends[-1] if ends else 0) + delay))
+                    if ends[-1] >= PROFILE_ANIMATION_MS:
+                        break
         if not sources:
             return profilecheck_card(visual), "png"
         # Paint text, gradients and score bars once, not once per GIF frame.
@@ -395,22 +445,15 @@ def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
                       if key not in sources}
         banner_mask = Image.new("L", (880, 164))
         ImageDraw.Draw(banner_mask).rounded_rectangle((0, 0, 879, 163), radius=16, fill=255)
-        frames, durations = [], []
-        for index in range(12):
-            changes = {}
-            advanced, delay = False, 20
-            for key, source in sources.items():
-                try:
-                    source.seek(index)
-                    advanced = True
-                    delay = max(delay, min(250, int(source.info.get("duration", 100) or 100)))
-                except EOFError:
-                    pass  # Hold shorter assets on their last frame.
-                frame = source.convert("RGBA")
-                frame.thumbnail((880, 512))
-                changes[key] = frame
-            if not advanced:
-                break
+        times = _animation_timeline(sources)
+        durations = [end - start for start, end in zip(times, times[1:])]
+        for elapsed in times[:-1]:
+            if monotonic() > deadline:
+                raise ValueError("animation exceeded render time budget")
+            changes = {
+                key: decoded[bisect_right(ends, elapsed % ends[-1])]
+                for key, (decoded, ends) in sources.items()
+            }
             rendered = template.copy()
             if "banner" in changes:
                 rendered.paste(ImageOps.fit(changes["banner"], (880, 164)), (60, 155), banner_mask)
@@ -418,16 +461,20 @@ def profilecheck_media(visual: ProfileVisual) -> tuple[bytes, str]:
                         changes.get("avatar", static_art.get("avatar")),
                         changes.get("decoration", static_art.get("decoration")))
             frames.append(rendered.resize((750, 675)).convert("P", palette=Image.Palette.ADAPTIVE, colors=128))
-            durations.append(delay)
+            rendered.close()
         output = BytesIO()
         frames[0].save(output, "GIF", save_all=True, append_images=frames[1:], duration=durations, loop=0, disposal=2)
-        if output.tell() <= 8 * 1024 * 1024:
+        if output.tell() <= min(max_bytes, PROFILE_MEDIA_BYTES):
             return output.getvalue(), "gif"
-    except (OSError, ValueError, EOFError):
-        pass
+        logging.getLogger(__name__).info("profile_animation_static_fallback reason=upload_size bytes=%s", output.tell())
+    except (OSError, ValueError, EOFError, Image.DecompressionBombError) as error:
+        logging.getLogger(__name__).warning("profile_animation_static_fallback reason=%s", type(error).__name__)
     finally:
-        for source in sources.values():
-            source.close()
+        for decoded, _ in sources.values():
+            for frame in decoded:
+                frame.close()
+        for frame in frames:
+            frame.close()
     return profilecheck_card(visual), "png"
 
 

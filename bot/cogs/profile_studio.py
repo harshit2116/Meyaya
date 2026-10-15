@@ -99,7 +99,10 @@ class ProfileStudioCog(commands.Cog):
         started = monotonic()
         visual = await self.aesthetics.inspect(target, refresh=True, animated=True)
         inspected = monotonic()
-        visual, rendered, extension = await self._profile_renderer.render(visual)
+        upload_limit = getattr(ctx.interaction, "filesize_limit", None) or ctx.guild.filesize_limit
+        visual, rendered, extension = await self._profile_renderer.render(visual, max_bytes=upload_limit)
+        if len(rendered) > upload_limit:
+            raise commands.CommandError("This profile card is too large for this channel's upload limit.")
         prepared = monotonic()
         review = profile_review_result(visual)
         remember_command_result(ctx, **review)

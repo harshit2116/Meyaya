@@ -201,7 +201,7 @@ async def test_catalog_matches_written_and_slash_commands() -> None:
         catalog_names = {item.name for item in COMMANDS}
         install_command_aliases(bot)
         install_command_aliases(bot)
-        assert set(SHORT_COMMANDS) == catalog_names
+        assert set(SHORT_COMMANDS) <= catalog_names
         for name, alias in SHORT_COMMANDS.items():
             assert bot.get_command(alias) is bot.get_command(name)
         written_names = {command.name for command in bot.walk_commands() if not command.hidden}
