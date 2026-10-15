@@ -40,6 +40,8 @@ def identity_activity() -> discord.CustomActivity:
 
 def presence_activities(stream_url=""):
     stream_url = stream_url.strip()
+    if not stream_url:
+        logger.info("Streaming statuses disabled: PRESENCE_STREAM_URL is not configured")
     if stream_url:
         try:
             parsed = urlsplit(stream_url)
@@ -70,8 +72,15 @@ class PresenceCog(commands.Cog):
         self.activities = presence_activities(
             getattr(getattr(bot, "settings", None), "presence_stream_url", "")
         )
-        self.index = 0
+        # Show a native activity immediately instead of appearing unchanged for
+        # five minutes after every deployment. Keep the identity in the cycle.
+        self.index = 1
         self._first_tick = True
+
+    async def cog_load(self):
+        # Extensions can also be reloaded after READY has already happened.
+        if self.bot.is_ready():
+            await self.on_ready()
 
     async def apply_presence(self):
         try:
@@ -79,8 +88,11 @@ class PresenceCog(commands.Cog):
                 status=discord.Status.dnd,
                 activity=self.activities[self.index],
             )
-        except (discord.HTTPException, ConnectionError, OSError):
-            logger.warning("Meyaya presence unavailable; will retry on the next rotation or reconnect")
+            logger.info("presence_updated type=%s index=%s interval_minutes=%s",
+                        self.activities[self.index].type.name, self.index, ROTATION_MINUTES)
+        except (discord.HTTPException, ConnectionError, OSError) as error:
+            logger.warning("Meyaya presence unavailable; will retry on the next rotation or reconnect (%s)",
+                           type(error).__name__)
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -89,9 +101,14 @@ class PresenceCog(commands.Cog):
             self._first_tick = True
             self.rotate.start()
 
+    @commands.Cog.listener()
+    async def on_resumed(self):
+        # A successful gateway resume does not dispatch another READY event.
+        await self.on_ready()
+
     @tasks.loop(minutes=ROTATION_MINUTES)
     async def rotate(self):
-        # tasks.loop runs immediately; hold the identity for a full interval.
+        # tasks.loop runs immediately; on_ready already applied this activity.
         if self._first_tick:
             self._first_tick = False
             return

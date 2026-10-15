@@ -4,10 +4,13 @@ Meyaya is a Discord character bot built with Python. She supports social reactio
 profiles, marriage, multiplayer games, court cases, Gemini chat and memory, English-only monitoring,
 and live voice conversations.
 
-Meyaya uses a fixed Do Not Disturb presence with the custom status
-“The Girl at the end of every story”. Edit `bot/cogs/presence.py` to change it.
-The `Meyaya` emoji is sent best-effort; Discord may omit custom-status emoji for
-bot accounts. The former 15-minute presence rotation is disabled.
+Meyaya stays Do Not Disturb and rotates her activity every five minutes, starting
+with Playing immediately. The cycle includes Watching and the custom status
+“The Girl at the end of every story”. Set `PRESENCE_STREAM_URL` to a valid Twitch
+or YouTube HTTPS link in the deployed environment to include Streaming, then
+restart the bot. Edit `bot/cogs/presence.py` to change the texts. Presence updates
+are logged as `presence_updated`; reconnects reapply the current activity.
+The `Meyaya` custom-status emoji is best-effort and may be omitted by Discord.
 
 ## Fantasy awakenings and rebirth
 
