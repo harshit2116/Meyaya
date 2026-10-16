@@ -38,7 +38,7 @@ def _display(text):
     return [discord.ui.TextDisplay(chunk) for chunk in _text_chunks(text)]
 
 
-def _card_parts(content, embeds, media):
+def _card_parts(content, embeds, media, *, image_first=False):
     parts = _display(content) if content else []
     referenced = set()
     color = 0xF48FB1
@@ -58,10 +58,25 @@ def _card_parts(content, embeds, media):
             text_parts.extend(_display(heading))
         if embed.description:
             text_parts.extend(_display(embed.description))
+        if image_first and embed.image.url:
+            # Profile artwork belongs with the opening identity, before the
+            # detailed fields can fill the first page.
+            parts.extend(text_parts)
+            text_parts = []
+            parts.append(discord.ui.MediaGallery(discord.MediaGalleryItem(str(embed.image.url))))
+            referenced.add(str(embed.image.url))
+        field_text = []
         for field in embed.fields:
             # Compact field headings keep result pages legible without the
             # large repeated headings of the old embed layout.
-            text_parts.extend(_display(f"**{field.name}**\n{field.value}"))
+            field_text.append(f"**{field.name}**\n{field.value}")
+        if image_first:
+            # One compact native text flow avoids artificial item-count pages.
+            if field_text:
+                text_parts.extend(_display("\n\n".join(field_text)))
+        else:
+            for text in field_text:
+                text_parts.extend(_display(text))
         if thumbnail and text_parts:
             # The thumbnail sets a minimum Section height. Put the opening
             # body/fields alongside it rather than below a title-only Section,
@@ -80,7 +95,7 @@ def _card_parts(content, embeds, media):
             parts.append(discord.ui.MediaGallery(discord.MediaGalleryItem(str(thumbnail))))
             referenced.add(str(thumbnail))
         parts.extend(text_parts)
-        if embed.image.url:
+        if embed.image.url and not image_first:
             parts.append(discord.ui.MediaGallery(discord.MediaGalleryItem(str(embed.image.url))))
             referenced.add(str(embed.image.url))
         footer = embed.footer.text or ""
@@ -120,6 +135,8 @@ class MeyayaView(discord.ui.View, discord.ui.LayoutView):
     This avoids proxy views that would break item.view, stop(), wait(), or checks.
     """
 
+    image_first = False
+
     def __init__(self, *, timeout=180):
         self._card_content = None
         self._card_embeds = []
@@ -158,7 +175,9 @@ class MeyayaView(discord.ui.View, discord.ui.LayoutView):
         for item in self._page_items:
             discord.ui.LayoutView.remove_item(self, item)
         self._page_items = []
-        self._accent, parts = _card_parts(self._card_content, self._card_embeds, self._card_media)
+        self._accent, parts = _card_parts(
+            self._card_content, self._card_embeds, self._card_media, image_first=self.image_first
+        )
         rows = self._control_rows()
         # Reserve a container plus a navigation row with three buttons. All
         # nested controls count against Discord's 40-component message ceiling.

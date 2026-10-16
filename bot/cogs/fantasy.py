@@ -16,6 +16,9 @@ from bot.services.meyaya_boss_presentation import BossPresentation
 from bot.services.fantasy_boss import veyra_boss_profile, VEYRA_BOSS_ID
 from bot.services.patron_boss_combat import VeyraDuelEngine, PatronClashEngine
 from bot.services.patron_boss_presentation import VeyraPresentation, PatronClashPresentation
+from bot.services.veyra_boss_hud import VeyraBossHud
+from bot.services import meyaya_boss_hud
+from bot.services.patron_clash_hud import PatronClashHud
 from bot.utils.fantasy_profile_target import FantasyProfileTarget
 
 import discord
@@ -257,6 +260,15 @@ class FantasyCog(commands.Cog):
             else VeyraPresentation if boss_key == "veyra" else BossPresentation
         )
         cinematic = presentation(self, view, interaction.channel) if is_boss else None
+        veyra_hud = None
+        if clash:
+            veyra_hud = PatronClashHud(self, view, interaction.channel)
+        if getattr(view, "boss_hud_trial", False) and boss_key in {"veyra", "meyaya"} and not clash:
+            guardian = bound_guardian(view.profiles[view.left.id]).name
+            veyra_hud = VeyraBossHud(
+                self, view, interaction.channel, guardian,
+                presentation=meyaya_boss_hud if boss_key == "meyaya" else None,
+            )
         try:
             view.message = await interaction.edit_original_response(
                 content=None,
@@ -300,13 +312,17 @@ class FantasyCog(commands.Cog):
                 avatar, palette = visual.result()
                 portraits.append(avatar)
                 palettes.append(palette)
-            if cinematic:
+            if cinematic and not veyra_hud:
                 await cinematic.intro(state)
 
-            async def frame(*, intro=False, outcome=False, controls=None, history_note=""):
+            async def frame(*, intro=False, outcome=False, exchange=False, controls=None, history_note=""):
                 nonlocal battle_message, boss_comment, image_delivery_failed
                 if view.closed:
                     raise commands.CommandError("This duel has ended.")
+                if veyra_hud:
+                    async with asyncio.timeout(DUEL_DELIVERY_TIMEOUT):
+                        return await veyra_hud.update(engine, intro=intro, final=outcome, history_note=history_note,
+                                                     **({"exchange": exchange} if clash else {}))
                 safe = lambda text: discord.utils.escape_markdown(
                     discord.utils.escape_mentions(str(text))
                 )
@@ -422,12 +438,17 @@ class FantasyCog(commands.Cog):
                 return message
 
             await frame(intro=True)
-            await asyncio.sleep(3)
+            await asyncio.sleep(veyra_hud.hold_seconds if clash else 3)
             while not state.finished:
-                engine.advance_move()
-                await frame()
-                if not state.finished:
-                    await asyncio.sleep(1.5)
+                if clash:
+                    # Presentation callbacks and combat may otherwise read different moves.
+                    async with veyra_hud.lock:
+                        engine.advance_move()
+                else:
+                    engine.advance_move()
+                await frame(exchange=clash and state.finished)
+                if not state.finished or clash:
+                    await asyncio.sleep(veyra_hud.hold_seconds if clash else 1.5)
             note = ""
             summary = dict(
                 inputs=initial,
@@ -482,7 +503,9 @@ class FantasyCog(commands.Cog):
             except Exception as error:
                 error_id = self.report(error, "fantasy_duel_history")
                 note = f"Result history could not be saved. Error ID: `{error_id}`"
-            if cinematic:
+            if veyra_hud:
+                message = await frame(outcome=True, history_note=note)
+            elif cinematic:
                 await cinematic.finish(state, history_note=note)
                 message = cinematic.message
             else:
@@ -549,6 +572,8 @@ class FantasyCog(commands.Cog):
             while len(outputs) > 512:
                 outputs.popitem(last=False)
         except BaseException:
+            if clash and veyra_hud:
+                veyra_hud.close_if_interrupted()
             if result_view:
                 result_view.finish()
             try:
@@ -558,12 +583,19 @@ class FantasyCog(commands.Cog):
                         if battle_message
                         else interaction.edit_original_response
                     )
-                    await edit(
-                        content="The duel was interrupted. Both fantasy identities are unchanged.",
-                        embed=None,
-                        attachments=[],
-                        view=None,
-                    )
+                    if clash and veyra_hud and veyra_hud.message:
+                        stopped = discord.ui.LayoutView(timeout=None)
+                        stopped.add_item(discord.ui.TextDisplay(
+                            "The clash was interrupted. Both fantasy identities are unchanged."
+                        ))
+                        await veyra_hud.message.edit(view=stopped, attachments=[])
+                    else:
+                        await edit(
+                            content="The duel was interrupted. Both fantasy identities are unchanged.",
+                            embed=None,
+                            attachments=[],
+                            view=None,
+                        )
             except (Exception, asyncio.CancelledError):
                 pass
             raise
@@ -701,6 +733,7 @@ class FantasyCog(commands.Cog):
         view.owner = ctx.author.id
         view.participant_ids = (ctx.author.id,)
         view.patron_clash = clash
+        view.boss_hud_trial = patron in {"veyra", "meyaya"} and not clash
         view.running = True
         for child in view.children:
             child.disabled = True

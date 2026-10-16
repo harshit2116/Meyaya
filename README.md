@@ -29,6 +29,37 @@ build, weapon and guardian, with a persistent 24-hour cooldown and rebirth count
 
 ## Command help and parameter names
 
+Both patrons in `/bossfight` (or `uwu bf veyra` / `uwu bf meyaya`) use a native Components V2
+spectator HUD with distinct opening, battle, and patron-victory artwork. Veyra's
+Abyss Memory and World Sever, and Meyaya's Spell Memory and prismatic attacks,
+advance their visual stages; the first special attack gets a short cached animation. Ordinary moves reuse the
+current artwork attachment. A final recap replaces the live HUD in the same
+message. This presentation does not alter combat, reveal hidden boss resources,
+or apply to dungeon encounters or ordinary player duels.
+
+`/bossfight boss:clash` (or `uwu bf clash`) presents Origin versus Erasure in one
+Components V2 message. The exact existing Klipy introductions are combined into a
+9.2-second side-by-side GIF; the shorter clip loops at its original speed. Six
+new illustrations cover the clash, ultimates, and two outcome-specific endings. Six signature scenes use
+short particle animations, shown on each attack's first occurrence. Later attacks
+reuse static phase artwork. A final exchange holds the decisive attack for 2.8 seconds
+(1.2 in static mode) before revealing the actual winner or draw. Meyaya's ending
+restores the arena; Veyra's ending leaves Everbloom's crown fallen. Authored dialogue
+reacts to each attack, varies on repeats, and distinguishes close victories without
+revealing hidden resource values or making AI calls.
+The starter can switch to static artwork; spectators can open an ephemeral battle
+chronicle. Controls expire after three minutes of inactivity. Hidden boss resources,
+seeded combat, cooldowns, and saved progression are unchanged.
+
+Clash media is built offline with `python -m scripts.build_clash_cinematics
+<meyaya-original.gif> <veyra-original.gif>` and shipped in `bot/assets/duels`.
+No GIF lookup or image rendering runs during a live clash. Attack GIFs are about
+160 KB each; the combined opening is about 3.9 MB. Media failures fall back to the
+native text HUD. Prompts and source links are in `bot/assets/duels/clash-v3-provenance.json`
+and `bot/assets/duels/clash-victory-prompts.json`.
+Discord clients control animation autoplay; the bot cannot force playback or add
+synchronized audio. Layout follows the [Components V2 reference](https://docs.discord.com/developers/components/reference).
+
 `/help` and `uwu help` immediately list every public command, grouped by category.
 The optional category menu shows descriptions; `/help command:<name>` or
 `uwu help <name>` shows exact syntax and examples. No command picker or paging

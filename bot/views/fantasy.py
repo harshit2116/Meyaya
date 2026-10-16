@@ -255,6 +255,8 @@ class OwnedFantasyView(MeyayaView):
 
 
 class FantasyProfileView(OwnedFantasyView):
+    image_first = True
+
     def __init__(self, cog, owner, profile, name, *, image=False):
         super().__init__(cog, owner)
         self.profile, self.name, self.image = profile, name, image
@@ -295,6 +297,8 @@ class FantasyProfileView(OwnedFantasyView):
             old = self.tab
             self.tab = tab
             for button in self.children:
+                if not hasattr(button, "tab"):
+                    continue
                 button.style = (
                     discord.ButtonStyle.primary
                     if button.tab == tab
@@ -307,6 +311,8 @@ class FantasyProfileView(OwnedFantasyView):
             except BaseException:
                 self.tab = old
                 for button in self.children:
+                    if not hasattr(button, "tab"):
+                        continue
                     button.style = (
                         discord.ButtonStyle.primary
                         if button.tab == old
