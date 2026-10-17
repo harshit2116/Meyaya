@@ -38,7 +38,20 @@ def _display(text):
     return [discord.ui.TextDisplay(chunk) for chunk in _text_chunks(text)]
 
 
-def _card_parts(content, embeds, media, *, image_first=False):
+def _field_displays(fields):
+    """Pack related fields into readable blocks without splitting short fields."""
+    block = []
+    for field in fields:
+        text = f"**{field.name}**\n{field.value}"
+        if block and len("\n\n".join([*block, text])) > 900:
+            yield from _display("\n\n".join(block))
+            block = []
+        block.append(text)
+    if block:
+        yield from _display("\n\n".join(block))
+
+
+def _card_parts(content, embeds, media, *, image_first=True):
     parts = _display(content) if content else []
     referenced = set()
     color = 0xF48FB1
@@ -61,22 +74,31 @@ def _card_parts(content, embeds, media, *, image_first=False):
         if image_first and embed.image.url:
             # Profile artwork belongs with the opening identity, before the
             # detailed fields can fill the first page.
-            parts.extend(text_parts)
+            if thumbnail and text_parts:
+                opening, size = [], 0
+                while text_parts and len(opening) < 3 and size + len(text_parts[0].content) <= 3500:
+                    item = text_parts.pop(0)
+                    opening.append(item)
+                    size += len(item.content)
+                parts.append(discord.ui.Section(*opening, accessory=discord.ui.Thumbnail(str(thumbnail))))
+                parts.extend(text_parts)
+                referenced.add(str(thumbnail))
+                thumbnail = None
+            else:
+                parts.extend(text_parts)
             text_parts = []
             parts.append(discord.ui.MediaGallery(discord.MediaGalleryItem(str(embed.image.url))))
             referenced.add(str(embed.image.url))
-        field_text = []
-        for field in embed.fields:
-            # Compact field headings keep result pages legible without the
-            # large repeated headings of the old embed layout.
-            field_text.append(f"**{field.name}**\n{field.value}")
-        if image_first:
-            # One compact native text flow avoids artificial item-count pages.
-            if field_text:
-                text_parts.extend(_display("\n\n".join(field_text)))
+        fields = list(embed.fields)
+        if thumbnail and text_parts and fields:
+            # Only the opening field shares the portrait column. Keep the
+            # remaining details full-width instead of narrowing the whole card.
+            text_parts.extend(_field_displays(fields[:1]))
+            opening_fields = len(text_parts)
+            text_parts.extend(_field_displays(fields[1:]))
         else:
-            for text in field_text:
-                text_parts.extend(_display(text))
+            text_parts.extend(_field_displays(fields))
+            opening_fields = len(text_parts)
         if thumbnail and text_parts:
             # The thumbnail sets a minimum Section height. Put the opening
             # body/fields alongside it rather than below a title-only Section,
@@ -84,7 +106,7 @@ def _card_parts(content, embeds, media, *, image_first=False):
             # Sections allow at most three displays; keep the group within one
             # page's text budget so pagination never splits this native unit.
             opening, size = [], 0
-            while text_parts and len(opening) < 3 and size + len(text_parts[0].content) <= 3500:
+            while text_parts and len(opening) < min(3, opening_fields) and size + len(text_parts[0].content) <= 3500:
                 item = text_parts.pop(0)
                 opening.append(item)
                 size += len(item.content)
@@ -102,6 +124,7 @@ def _card_parts(content, embeds, media, *, image_first=False):
         if embed.timestamp:
             footer += (" · " if footer else "") + f"<t:{int(embed.timestamp.timestamp())}:f>"
         if footer:
+            parts.append(discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small))
             parts.extend(_display("-# " + footer))
     for filename in media:
         url = "attachment://" + filename
@@ -135,7 +158,7 @@ class MeyayaView(discord.ui.View, discord.ui.LayoutView):
     This avoids proxy views that would break item.view, stop(), wait(), or checks.
     """
 
-    image_first = False
+    image_first = True
 
     def __init__(self, *, timeout=180):
         self._card_content = None
@@ -186,9 +209,14 @@ class MeyayaView(discord.ui.View, discord.ui.LayoutView):
         page, text_size, count = [], 0, 0
         for part in parts:
             size, cost = _text_length(part), _component_count(part)
-            if page and (text_size + size > 3500 or count + cost > budget or len(page) >= 9):
+            if page and (text_size + size > 3500 or count + cost > budget):
+                # A divider belongs between sections, never at a page edge.
+                while page and isinstance(page[-1], discord.ui.Separator):
+                    page.pop()
                 self._pages.append(page)
                 page, text_size, count = [], 0, 0
+            if not page and isinstance(part, discord.ui.Separator):
+                continue
             page.append(part)
             text_size += size
             count += cost

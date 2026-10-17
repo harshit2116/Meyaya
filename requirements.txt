@@ -1,3 +1,2 @@
-# Hosting panels can install this with: python -m pip install --no-cache-dir -r requirements.txt
-# pyproject.toml remains the single dependency source. Do not install the dev extra in production.
+# Dependencies are defined in pyproject.toml.
 .

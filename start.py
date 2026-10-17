@@ -1,4 +1,4 @@
-"""HeavenCloud/Pterodactyl entry point: python start.py (Python 3.12)."""
+"""Application launcher for Python 3.12."""
 
 import argparse
 import os
@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent
 
 
 def prepare_environment():
-    # Panel secrets win over .env; defaults must not override either.
+    # Environment values take precedence over .env and application defaults.
     from dotenv import load_dotenv
 
     load_dotenv(ROOT / ".env", override=False)
@@ -36,7 +36,7 @@ def main():
     args = parser.parse_args()
     os.chdir(ROOT)
     if sys.version_info[:2] != (3, 12):
-        raise SystemExit("Select the Python 3.12 runtime in the hosting panel.")
+        raise SystemExit("Python 3.12 is required.")
     prepare_environment()
     from bot.config.settings import Settings
     from pydantic import ValidationError
@@ -48,10 +48,10 @@ def main():
         fields = sorted({str(item["loc"][0]) for item in error.errors()})
         raise SystemExit("Missing or invalid configuration: " + ", ".join(fields)) from None
     if not settings.discord_token.strip() or not settings.database_url.strip() or not settings.redis_url.strip():
-        raise SystemExit("Set DISCORD_TOKEN, DATABASE_URL and REDIS_URL in the panel or .env.")
+        raise SystemExit("DISCORD_TOKEN, DATABASE_URL and REDIS_URL must not be empty.")
     if settings.dashboard_enabled and len(settings.dashboard_token) < 32:
         raise SystemExit("Use a random DASHBOARD_TOKEN of at least 32 characters.")
-    print("Configuration valid. Use external PostgreSQL/Redis and one bot process.", flush=True)
+    print("Configuration valid.", flush=True)
     if args.check:
         print("Offline check only: database, Redis, Discord and voice connectivity were not tested.")
         return
@@ -67,7 +67,7 @@ def main():
 
         run()
     else:
-        # On Linux hosting, replace the launcher so SIGTERM reaches the bot and
+        # On Linux, replace the launcher so SIGTERM reaches the bot and
         # no parent process stays resident.
         os.execv(sys.executable, [sys.executable, "-m", "bot.main"])
 

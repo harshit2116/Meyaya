@@ -312,6 +312,8 @@ class FantasyCog(commands.Cog):
                 avatar, palette = visual.result()
                 portraits.append(avatar)
                 palettes.append(palette)
+            if veyra_hud and not clash:
+                veyra_hud.avatar = portraits[0]
             if cinematic and not veyra_hud:
                 await cinematic.intro(state)
 

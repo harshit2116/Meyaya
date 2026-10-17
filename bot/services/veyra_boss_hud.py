@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw, ImageOps
 
 from bot.services.meyaya_boss_renderer import template
 from bot.utils.image_work import animation_work
+from bot.services.player_boss_duel_hud import render_duel_cut_in, duel_layout
 
 STAGES = (
     ("I · HOSTILE PRESENCE", "SOUL INTERFACE / CONNECTION CONTESTED", 0xB93E72),
@@ -139,6 +140,9 @@ class VeyraBossHud:
         self.signature_shown = False
         self.art_failed = False
         self.presentation = presentation or sys.modules[__name__]
+        self.avatar = b""
+        self.cut_ins = {}
+        self.player_signature_shown = False
 
     async def update(self, engine, *, intro=False, final=False, history_note=""):
         state = engine.state
@@ -149,22 +153,35 @@ class VeyraBossHud:
                      and presentation.signature_for(engine))
         if signature:
             self.signature_shown = True
+        player_signature = (not final and not self.player_signature_shown
+                            and state.last_actor == engine.player.user_id and engine.player.skills_used > 0)
+        if player_signature:
+            self.player_signature_shown = True
         art_stage = presentation.stage_for(engine)
         if final:
             art_stage = 3 if state.winner_id == state.left.user_id else 4 if state.winner_id == state.right.user_id else 5
-        key = (art_stage, bool(signature), bool(intro and not final))
+        pose = ("victory" if art_stage == 3 else "defeat" if art_stage == 4 else "draw" if art_stage == 5 else
+                "opening" if intro else "player" if state.last_actor == engine.player.user_id else "boss")
+        animated = bool(signature or player_signature)
+        key = (pose, animated)
         attachments = list(getattr(self.message, "attachments", ())) if self.message else []
         media = f"attachment://{attachments[0].filename}" if attachments else None
         if key != self.media_key and not self.art_failed:
             try:
-                data = await animation_work(presentation.stage_art, *key)
-                name = f"{presentation.ASSET_PREFIX}-signature.gif" if signature else f"{presentation.ASSET_PREFIX}-stage.jpg"
+                if key not in self.cut_ins:
+                    self.cut_ins[key] = await animation_work(
+                        render_duel_cut_in, presentation.ASSET_PREFIX, self.avatar, engine.player.name, *key)
+                data = self.cut_ins[key]
+                name = f"{presentation.ASSET_PREFIX}-duel.gif" if animated else f"{presentation.ASSET_PREFIX}-duel.jpg"
                 attachments = [discord.File(BytesIO(data), filename=name)]
                 media = f"attachment://{name}"
             except Exception as error:
                 self.cog.report(error, f"{presentation.ASSET_PREFIX}_hud_art")
                 self.art_failed = True
-        layout = presentation.battle_layout(engine, media=media, guardian=self.guardian, final=final, history_note=history_note)
+                attachments, media = [], None
+        if self.art_failed:
+            attachments, media = [], None
+        layout = duel_layout(engine, presentation, media=media, guardian=self.guardian, final=final, intro=intro, history_note=history_note)
 
         async def deliver(view, files):
             if self.message is None:
@@ -180,7 +197,7 @@ class VeyraBossHud:
                 raise
             self.art_failed = True
             async with asyncio.timeout(DELIVERY_SECONDS):
-                message = await deliver(presentation.battle_layout(engine, guardian=self.guardian, final=final, history_note=history_note), [])
+                message = await deliver(duel_layout(engine, presentation, guardian=self.guardian, final=final, intro=intro, history_note=history_note), [])
         self.message, self.media_key = message, key
         self.owner_view.message = message
         return message

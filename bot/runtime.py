@@ -1,4 +1,4 @@
-"""Restore private config from deployment secrets on each ephemeral boot."""
+"""Load private configuration supplied through the environment."""
 
 import json
 import os
