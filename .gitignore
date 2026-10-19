@@ -99,10 +99,5 @@ node_modules/
 [rR][eE][aA][dD][mM][eE].*
 !/README.md
 
-# Top.gg publishing sources and unused showcase media stay local.
-/branding/topgg/*
-!/branding/topgg/images/
-/branding/topgg/images/*
-!/branding/topgg/images/meyaya-banner.png
-!/branding/topgg/images/chat-meyaya.jpg
-!/branding/topgg/images/chat-user.png
+# Local listing publishing sources and previews
+/branding/
