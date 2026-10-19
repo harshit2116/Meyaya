@@ -1,59 +1,94 @@
-.meyaya-showcase {
-  --my-pink: #f28db2;
-  --my-text: #f8edf4;
-  --my-muted: #c9b7c7;
-  box-sizing: border-box;
-  max-width: 900px;
-  margin: 0 auto;
-  overflow: hidden;
-  border: 1px solid #493044;
-  border-radius: 18px;
-  background: #140f19;
-  color: var(--my-text);
-  font: 16px/1.7 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  text-align: left;
-}
-.meyaya-showcase * { box-sizing: border-box; }
-.meyaya-showcase img { display: block; max-width: 100%; height: auto; margin: 0; }
-.meyaya-showcase .my-cover { width: 100%; }
-.meyaya-showcase .my-intro, .meyaya-showcase .my-section { padding: 32px; }
-.meyaya-showcase .my-section { border-top: 1px solid #3b2939; }
-.meyaya-showcase .my-kicker { margin: 0 0 9px; color: var(--my-pink); font-size: 11px; font-weight: 750; letter-spacing: .16em; text-transform: uppercase; }
-.meyaya-showcase h2 { margin: 0 0 14px; color: #fff2f9; font-size: clamp(30px, 4vw, 43px); line-height: 1.15; letter-spacing: -.035em; }
-.meyaya-showcase h3 { margin: 0 0 12px; color: #fff2f9; font-size: clamp(24px, 3vw, 31px); line-height: 1.25; letter-spacing: -.025em; }
-.meyaya-showcase p { margin: 0 0 16px; }
-.meyaya-showcase .my-lead { color: #ead9e5; font-size: 18px; }
-.meyaya-showcase a { color: #ffc1dc; text-decoration: underline; text-underline-offset: 4px; }
-.meyaya-showcase .my-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
-.meyaya-showcase .my-button { display: inline-block; padding: 10px 18px; border: 1px solid var(--my-pink); border-radius: 8px; background: var(--my-pink); color: #28131f; font-size: 14px; font-weight: 750; text-decoration: none; }
-.meyaya-showcase .my-button-secondary { border-color: #76546d; background: transparent; color: #f8dbe9; }
-.meyaya-showcase .my-features { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
-.meyaya-showcase .my-features span { flex: 1 1 140px; padding: 9px 12px; border: 1px solid #493044; border-radius: 8px; background: #241925; color: #f1dce9; font-size: 13px; text-align: center; }
-.meyaya-showcase .my-commands { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
-.meyaya-showcase code { display: inline-block; padding: 2px 7px; border: 1px solid #55384d; border-radius: 5px; background: #30202d; color: #ffcae1; font: 13px/1.65 ui-monospace, Consolas, monospace; overflow-wrap: anywhere; white-space: normal; }
-.meyaya-showcase .my-shot { margin: 22px 0 0; overflow: hidden; border: 1px solid #51364a; border-radius: 12px; background: #09090b; }
-.meyaya-showcase .my-shot > img { width: 100%; }
-.meyaya-showcase .my-caption { margin: 0; padding: 11px 15px; border-top: 1px solid #493044; background: #211721; color: #d8c5d4; font-size: 12px; line-height: 1.5; }
-.meyaya-showcase .my-pair { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
-.meyaya-showcase .my-pair > .my-shot { flex: 1 1 280px; min-width: 0; }
-.meyaya-showcase .my-frame { position: relative; overflow: hidden; background: #08080a; }
-.meyaya-showcase .my-frame img { position: absolute; max-width: none; height: auto; }
-.meyaya-showcase .my-dungeon { aspect-ratio: 602 / 782; }
-.meyaya-showcase .my-dungeon img { width: 128.7375%; left: -10.9635%; top: -3.5806%; }
-.meyaya-showcase .my-character { aspect-ratio: 368 / 711; }
-.meyaya-showcase .my-character img { width: 147.2826%; left: -10.8696%; top: -2.2504%; }
-.meyaya-showcase .my-meyaya-duel { aspect-ratio: 600 / 388; }
-.meyaya-showcase .my-meyaya-duel img { width: 137.1667%; left: -12.3333%; top: -10.8247%; }
-.meyaya-showcase .my-veyra-duel { aspect-ratio: 600 / 388; }
-.meyaya-showcase .my-veyra-duel img { width: 136.8333%; left: -11.5%; top: -24.2268%; }
-.meyaya-showcase .my-steps { margin: 14px 0 20px; padding-left: 22px; }
-.meyaya-showcase .my-steps li { padding: 5px 0 5px 4px; }
-.meyaya-showcase .my-note { color: var(--my-muted); font-size: 13px; }
-.meyaya-showcase .my-footer { padding: 28px 24px; border-top: 1px solid #51344a; background: #251824; text-align: center; }
-.meyaya-showcase .my-footer p { margin-bottom: 12px; }
-@media (max-width: 560px) {
-  .meyaya-showcase .my-intro, .meyaya-showcase .my-section { padding: 24px 18px; }
-  .meyaya-showcase .my-pair > .my-shot { flex-basis: 100%; }
-  .meyaya-showcase .my-lead { font-size: 16px; }
-  .meyaya-showcase .my-features span { flex-basis: 115px; }
-}
+.meyaya-showcase { --my-pink:#f28db2; box-sizing:border-box; width:100%; max-width:900px; margin:0 auto; overflow:hidden; border:1px solid #493044; border-radius:16px; background:#140f19; color:#f8edf4; font:15px/1.6 system-ui,sans-serif; text-align:left; white-space:normal; }
+.meyaya-showcase * { box-sizing:border-box; }
+.meyaya-showcase br { display:none; }
+.meyaya-showcase p:empty { display:none; }
+.meyaya-showcase p,.meyaya-showcase h2,.meyaya-showcase h3 { padding:0; margin:0; }
+.meyaya-showcase img { display:block; max-width:100%; margin:0; padding:0; border:0; }
+.meyaya-showcase a { color:#ffc1dc; text-decoration:none; }
+.meyaya-showcase a:hover { text-decoration:underline; }
+.meyaya-showcase a:focus-visible,.meyaya-showcase .my-gallery:focus-visible { outline:2px solid #ffc1dc; outline-offset:3px; }
+.meyaya-showcase .my-banner { position:relative; height:140px; overflow:hidden; background:#271c32; }
+.meyaya-showcase .my-banner img { width:100%; height:100%; object-fit:cover; object-position:50% 38%; }
+.meyaya-showcase .my-banner span { position:absolute; bottom:0; left:0; width:100%; padding:24px 22px 12px; background:linear-gradient(transparent,#140f19); color:#fff; font-size:10px; font-weight:700; letter-spacing:.13em; }
+.meyaya-showcase .my-intro { padding:20px 24px 22px; }
+.meyaya-showcase h2 { font-size:clamp(23px,3vw,30px); line-height:1.2; letter-spacing:-.025em; color:#fff1f8; }
+.meyaya-showcase h3 { font-size:21px; line-height:1.25; color:#fff1f8; }
+.meyaya-showcase .my-intro>p { margin-top:10px; color:#d8c5d5; }
+.meyaya-showcase .my-actions { display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin-top:16px; font-size:13px; }
+.meyaya-showcase .my-button { display:inline-block; padding:9px 17px; border-radius:7px; background:#f28db2; color:#28131f; font-weight:750; }
+.meyaya-showcase .my-world { border-top:1px solid #493044; padding:22px 0 18px; }
+.meyaya-showcase .my-world>p,.meyaya-showcase .my-world>h3 { margin:0 24px; }
+.meyaya-showcase .my-kicker { color:#f28db2; font-size:10px; font-weight:750; letter-spacing:.15em; }
+.meyaya-showcase .my-world>h3 { margin-top:5px; }
+.meyaya-showcase .my-world>h3+p { margin-top:9px; color:#d8c5d5; }
+.meyaya-showcase .my-gallery { display:flex; width:100%; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; scrollbar-width:thin; scrollbar-color:#945778 #211622; margin:18px 0 0; }
+.meyaya-showcase .my-slide { flex:0 0 100%; min-width:0; scroll-snap-align:start; scroll-margin-top:16px; }
+.meyaya-showcase .my-stage { position:relative; width:100%; aspect-ratio:2.45; overflow:hidden; isolation:isolate; }
+.meyaya-showcase .my-stage img { position:absolute; top:50%; transform:translateY(-50%); object-fit:cover; border-radius:9px; }
+.meyaya-showcase .my-stage .my-main { z-index:2; left:14%; width:72%; height:100%; border:1px solid #79506d; box-shadow:0 6px 24px #0008; }
+.meyaya-showcase .my-stage .my-side { width:45%; height:82%; filter:blur(3px) brightness(.55); opacity:.75; }
+.meyaya-showcase .my-left { left:-34%; }
+.meyaya-showcase .my-right { right:-34%; }
+.meyaya-showcase .my-caption { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:3px 10px; padding:12px 18px 6px; font-size:12px; color:#cbb6c6; text-align:center; }
+.meyaya-showcase .my-caption strong { color:#ffd3e6; font-size:14px; }
+.meyaya-showcase .my-slide-nav { display:flex; align-items:center; justify-content:space-between; padding:2px 24px 10px; font-size:12px; }
+.meyaya-showcase .my-slide-nav a { padding:6px; }
+.meyaya-showcase .my-slide-nav span { color:#a98da2; font-size:10px; letter-spacing:.15em; }
+.meyaya-showcase .my-dots { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; padding:12px 16px; }
+.meyaya-showcase .my-dots a { padding:6px 10px; border:1px solid #54374c; border-radius:20px; background:#251a27; font-size:11px; }
+.meyaya-showcase .my-note { color:#bda6b8; font-size:11px; line-height:1.6; }
+.meyaya-showcase .my-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 24px; padding:22px 24px; border-top:1px solid #493044; }
+.meyaya-showcase .my-grid h3 { font-size:16px; color:#ffc1dc; }
+.meyaya-showcase .my-grid p { margin-top:7px; font-size:13px; color:#d8c5d5; }
+.meyaya-showcase code { padding:2px 5px; border-radius:4px; background:#30202d; color:#ffcae1; font:12px/1.5 ui-monospace,Consolas,monospace; white-space:normal; }
+.meyaya-showcase .my-footer { padding:20px 24px; border-top:1px solid #493044; background:#211620; font-size:12px; }
+.meyaya-showcase .my-footer p { margin-bottom:8px; }
+.meyaya-showcase .my-footer strong { font-size:16px; color:#ffe3ef; }
+@media (max-width:480px) { .meyaya-showcase .my-banner { height:110px; } .meyaya-showcase .my-intro,.meyaya-showcase .my-grid,.meyaya-showcase .my-footer { padding:18px; } .meyaya-showcase .my-world>p,.meyaya-showcase .my-world>h3 { margin-left:18px; margin-right:18px; } .meyaya-showcase .my-grid { grid-template-columns:1fr; gap:16px; } .meyaya-showcase .my-stage { aspect-ratio:2; } .meyaya-showcase .my-stage .my-main { left:10%; width:80%; } .meyaya-showcase .my-stage .my-side { width:42%; } .meyaya-showcase .my-left { left:-35%; } .meyaya-showcase .my-right { right:-35%; } }
+
+.meyaya-showcase { background:#211723; color:#fff2e9; border-color:#d49ab52e; border-radius:24px; box-shadow:0 12px 40px #0002; }
+.meyaya-showcase .my-banner { border-radius:23px 23px 0 0; }
+.meyaya-showcase .my-banner span { background:linear-gradient(transparent,#211723); }
+.meyaya-showcase .my-banner::before,.meyaya-showcase .my-banner::after { content:""; position:absolute; z-index:1; width:12px; height:19px; border-radius:80% 15% 80% 15%; background:#ffd1e2b3; transform:rotate(-25deg); top:17px; left:20px; box-shadow:34px 11px 0 -3px #ffdae9a6; pointer-events:none; }
+.meyaya-showcase .my-banner::after { left:auto; right:26px; top:25px; transform:rotate(35deg); }
+.meyaya-showcase .my-kicker::before { content:"✧ "; color:#e2b9ed; }
+.meyaya-showcase .my-kicker { color:#f5afc9; }
+.meyaya-showcase .my-world,.meyaya-showcase .my-grid,.meyaya-showcase .my-footer { border-color:#d49ab526; }
+.meyaya-showcase .my-grid>div { padding:15px; border:1px solid #e6b7d01a; border-radius:17px; background:#2a1e2d; box-shadow:0 4px 14px #0001; }
+.meyaya-showcase .my-grid { gap:12px; }
+.meyaya-showcase .my-grid p,.meyaya-showcase .my-intro>p,.meyaya-showcase .my-world>h3+p { color:#decfdf; }
+.meyaya-showcase .my-note,.meyaya-showcase .my-caption { color:#c8b5d5; }
+.meyaya-showcase .my-footer { background:#2c1e2c; }
+.meyaya-showcase .my-button { background:#f4a5c2; border-radius:14px; box-shadow:0 4px 14px #ed8db425; }
+.meyaya-showcase .my-dots a { border-color:#e1b2d02b; background:#302334; color:#dbc5e6; padding:7px 13px; border-radius:30px; }
+.meyaya-showcase .my-dots a.my-selected { background:#f4a5c2; color:#3b2030; border-color:#f4a5c2; font-weight:700; box-shadow:0 3px 12px #ed8db42b; }
+.meyaya-showcase .my-dots a:hover { background:#654052; color:#fff1f6; text-decoration:none; }
+.meyaya-showcase .my-button:hover { background:#ffc1d8; text-decoration:none; }
+.meyaya-showcase .my-stage .my-main { border-radius:16px; border-color:#e6b7d045; }
+.meyaya-showcase .my-chat { margin:0 24px 22px; padding:17px; border:1px solid #e6b7d02b; border-radius:21px; background:#2b1e2c; box-shadow:0 6px 20px #0002; }
+.meyaya-showcase .my-chat-heading { margin-bottom:12px; }
+.meyaya-showcase .my-chat-stage { position:relative; height:244px; }
+.meyaya-showcase .my-chat-exchange { position:absolute; inset:0; display:flex; flex-direction:column; gap:16px; padding:5px 0 24px; visibility:hidden; animation:my-chat-scene 36s linear infinite; animation-delay:var(--my-phase); }
+.meyaya-showcase .my-chat-row { display:flex; align-items:flex-start; padding-left:10px; }
+.meyaya-showcase .my-chat-avatar { flex:0 0 36px; width:36px; height:36px; margin-right:-8px; margin-top:9px; z-index:1; object-fit:cover; border:3px solid #2b1e2c; border-radius:50%; }
+.meyaya-showcase .my-chat-content { flex:1; min-width:0; padding:10px 14px 12px 19px; border-radius:16px; background:#383047; border:1px solid #c1a5df29; font-size:13px; line-height:1.65; color:#fff1e9; }
+.meyaya-showcase .my-chat-bot .my-chat-content { background:#482b3b; border-color:#f5afc929; }
+.meyaya-showcase .my-chat-name { display:flex; align-items:center; gap:7px; margin-bottom:3px; font-size:12px; font-weight:750; color:#ead4ff; }
+.meyaya-showcase .my-chat-bot .my-chat-name { color:#ffc5db; }
+.meyaya-showcase .my-app-label { background:#8b659c; border-radius:4px; color:white; padding:0 4px; font-size:9px; line-height:1.5; }
+.meyaya-showcase .my-chat-mention { color:#ead4ff; background:#574467; border-radius:4px; padding:1px 3px; }
+.meyaya-showcase .my-chat-response { position:relative; }
+.meyaya-showcase .my-chat-word { display:inline-block; white-space:nowrap; }
+.meyaya-showcase .my-chat-word>span { opacity:0; animation:my-chat-letter 36s step-end infinite; animation-delay:calc(var(--my-phase) + 1.8s + var(--my-char,0)*40ms); }
+.meyaya-showcase .my-chat-typing { position:absolute; color:#f4a5c2; letter-spacing:3px; visibility:hidden; animation:my-chat-typing 36s step-end infinite; animation-delay:var(--my-phase); }
+.meyaya-showcase .my-chat-count { position:absolute; bottom:0; right:2px; font-size:10px; letter-spacing:.15em; color:#c8b5d5; }
+.meyaya-showcase .my-chat-readable { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.meyaya-showcase img.my-chat-emoji { display:inline-block; width:22px; height:22px; vertical-align:middle; }
+@keyframes my-chat-scene { 0%,31.5% { visibility:visible; opacity:1; } 32.8% { visibility:visible; opacity:0; } 33.333%,100% { visibility:hidden; opacity:0; } }
+@keyframes my-chat-letter { 0%,32% { opacity:1; } 32.01%,100% { opacity:0; } }
+@keyframes my-chat-typing { 0% { visibility:visible; } 5%,100% { visibility:hidden; } }
+@media (max-width:560px) { .meyaya-showcase .my-chat-stage { height:320px; } .meyaya-showcase .my-chat { margin-left:18px; margin-right:18px; padding:12px; } .meyaya-showcase .my-chat-content { font-size:12px; padding-right:10px; } }
+@media (prefers-reduced-motion:reduce) { .meyaya-showcase .my-chat-stage { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; } .meyaya-showcase .my-chat-exchange { position:relative; inset:auto; flex:0 0 100%; min-width:0; visibility:visible; animation:none; scroll-snap-align:start; } .meyaya-showcase .my-chat-word>span { opacity:1; animation:none; } .meyaya-showcase .my-chat-typing { display:none; animation:none; } }
+
+.meyaya-showcase .my-chat-motion-note { display:none; }
+@media (prefers-reduced-motion:reduce) { .meyaya-showcase .my-chat-motion-note { display:block; margin-bottom:10px; color:#c8b5d5; font-size:11px; } }
