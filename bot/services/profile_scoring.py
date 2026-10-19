@@ -166,6 +166,21 @@ def get_rule_based_recommendation(visual):
     items = get_available_profile_items(visual)
     if score == 100:
         return "Best upgrade: Nothing major needs changing. Keep this balance when you update your " + _join_items(["PFP", *items]) + "."
+    kind = getattr(visual, "detail_kind", None)
+    if kind == "unavailable":
+        return "Best upgrade: Your avatar could not be analysed. Try again once the image loads; this is not a reliable style score."
+    if field == "originality_score" and kind == "sparse":
+        return "Best upgrade: Your PFP uses large flat areas with little tonal detail. Keep its clear shape; try a more personal image or add subtle shading for depth."
+    if field == "originality_score" and kind == "busy":
+        return "Best upgrade: Your PFP has many rapid light-dark changes at icon size. Reduce fine texture or use a tighter crop around the subject."
+    if field == "avatar_score" and kind == "busy":
+        return "Best upgrade: Fine texture competes at small icon size. Simplify the background or crop closer, then check the result at 32 pixels."
+    item = getattr(visual, "weakest_comparison", None)
+    color = getattr(visual, "suggested_color", None)
+    if field in ("styling_score", "harmony_score") and item and color:
+        return f"Best upgrade: Your {item} is the weakest palette match to your PFP. Try repeating its dominant colour ({color}) there, then compare them side by side."
+    if field == "originality_score" and kind == "balanced":
+        return "Best upgrade: The measured texture is moderate. Check the PFP at 32 pixels and adjust the crop only if its important details disappear."
     return build_improvement_message(field, score, items)
 
 

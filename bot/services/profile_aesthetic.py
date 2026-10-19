@@ -17,7 +17,7 @@ from weakref import WeakValueDictionary
 
 import aiohttp
 import discord
-from PIL import Image, ImageEnhance, ImageStat
+from PIL import Image, ImageChops, ImageEnhance, ImageStat
 from bot.services.profile_scoring import finalize_profile_score, profilecheck_points
 
 MAX_ASSET_BYTES = 6 * 1024 * 1024
@@ -49,6 +49,9 @@ class ProfileVisual:
     animated_banner: bool = False
     banner_available: bool = False
     comparison_available: bool | None = None
+    detail_kind: str | None = None
+    weakest_comparison: str | None = None
+    suggested_color: str | None = None
 
 
 class ProfileAestheticService:
@@ -442,7 +445,8 @@ def calculate_category_scores(visual: ProfileVisual) -> ProfileVisual:
         banner = Image.new("RGB", (32, 32), visual.accent_color)
     if avatar is None:
         return replace(visual, avatar_score=0, styling_score=0, harmony_score=0,
-                       originality_score=0, comparison_available=False)
+                       originality_score=0, comparison_available=False, detail_kind="unavailable",
+                       weakest_comparison=None, suggested_color=None)
     def actual_colors(image):
         small = image.convert("RGB")
         if small.width * small.height > 9216:
@@ -454,6 +458,7 @@ def calculate_category_scores(visual: ProfileVisual) -> ProfileVisual:
 
     avatar_palette = actual_colors(avatar)
     matches = []
+    match_items = []
     for asset in (banner, decoration):
         if asset is None:
             continue
@@ -470,24 +475,33 @@ def calculate_category_scores(visual: ProfileVisual) -> ProfileVisual:
         # Use real, frequency-weighted colors, never the padded display palette.
         distance = sum(weight * min(service._distance(color, base)
                            for _, base in avatar_palette) for weight, color in other) / sum(weight for weight, _ in other)
-        match = service._clamp(round(96 - distance * 0.35))
+        match = service._clamp(round(88 - distance * 0.45))
         # Solid neutral backdrops coordinate by contrast, not hue matching.
         stat = ImageStat.Stat(asset.convert("RGB"))
         if asset is banner and max(stat.stddev) < 8 and max(stat.mean) - min(stat.mean) < 18:
             contrast_gap = abs(sum(stat.mean)/3 - sum(ImageStat.Stat(avatar).mean)/3)
-            match = max(match, min(92, round(68 + contrast_gap * .12)))
+            match = max(match, min(80, round(55 + contrast_gap * .12)))
         matches.append(match)
+        match_items.append("Avatar Decoration" if asset is not banner else ("Banner" if visual.banner else "Profile color"))
     # Grayscale readability treats monochrome and colorful artwork equally.
     gray = avatar.resize((96, 96)).convert("L")
     contrast = ImageStat.Stat(gray).stddev[0]
-    avatar_score = service._clamp(round(35 + min(1, contrast / 55) * 50))
+    # Adjacent-pixel differences separate noisy texture from simple, clear shapes.
+    horizontal = ImageChops.difference(gray.crop((1, 0, 96, 96)), gray.crop((0, 0, 95, 96)))
+    vertical = ImageChops.difference(gray.crop((0, 1, 96, 96)), gray.crop((0, 0, 96, 95)))
+    edge_energy = (ImageStat.Stat(horizontal).mean[0] + ImageStat.Stat(vertical).mean[0]) / 2
     entropy = gray.entropy()
-    # Reward a useful amount of detail without awarding maximum points to noise.
-    detail = service._clamp(round(35 + min(1, entropy / 6) * 50 - max(0, entropy - 7) * 15))
+    detail_kind = "sparse" if entropy < 3 else "busy" if edge_energy > 28 else "balanced"
+    noise_penalty = max(0, edge_energy - 20) * 1.2
+    avatar_score = service._clamp(round(20 + min(1, contrast / 65) * 60 - noise_penalty))
+    detail = service._clamp(round(20 + min(1, entropy / 6) * 60 - max(0, edge_energy - 20) * 1.5))
     harmony = round(sum(matches) / len(matches)) if matches else 0
     styling = round(sum(matches) / len(matches) * .5 + min(matches) * .5) if matches else 0
     reviewed = replace(visual, avatar_score=avatar_score, styling_score=styling, harmony_score=harmony,
-                       originality_score=detail, comparison_available=bool(matches))
+                       originality_score=detail, comparison_available=bool(matches),
+                       detail_kind=detail_kind,
+                       weakest_comparison=match_items[matches.index(min(matches))] if matches else None,
+                       suggested_color="#%02X%02X%02X" % avatar_palette[0][1])
     return reviewed
 
 
