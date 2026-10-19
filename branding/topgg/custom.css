@@ -1,0 +1,59 @@
+.meyaya-showcase {
+  --my-pink: #f28db2;
+  --my-text: #f8edf4;
+  --my-muted: #c9b7c7;
+  box-sizing: border-box;
+  max-width: 900px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #493044;
+  border-radius: 18px;
+  background: #140f19;
+  color: var(--my-text);
+  font: 16px/1.7 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-align: left;
+}
+.meyaya-showcase * { box-sizing: border-box; }
+.meyaya-showcase img { display: block; max-width: 100%; height: auto; margin: 0; }
+.meyaya-showcase .my-cover { width: 100%; }
+.meyaya-showcase .my-intro, .meyaya-showcase .my-section { padding: 32px; }
+.meyaya-showcase .my-section { border-top: 1px solid #3b2939; }
+.meyaya-showcase .my-kicker { margin: 0 0 9px; color: var(--my-pink); font-size: 11px; font-weight: 750; letter-spacing: .16em; text-transform: uppercase; }
+.meyaya-showcase h2 { margin: 0 0 14px; color: #fff2f9; font-size: clamp(30px, 4vw, 43px); line-height: 1.15; letter-spacing: -.035em; }
+.meyaya-showcase h3 { margin: 0 0 12px; color: #fff2f9; font-size: clamp(24px, 3vw, 31px); line-height: 1.25; letter-spacing: -.025em; }
+.meyaya-showcase p { margin: 0 0 16px; }
+.meyaya-showcase .my-lead { color: #ead9e5; font-size: 18px; }
+.meyaya-showcase a { color: #ffc1dc; text-decoration: underline; text-underline-offset: 4px; }
+.meyaya-showcase .my-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.meyaya-showcase .my-button { display: inline-block; padding: 10px 18px; border: 1px solid var(--my-pink); border-radius: 8px; background: var(--my-pink); color: #28131f; font-size: 14px; font-weight: 750; text-decoration: none; }
+.meyaya-showcase .my-button-secondary { border-color: #76546d; background: transparent; color: #f8dbe9; }
+.meyaya-showcase .my-features { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 26px; }
+.meyaya-showcase .my-features span { flex: 1 1 140px; padding: 9px 12px; border: 1px solid #493044; border-radius: 8px; background: #241925; color: #f1dce9; font-size: 13px; text-align: center; }
+.meyaya-showcase .my-commands { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+.meyaya-showcase code { display: inline-block; padding: 2px 7px; border: 1px solid #55384d; border-radius: 5px; background: #30202d; color: #ffcae1; font: 13px/1.65 ui-monospace, Consolas, monospace; overflow-wrap: anywhere; white-space: normal; }
+.meyaya-showcase .my-shot { margin: 22px 0 0; overflow: hidden; border: 1px solid #51364a; border-radius: 12px; background: #09090b; }
+.meyaya-showcase .my-shot > img { width: 100%; }
+.meyaya-showcase .my-caption { margin: 0; padding: 11px 15px; border-top: 1px solid #493044; background: #211721; color: #d8c5d4; font-size: 12px; line-height: 1.5; }
+.meyaya-showcase .my-pair { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; }
+.meyaya-showcase .my-pair > .my-shot { flex: 1 1 280px; min-width: 0; }
+.meyaya-showcase .my-frame { position: relative; overflow: hidden; background: #08080a; }
+.meyaya-showcase .my-frame img { position: absolute; max-width: none; height: auto; }
+.meyaya-showcase .my-dungeon { aspect-ratio: 602 / 782; }
+.meyaya-showcase .my-dungeon img { width: 128.7375%; left: -10.9635%; top: -3.5806%; }
+.meyaya-showcase .my-character { aspect-ratio: 368 / 711; }
+.meyaya-showcase .my-character img { width: 147.2826%; left: -10.8696%; top: -2.2504%; }
+.meyaya-showcase .my-meyaya-duel { aspect-ratio: 600 / 388; }
+.meyaya-showcase .my-meyaya-duel img { width: 137.1667%; left: -12.3333%; top: -10.8247%; }
+.meyaya-showcase .my-veyra-duel { aspect-ratio: 600 / 388; }
+.meyaya-showcase .my-veyra-duel img { width: 136.8333%; left: -11.5%; top: -24.2268%; }
+.meyaya-showcase .my-steps { margin: 14px 0 20px; padding-left: 22px; }
+.meyaya-showcase .my-steps li { padding: 5px 0 5px 4px; }
+.meyaya-showcase .my-note { color: var(--my-muted); font-size: 13px; }
+.meyaya-showcase .my-footer { padding: 28px 24px; border-top: 1px solid #51344a; background: #251824; text-align: center; }
+.meyaya-showcase .my-footer p { margin-bottom: 12px; }
+@media (max-width: 560px) {
+  .meyaya-showcase .my-intro, .meyaya-showcase .my-section { padding: 24px 18px; }
+  .meyaya-showcase .my-pair > .my-shot { flex-basis: 100%; }
+  .meyaya-showcase .my-lead { font-size: 16px; }
+  .meyaya-showcase .my-features span { flex-basis: 115px; }
+}
