@@ -23,6 +23,8 @@ class OperationalTelemetry:
         self.started_at = datetime.now(UTC)
         self._requests: deque[dict] = deque(maxlen=capacity)
         self._commands: deque[dict] = deque(maxlen=capacity)
+        self._failure_day = datetime.now(UTC).date()
+        self._failure_count = 0
 
     def record(self, payload: dict) -> None:
         from bot.logging.health import health
@@ -40,6 +42,9 @@ class OperationalTelemetry:
             return
         if payload.get("event") != "llm_request":
             return
+        if payload.get('status') in {'error', 'unavailable'}:
+            self.failed_today()
+            self._failure_count += 1
         self._requests.append(
             {
                 "recorded_at": datetime.now(UTC),
@@ -65,6 +70,12 @@ class OperationalTelemetry:
                 ),
             }
         )
+
+    def failed_today(self):
+        today = datetime.now(UTC).date()
+        if self._failure_day != today:
+            self._failure_day, self._failure_count = today, 0
+        return self._failure_count
 
     def snapshot(self, guild_id: int | None = None) -> dict:
         records = [

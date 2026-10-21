@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
+from uuid import uuid4
 from collections import deque
 import logging
 import threading
@@ -155,6 +157,10 @@ class VoiceChatSession:
         self._playback_state = ResampleState()
         self._gemini: GeminiLiveSession | None = None
         self._closed = False
+        self._voice_usage_id = str(uuid4())
+        self._voice_usage_started = None
+        self._voice_usage_clock = None
+        self._voice_usage_checkpoint_at = 0
         self._loop = asyncio.get_running_loop()
         self._sink = DiscordAudioReceiveSink(self)
         self._last_end_sent_at = 0.0
@@ -242,6 +248,8 @@ class VoiceChatSession:
             self.voice_name,
         )
         self._log_dave_state()
+        self._voice_usage_started = datetime.now(UTC)
+        self._voice_usage_clock = time.monotonic()
 
     async def _watch_voice_budget(self):
         """Bound session duration, including silent/paused sessions."""
@@ -258,10 +266,33 @@ class VoiceChatSession:
             logger.warning("Voice session timer failed guild=%s", self.guild_id)
         await self.close(reason="voice session duration reached")
 
+    def voice_usage_snapshot(self):
+        from bot.services.voice_usage import daily_seconds
+        if getattr(self, '_voice_usage_started', None) is None or not self.is_active:
+            return None
+        return dict(session_id=self._voice_usage_id, guild_id=self.guild_id,
+            days=daily_seconds(self._voice_usage_started, time.monotonic()-self._voice_usage_clock))
+
+    async def checkpoint_voice_usage(self, *, final=False):
+        from bot.services.voice_usage import daily_seconds, checkpoint
+        if getattr(self, '_voice_usage_started', None) is None:
+            return
+        now = time.monotonic()
+        if not final and (not self.is_active or now-self._voice_usage_checkpoint_at < 60):
+            return
+        try:
+            async with asyncio.timeout(3):
+                await checkpoint(self.bot.db_session, self._voice_usage_id, self.guild_id,
+                    daily_seconds(self._voice_usage_started, now-self._voice_usage_clock))
+            self._voice_usage_checkpoint_at = now
+        except (SQLAlchemyError, TimeoutError):
+            logger.warning('Voice usage checkpoint unavailable guild=%s', self.guild_id)
+
     async def close(self, *, reason: str = "requested") -> None:
         if self._closed:
             return
         self._closed = True
+        await self.checkpoint_voice_usage(final=True)
         if self._voice_budget_task and self._voice_budget_task is not asyncio.current_task():
             self._voice_budget_task.cancel()
 

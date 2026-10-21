@@ -10,6 +10,8 @@
 !/bot/private/gemini_persona.txt
 # Local verification and offline helpers
 /tests/
+**/tests/
+conftest.py
 /scripts/
 /test_*.py
 /*_test.py
@@ -44,6 +46,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.hypothesis/
+.tox/
+.nox/
 .coverage
 .coverage.*
 htmlcov/
@@ -59,6 +64,19 @@ coverage.xml
 *.aof
 *.dump
 *.sqlite3
+*.sqlite
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite*-journal
+*.sqlite*-wal
+*.sqlite*-shm
+*.pid
+*.tmp
+*.bak
+*.orig
+*.rej
 
 # Editor and OS files
 .idea/

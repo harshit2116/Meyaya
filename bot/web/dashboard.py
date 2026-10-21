@@ -16,6 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from bot.logging.telemetry import operations as operational_telemetry
 from bot.models.guild_settings import GuildSettings
+from bot.services.guild_identity import saved_identities
 from bot.models.memory import BotMemory, MemoryStatus
 from bot.models.meyaya_state import MeyayaUserState
 from bot.web.security import DashboardSecurity, SESSION_SECONDS
@@ -23,6 +24,8 @@ from bot.web.server_info import cached_server_info, cached_member_preview
 from bot.services.owner_health import OwnerHealth
 from bot.logging.health import health as health_telemetry, find_retained_error
 import re
+from datetime import UTC, datetime, timedelta
+from bot.models.guild_identity import GuildEvent
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +88,12 @@ class Dashboard:
         self._member_lock = asyncio.Lock()
         self.security = DashboardSecurity(bot.settings)
         token = bot.settings.dashboard_token
+        api_token = getattr(bot.settings, 'dashboard_api_token', '')
+        edit_token = getattr(bot.settings, 'dashboard_edit_token', '')
+        if edit_token and (len(edit_token) < 32 or edit_token == api_token):
+            raise ValueError('DASHBOARD_EDIT_TOKEN must be distinct and at least 32 characters')
+        if api_token and len(api_token) < 32:
+            raise ValueError('DASHBOARD_API_TOKEN must contain at least 32 random characters')
         if len(token) < 32:
             raise ValueError("DASHBOARD_TOKEN must contain at least 32 random characters")
 
@@ -97,7 +106,14 @@ class Dashboard:
                         self.security.throttle(request.remote)
                     elif not local_no_auth:
                         supplied = request.headers.get("Authorization", "")
-                        if not supplied.startswith("Bearer ") or not self.security.authenticated(supplied[7:]):
+                        api_access = bool(api_token and supplied.startswith('Bearer ') and hmac.compare_digest(supplied[7:].encode(), api_token.encode()))
+                        edit_access = bool(edit_token and supplied.startswith('Bearer ') and hmac.compare_digest(supplied[7:].encode(), edit_token.encode()))
+                        if edit_access and request.method not in {'GET', 'HEAD'} and not (request.method == 'PATCH' and re.fullmatch(r'/api/servers/[0-9]+', request.path)):
+                            raise web.HTTPForbidden(text='Edit token is scoped to server settings')
+                        request['dashboard_actor'] = 'dashboard edit token' if edit_access else 'owner session'
+                        if api_access and request.method not in {'GET', 'HEAD'}:
+                            raise web.HTTPForbidden(text='This API token is read-only')
+                        if not api_access and not edit_access and (not supplied.startswith("Bearer ") or not self.security.authenticated(supplied[7:])):
                             self.security.throttle(request.remote)
                             raise web.HTTPUnauthorized(text="Owner session expired or missing")
                     if request.method not in {"GET", "HEAD"} and request.content_type != "application/json":
@@ -139,11 +155,15 @@ class Dashboard:
         self.app.router.add_patch("/api/blacklist", self.update_blacklist)
         self.app.router.add_get("/dashboard.js", self.script)
         self.app.router.add_get("/dashboard.css", self.style)
+        self.app.router.add_get('/meyaya-avatar.jpg', self.avatar)
         self.app.router.add_get("/api/servers", self.servers)
+        self.app.router.add_get('/api/overview', self.overview)
+        self.app.router.add_get('/api/servers/{guild_id}/insights', self.server_insights)
         self.app.router.add_get("/api/servers/{guild_id}/details", self.server_details)
         self.app.router.add_get("/api/servers/{guild_id}/summary", self.server_summary)
         self.app.router.add_get("/api/servers/{guild_id}/commands", self.server_commands)
         self.app.router.add_get("/api/servers/{guild_id}/requests", self.requests)
+        self.app.router.add_get("/api/servers/{guild_id}/command-history", self.command_history)
         self.app.router.add_get("/api/memories", self.memories)
         self.app.router.add_get("/api/nicknames", self.nicknames)
         self.app.router.add_get("/api/operations", self.operations)
@@ -278,6 +298,9 @@ class Dashboard:
             content_type="text/html",
         )
 
+    async def avatar(self, request):
+        return web.FileResponse(Path(__file__).parents[1] / "assets/listing/chat-meyaya.jpg")
+
     async def script(self, request):
         return web.Response(
             text=Path(__file__).with_name("dashboard.js").read_text(encoding="utf-8"),
@@ -290,10 +313,81 @@ class Dashboard:
             content_type="text/css",
         )
 
+    async def _identities(self):
+        from sqlalchemy import union
+        from bot.models.usage import GuildUsage
+        from bot.models.request_log import RequestLog
+        from bot.models.chat_blacklist import ChatBlacklist
+        identities = await saved_identities(self.bot.db_session)
+        async with self.bot.db_session() as session:
+            ids = await session.scalars(union(*(select(model.guild_id) for model in (
+                GuildSettings, GuildUsage, RequestLog, BotMemory, MeyayaUserState, ChatBlacklist))))
+            for gid in ids:
+                if gid is not None:
+                    identities.setdefault(gid, dict(id=str(gid), name=f'Server {gid}',
+                        owner_id=None, owner_name=None, icon_url=None))
+        return identities
+
+    async def _saved_server(self, guild_id):
+        identities = await self._identities()
+        return identities.get(guild_id)
+
+    async def _known_server(self, guild_id):
+        return self.bot.get_guild(guild_id) is not None or await self._saved_server(guild_id) is not None
+
     async def servers(self, request):
-        return web.json_response(
-            {"ready": self.bot.is_ready(), "servers": await server_report(self.bot)}
-        )
+        rows = await server_report(self.bot)
+        live_ids = {int(row['id']) for row in rows}
+        saved = await self._identities()
+        usage, limits = await self.bot.usage.report()
+        voice_totals = await self._voice_totals()
+        for row in rows:
+            row['membership'] = 'current'
+            for key in ('joined_at', 'left_at', 'last_activity_at'):
+                row[key] = saved.get(int(row['id']), {}).get(key)
+            guild = self.bot.get_guild(int(row['id']))
+            if guild and guild.me and guild.me.joined_at:
+                row['joined_at'] = guild.me.joined_at.isoformat()
+            if not row.get('owner_name'):
+                row['owner_name'] = saved.get(int(row['id']), {}).get('owner_name')
+        for gid, identity in saved.items():
+            if gid not in live_ids:
+                rows.append(dict(identity, membership='removed', available=False,
+                    prefix='uwu', autoresponder=False, limit=limits.get(gid, 40), exempt=False, model_success_rate=0, model_failures=0, model_average_latency_ms=None, model_tokens=0,
+                    **usage.get(gid, dict(today_chats=0, today_commands=0, week_chats=0, week_commands=0))))
+        for row in rows:
+            row.update(voice_totals.get(int(row['id']), dict(today_voice_seconds=0,week_voice_seconds=0,total_voice_seconds=0)))
+        return web.json_response({'ready': self.bot.is_ready(), 'servers': rows})
+
+    async def _voice_totals(self):
+        from bot.services.voice_usage import report
+        voice_cog = self.bot.get_cog('VoiceLiveCog')
+        return await report(self.bot.db_session, getattr(voice_cog, '_sessions', {}).values())
+
+    async def overview(self, request):
+        from bot.web.insights import overview
+        return web.json_response(overview(self.bot, await server_report(self.bot)))
+
+    async def server_insights(self, request):
+        from bot.models.usage import GuildUsage
+        try:
+            gid = int(request.match_info['guild_id'])
+            if not 0 < gid < 2**63:
+                raise ValueError()
+        except ValueError:
+            raise web.HTTPBadRequest(text='Invalid server ID')
+        if not await self._known_server(gid):
+            raise web.HTTPNotFound(text='Server not found')
+        async with self.bot.db_session() as session:
+            events = (await session.scalars(select(GuildEvent).where(GuildEvent.guild_id == gid)
+                .order_by(GuildEvent.occurred_at.desc(), GuildEvent.id.desc()).limit(100))).all()
+            daily = (await session.scalars(select(GuildUsage).where(GuildUsage.guild_id == gid,
+                GuildUsage.day >= datetime.now(UTC).date()-timedelta(days=13)).order_by(GuildUsage.day))).all()
+        errors = [row for row in reversed(list(health_telemetry.errors.values())) if str(row.get('guild_id')) == str(gid)][:20]
+        return web.json_response(dict(history=[dict(id=row.id, type=row.event_type,
+            timestamp=row.occurred_at.isoformat(), actor=row.actor, details=row.details) for row in events],
+            trend=[dict(day=row.day.isoformat(), chats=row.chats, commands=row.commands) for row in daily],
+            errors=errors, identity=await self._saved_server(gid)))
 
     async def requests(self, request):
         try:
@@ -303,9 +397,24 @@ class Dashboard:
                 raise ValueError()
         except ValueError:
             raise web.HTTPBadRequest(text="Invalid server or pagination cursor")
-        if self.bot.get_guild(guild_id) is None:
+        if not await self._known_server(guild_id):
             raise web.HTTPNotFound(text="Server not found")
-        return web.json_response(await self.bot.request_log.page(guild_id, before))
+        kind = request.query.get('kind', 'all')
+        if kind not in {'all', 'direct', 'automatic'}:
+            raise web.HTTPBadRequest(text='Invalid conversation filter')
+        return web.json_response(await self.bot.request_log.page(guild_id, before, kind=kind))
+
+    async def command_history(self, request):
+        try:
+            guild_id = int(request.match_info['guild_id'])
+            before = int(request.query['before']) if request.query.get('before') else None
+            if not 0 < guild_id < 2**63 or (before is not None and not 0 < before < 2**63):
+                raise ValueError()
+        except ValueError:
+            raise web.HTTPBadRequest(text='Invalid server or cursor')
+        if not await self._known_server(guild_id):
+            raise web.HTTPNotFound(text='Server not found')
+        return web.json_response(await self.bot.request_log.page(guild_id, before, kind='command'))
 
     async def server_details(self, request):
         try:
@@ -316,6 +425,9 @@ class Dashboard:
             raise web.HTTPBadRequest(text="Invalid server ID")
         guild = self.bot.get_guild(guild_id)
         if guild is None:
+            saved = await self._saved_server(guild_id)
+            if saved:
+                return web.json_response(dict(saved, stale=True, available=False, source='Last-known server identity'))
             raise web.HTTPNotFound(text="Server not found")
         info = cached_server_info(guild)
         await self._fill_owner(info, guild)
@@ -349,6 +461,9 @@ class Dashboard:
             raise web.HTTPBadRequest(text='Invalid server ID')
         guild = self.bot.get_guild(guild_id)
         if guild is None:
+            saved = await self._saved_server(guild_id)
+            if saved:
+                return web.json_response(dict(saved, stale=True, available=False, source='Last-known server identity'))
             raise web.HTTPNotFound(text='Server not found')
         info = {'id': str(guild.id), 'name': guild.name, 'owner_id': str(guild.owner_id),
                 'owner_name': guild.owner.display_name if guild.owner else None,
@@ -363,7 +478,7 @@ class Dashboard:
                 raise ValueError()
         except ValueError:
             raise web.HTTPBadRequest(text='Invalid server ID')
-        if self.bot.get_guild(guild_id) is None or (hasattr(self.bot, '_guild_names') and guild_id not in self.bot._guild_names):
+        if not await self._known_server(guild_id):
             raise web.HTTPNotFound(text='Server not found')
         return web.json_response(await self.bot.usage.command_report(guild_id))
 
@@ -476,7 +591,7 @@ class Dashboard:
         guild_id, limit, offset, query, status = self._query_options(request, statuses=statuses)
         filters = []
         if guild_id is not None:
-            if self.bot.get_guild(guild_id) is None:
+            if not await self._known_server(guild_id):
                 raise web.HTTPNotFound(text="Server not found")
             filters.append(BotMemory.guild_id == guild_id)
         if status != "all":
@@ -552,7 +667,7 @@ class Dashboard:
         guild_id, limit, offset, query, _ = self._query_options(request)
         filters = [MeyayaUserState.nickname.is_not(None), MeyayaUserState.nickname != ""]
         if guild_id is not None:
-            if self.bot.get_guild(guild_id) is None:
+            if not await self._known_server(guild_id):
                 raise web.HTTPNotFound(text="Server not found")
             filters.append(MeyayaUserState.guild_id == guild_id)
         if query:
@@ -622,7 +737,15 @@ class Dashboard:
             raise web.HTTPBadRequest(
                 text="Invalid settings: limit must be 0-10000 and prefix 1-10 supported characters"
             )
+        data["prefix"] = prefix
         async with self.bot.db_session() as session:
+            # Serialize dashboard edits and retain the previous settings atomically.
+            from sqlalchemy import text
+            await session.execute(text('SELECT pg_advisory_xact_lock(:gid)'), {'gid': guild_id})
+            previous = await session.get(GuildSettings, guild_id)
+            before = dict(prefix=previous.command_prefix if previous else 'uwu',
+                limit=previous.daily_chat_limit if previous else 40,
+                autoresponder=previous.autoresponder_enabled if previous else False)
             values = {
                 "command_prefix": prefix,
                 "autoresponder_enabled": data["autoresponder"],
@@ -633,6 +756,9 @@ class Dashboard:
                 .values(guild_id=guild_id, **values)
                 .on_conflict_do_update(index_elements=[GuildSettings.guild_id], set_=values)
             )
+            session.add(GuildEvent(guild_id=guild_id, event_type='settings_changed',
+                actor=request.get('dashboard_actor', 'local owner'),
+                details={'before': before, 'after': data}))
             await session.commit()
         self.bot.cache_guild_prefix(guild_id, prefix)
         self.bot.cache_autoresponder(guild_id, data["autoresponder"])

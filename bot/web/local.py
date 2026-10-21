@@ -13,6 +13,7 @@ from sqlalchemy import select, union
 from bot.config.settings import Settings
 from bot.database.session import build_async_engine, build_session_factory
 from bot.models.guild_settings import GuildSettings
+from bot.services.guild_identity import remember_identity, saved_identities
 from bot.models.usage import GuildUsage
 from bot.models.request_log import RequestLog
 from bot.models.memory import BotMemory
@@ -35,8 +36,11 @@ class LocalBackend:
         self.chat_blacklist = ChatBlacklistService(self.db_session)
         self.guilds_by_id = {}
         self._guild_names = {}
+        self._saved_identities = {}
         self._names_refresh_at = 0
         self._names_lock = asyncio.Lock()
+        self._catalog_lock = asyncio.Lock()
+        self._catalog_refresh_at = 0
         self._guild_metadata = {}
         self._details_cache = {}
         self._summary_cache = {}
@@ -80,27 +84,44 @@ class LocalBackend:
                         if cursor == after:
                             return
                         after = cursor
+                for gid, name in names.items():
+                    await remember_identity(self.db_session, rest_server_info(dict(self._guild_metadata[gid], id=str(gid))))
                 self._guild_names = names
                 self._guild_metadata = {gid: self._guild_metadata[gid] for gid in names}
             except (ClientError, TimeoutError, ValueError, KeyError, TypeError):
                 pass  # Never log credentials or provider response bodies.
 
     async def refresh(self):
-        await self.refresh_names()
-        async with self.db_session() as session:
-            ids = await session.scalars(union(*(select(model.guild_id) for model in (
-                GuildSettings, GuildUsage, RequestLog, BotMemory, MeyayaUserState, ChatBlacklist
-            ))))
-            # New/quiet servers may not have any database rows yet.
-            all_ids = {gid for gid in ids if gid is not None} | self._guild_names.keys()
-            self.guilds_by_id = {gid: SimpleNamespace(id=gid, name=self._guild_names.get(gid, f"Server {gid}"), get_member=lambda _: None)
-                                 for gid in all_ids}
+        # Concurrent tile requests share one catalog refresh rather than each
+        # querying the cloud database and rebuilding the whole server list.
+        if not hasattr(self, '_catalog_lock'):
+            self._catalog_lock = asyncio.Lock()
+            self._catalog_refresh_at = 0
+        async with self._catalog_lock:
+            if time.monotonic() < self._catalog_refresh_at:
+                return
+            await self.refresh_names()
+            self._saved_identities = await saved_identities(self.db_session)
+            async with self.db_session() as session:
+                ids = await session.scalars(union(*(select(model.guild_id) for model in (
+                    GuildSettings, GuildUsage, RequestLog, BotMemory, MeyayaUserState, ChatBlacklist
+                ))))
+                # New/quiet servers may not have any database rows yet.
+                all_ids = {gid for gid in ids if gid is not None} | self._guild_names.keys() | self._saved_identities.keys()
+                self.guilds_by_id = {gid: SimpleNamespace(id=gid, name=self._guild_names.get(gid) or self._saved_identities.get(gid, {}).get("name", f"Server {gid}"), get_member=lambda _: None)
+                                     for gid in all_ids}
+            self._catalog_refresh_at = time.monotonic() + 15
 
     def get_guild(self, guild_id):
         return self.guilds_by_id.get(guild_id)
 
     async def server_details(self, guild_id, *, summary=False):
         """Bounded on-demand reads including one 50-member page; no gateway."""
+        saved = self._saved_identities.get(guild_id)
+        if guild_id not in self._guild_names and guild_id in self.guilds_by_id:
+            identity = saved or dict(id=str(guild_id), name=self.guilds_by_id[guild_id].name, owner_id=None, owner_name=None)
+            return dict(identity, stale=True, source='Last-known server identity', available=False,
+                        member_preview_error='Meyaya is no longer in this server. Saved records remain available.')
         if summary and not hasattr(self, '_summary_lock'):
             self._summary_lock = asyncio.Lock()
         async with self._summary_lock if summary else self._details_lock:
@@ -142,6 +163,8 @@ class LocalBackend:
                     owner = await get(f'users/{data["owner_id"]}') if data.get('owner_id') else None
                     members = None if summary else await get(f'guilds/{guild_id}/members', params={'limit': '200'})
                 details = rest_server_info(data, channels, owner)
+                await remember_identity(self.db_session, details)
+                self._saved_identities[guild_id] = {key: details.get(key) for key in ('id', 'name', 'owner_id', 'owner_name', 'icon_url')}
                 details['member_preview'] = rest_member_preview(members, data.get('roles')) if members is not None else None
                 if members is None and not summary:
                     details['member_preview_error'] = 'Member list unavailable. Check bot access and Server Members Intent.'
@@ -157,6 +180,8 @@ class LocalBackend:
                 if cached:
                     cache[guild_id] = (time.monotonic() + 30, dict(cached[1], stale=True))
                     return dict(cached[1], stale=True)
+                if saved:
+                    return dict(saved, stale=True, source='Last-known server identity', available=False)
                 raise web.HTTPServiceUnavailable(text='Discord metadata temporarily unavailable; retry shortly.') from None
 
     def cache_guild_prefix(self, *args):
@@ -177,9 +202,16 @@ class LocalDashboard(Dashboard):
             return await handler(request)
         self.app.middlewares.append(refresh_catalog)
 
+    async def _known_server(self, guild_id):
+        return self.bot.get_guild(guild_id) is not None
+
     async def index(self, request):
         response = await super().index(request)
         response.text = response.text.replace('<body>', '<body data-local-dashboard="true">')
+        response.text = response.text.replace('id="login" class="panel login"', 'id="login" class="panel login" hidden')
+        response.text = response.text.replace('id="workspace" hidden', 'id="workspace"')
+        response.text = response.text.replace('id="navigation" hidden', 'id="navigation"')
+        response.text = response.text.replace('id="logout" class="quiet"', 'id="logout" class="quiet" hidden')
         return response
 
     async def servers(self, request):
@@ -193,11 +225,12 @@ class LocalDashboard(Dashboard):
             metadata = self.bot._guild_metadata.get(gid, {})
             details = self.bot._details_cache.get(gid, (0, {}))[1]
             summary = self.bot._summary_cache.get(gid, (0, {}))[1]
-            rows.append(dict(id=str(gid), name=guild.name, local=True,
+            saved = self.bot._saved_identities.get(gid, {})
+            rows.append(dict(id=str(gid), name=guild.name, local=True, available=gid in self.bot._guild_names,
                 members=metadata.get('approximate_member_count'), members_approximate=True,
-                owner_id=details.get('owner_id') or summary.get('owner_id'),
-                owner_name=details.get('owner_name') or summary.get('owner_name'),
-                icon_url=rest_server_info(dict(metadata, id=str(gid))).get('icon_url'),
+                owner_id=details.get('owner_id') or summary.get('owner_id') or saved.get('owner_id'),
+                owner_name=details.get('owner_name') or summary.get('owner_name') or saved.get('owner_name'),
+                icon_url=rest_server_info(dict(metadata, id=str(gid))).get('icon_url') or saved.get('icon_url'),
                 prefix=config.command_prefix if config else 'uwu',
                 autoresponder=config.autoresponder_enabled if config else False,
                 exempt=gid == self.bot.settings.quota_exempt_guild_id,
@@ -212,8 +245,8 @@ class LocalDashboard(Dashboard):
                 raise ValueError()
         except ValueError:
             raise web.HTTPBadRequest(text='Invalid server ID')
-        if guild_id not in self.bot._guild_names:
-            raise web.HTTPNotFound(text='Bot is not currently in this server')
+        if guild_id not in self.bot.guilds_by_id:
+            raise web.HTTPNotFound(text='Server not found')
         return web.json_response(await self.bot.server_details(guild_id))
 
     async def operations(self, request):
@@ -229,8 +262,8 @@ class LocalDashboard(Dashboard):
                 raise ValueError()
         except ValueError:
             raise web.HTTPBadRequest(text='Invalid server ID')
-        if guild_id not in self.bot._guild_names:
-            raise web.HTTPNotFound(text='Bot is not currently in this server')
+        if guild_id not in self.bot.guilds_by_id:
+            raise web.HTTPNotFound(text='Server not found')
         details = await self.bot.server_details(guild_id, summary=True)
         return web.json_response({key: details.get(key) for key in ('id', 'name', 'owner_id', 'owner_name', 'icon_url')})
 
@@ -244,12 +277,22 @@ async def serve(port, *, open_browser=False):
     settings = Settings(REDIS_URL='', DASHBOARD_HOST='127.0.0.1',
         DASHBOARD_PORT=port, DASHBOARD_PUBLIC_URL='', DASHBOARD_TRUSTED_PROXIES='',
         DASHBOARD_TOKEN=secrets.token_urlsafe(48))
-    backend = LocalBackend(settings)
-    dashboard = LocalDashboard(backend)
+    backend = None
+    tunnel = None
+    if settings.dashboard_remote_url:
+        from bot.web.remote import RemoteDashboard
+        dashboard = RemoteDashboard(settings)
+    else:
+        backend = LocalBackend(settings)
+        dashboard = LocalDashboard(backend)
     try:
-        await backend.refresh()
+        if settings.dashboard_ssh_host:
+            from bot.web.tunnel import start_tunnel
+            tunnel = await start_tunnel(settings)
+        if backend is not None:
+            await backend.refresh()
         await dashboard.start()
-        print('Local dashboard only. No Discord login, migrations, or AI requests.', flush=True)
+        print(('AWS live console (settings editing enabled).' if settings.dashboard_remote_edit_token else 'AWS live console (read-only).') if backend is None else 'Local database dashboard.', flush=True)
         print(f'Open http://127.0.0.1:{port} - no login required on this laptop.', flush=True)
         print('Anyone using this laptop can access it while running. Ctrl+C to stop.', flush=True)
         if open_browser:
@@ -261,7 +304,11 @@ async def serve(port, *, open_browser=False):
         await asyncio.Event().wait()
     finally:
         await dashboard.close()
-        await backend.engine.dispose()
+        if tunnel is not None:
+            from bot.web.tunnel import stop_tunnel
+            await stop_tunnel(tunnel)
+        if backend is not None:
+            await backend.engine.dispose()
 
 
 def run():

@@ -1,4 +1,4 @@
-"""Short-lived records of user requests explicitly addressed to Meyaya."""
+"""Short-lived direct chats, delivered automatic exchanges, and command names."""
 
 from datetime import datetime
 from sqlalchemy import BigInteger, DateTime, Index, String, Text, func

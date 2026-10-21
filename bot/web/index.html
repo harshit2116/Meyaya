@@ -12,19 +12,28 @@
   <aside>
     <a class="brand" href="/">m<span>✿</span>yaya</a>
     <nav id="navigation" hidden>
+      <div id="global-navigation">
       <button class="nav active" data-view="overview">◈ Server overview</button>
       <button class="nav" data-view="operations">⌁ Response activity</button>
       <button class="nav" data-view="health">♡ Meyaya Health</button>
       <button class="nav" data-view="memories">🧠 Memory vault</button>
       <button class="nav" data-view="nicknames">✿ Nicknames</button>
       <button class="nav" data-view="blacklist">Chat blacklist</button>
+      </div>
+      <div id="server-navigation" hidden><p id="sidebar-server-name" class="sidebar-server-name"></p>
+        <button class="server-nav" data-panel="main">◈ Main page</button>
+        <button class="server-nav" data-panel="chat">♡ AI chat</button>
+        <button class="server-nav" data-panel="commands">⌘ Command history</button>
+        <button class="server-nav" data-panel="diagnostics">⌁ History &amp; diagnostics</button>
+        <button id="sidebar-all-servers" class="quiet">← All servers</button>
+      </div>
     </nav>
     <div class="aside-note">OWNER CONTROL ROOM<br><span>Private tools for Meyaya's little universe.</span></div>
     <button id="logout" class="quiet">Lock dashboard</button>
   </aside>
   <main>
-    <header>
-      <div><p class="eyebrow">THE MEYAYA SYSTEM</p><h1 id="page-title">A little bird's-eye view.</h1><p class="subtitle" id="page-subtitle">Your servers, activity, memories, and relationships in one place.</p></div>
+    <header id="dashboard-header">
+      <img class="dashboard-avatar" src="/meyaya-avatar.jpg" alt="Meyaya"><div class="header-copy"><p class="eyebrow">THE MEYAYA SYSTEM</p><h1 id="page-title">A little bird's-eye view.</h1><p class="subtitle" id="page-subtitle">Your servers, activity, memories, and relationships in one place.</p></div>
       <span class="badge" id="connection">Locked</span>
     </header>
     <section id="login" class="panel login">
@@ -40,16 +49,40 @@
         <article><span>Commands today</span><strong id="commands">0</strong></article>
         <article><span>Daily reset</span><strong class="small">00:00 UTC</strong></article>
       </section>
+      <section id="live-stats" class="stats" aria-label="Live bot metrics">
+        <article><span>Bot uptime</span><strong class="small" id="bot-uptime">Loading…</strong></article>
+        <article><span>AI response latency</span><strong class="small" id="bot-response-latency">Loading…</strong></article>
+        <article><span>Active voice sessions</span><strong id="bot-voice">Loading…</strong></article>
+        <article><span>Failed AI requests today</span><strong id="bot-failures">Loading…</strong></article>
+      </section><p id="overview-scope" class="details"></p>
       <section id="view-server" class="view" hidden>
-        <div class="toolbar"><div id="server-heading" class="server-heading"></div><button id="server-refresh" class="quiet" type="button">Refresh server</button></div>
+        <div id="server-main-chrome"><button id="server-back" class="quiet" type="button">← All servers</button><div class="toolbar"><div id="server-heading" class="server-heading"></div><button id="server-refresh" class="quiet" type="button">Refresh server</button></div></div>
+        <div id="server-panel-main" class="server-panel">
         <p id="server-state" class="result-state" role="status"></p>
         <div class="server-layout"><section id="server-detail-content" class="panel server-detail-panel"></section><section id="server-controls" class="panel server-detail-panel"></section></div>
+        </div>
+        <div id="server-panel-chat" class="server-panel" hidden></div>
+        <div id="server-panel-diagnostics" class="server-panel" hidden><div class="toolbar"><h2>Server history &amp; diagnostics</h2><button id="diagnostics-refresh" class="quiet">Refresh</button></div><section id="server-insights" class="panel operations-panel"></section></div>
+        <div id="server-panel-commands" class="server-panel" hidden>
+        <section class="panel operations-panel"><div class="toolbar"><h2>Command history</h2><button id="command-history-refresh" class="quiet">Refresh</button></div><p class="details">Successful prefix and slash commands from the last seven days. Command names only; arguments are not retained. History starts with this update.</p><p id="command-history-state" role="status"></p><div id="command-history-items"></div><button id="command-history-more" hidden>Load older commands</button></section>
         <section id="server-command-usage" class="panel operations-panel server-command-usage" aria-label="Server command usage"></section>
+        </div>
       </section>
       <section id="view-overview" class="view">
         <div class="toolbar"><div><h2>Your little universe</h2><p>Live operations and per-server controls.</p></div><div class="row"><input id="search" aria-label="Find a server" placeholder="Find a server"><button id="refresh" class="quiet">Refresh</button></div></div>
-        <section id="servers" class="grid"></section><p id="empty" hidden>No servers match your search.</p>
-        <section id="request-panel" class="panel request-panel" hidden aria-labelledby="request-title"><div class="row"><h2 id="request-title">Server requests</h2><button id="request-close" class="quiet" type="button">Close</button></div><p>Explicit requests to Meyaya only. Seven-day retention.</p><div class="row"><button id="request-refresh" type="button" class="quiet">Refresh requests</button><span id="request-state" role="status"></span></div><div id="request-items"></div><button id="request-more" type="button" hidden>Load older requests</button></section>
+        <section class="panel attention-panel"><h2>Needs attention</h2><p class="details">Permissions, allowances, command failures, and voice diagnostics.</p><div id="attention-items">Checking your servers…</div></section>
+        <div class="browse-controls"><label>Sort servers<select id="server-sort"><option value="name">Name</option><option value="activity">Most active</option><option value="members">Most members</option><option value="joined">Recently joined</option></select></label><label>Show<select id="server-filter"><option value="all">All servers</option><option value="active">Active today</option><option value="quota">Allowance exhausted</option><option value="unavailable">Unavailable</option></select></label></div>
+        <section class="server-group" aria-labelledby="current-servers-title">
+          <div class="server-group-heading"><h2 id="current-servers-title">Current servers</h2><span id="current-server-count" class="badge">0</span></div>
+          <p class="details">Servers Meyaya is currently in.</p>
+          <section id="servers" class="grid"></section><p id="empty" hidden>No current servers match these filters. Try another search or filter.</p>
+        </section>
+        <section class="server-group former-server-group" aria-labelledby="former-servers-title">
+          <div class="server-group-heading"><h2 id="former-servers-title">Removed servers</h2><span id="former-server-count" class="badge">0</span></div>
+          <p class="details">Servers Meyaya is no longer in. Saved records remain available.</p>
+          <section id="former-servers" class="grid"></section><p id="former-empty" hidden>No removed servers match these filters.</p>
+        </section>
+        <section id="request-panel" class="panel request-panel" hidden aria-labelledby="request-title"><div class="row"><h2 id="request-title">AI chat</h2><select id="chat-kind" aria-label="Conversation type"><option value="all">All conversations</option><option value="direct">Direct chats</option><option value="automatic">Automatic replies</option></select></div><p>Direct conversations and delivered automatic replies. Seven-day retention.</p><div class="row"><button id="request-refresh" type="button" class="quiet">Refresh chats</button><span id="request-state" role="status"></span></div><div id="request-items"></div><button id="request-more" type="button" hidden>Load older conversations</button></section>
       </section>
       <section id="view-memories" class="view" hidden>
         <div class="toolbar"><div><h2>Permanent memory vault</h2><p>Inspect active, conflicted, and superseded Memory System v2 records.</p></div><button id="memory-refresh" class="quiet">Refresh</button></div>

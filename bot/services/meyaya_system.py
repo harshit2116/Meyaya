@@ -142,7 +142,8 @@ class MeyayaSystemService:
         self._materialize_decay(global_state, user_state, now)
 
         last_seen = self._aware(user_state.last_interaction_at)
-        if last_seen is None or now - last_seen >= CHAT_FAMILIARITY_COOLDOWN:
+        counted_interaction = last_seen is None or now - last_seen >= CHAT_FAMILIARITY_COOLDOWN
+        if counted_interaction:
             user_state.familiarity = self._clamp(user_state.familiarity + CHAT_FAMILIARITY_GAIN)
             global_state.energy = self._clamp(global_state.energy + 1)
             global_state.energy_updated_at = now
@@ -152,7 +153,9 @@ class MeyayaSystemService:
             user_state.last_interaction_at = now
 
         effect = self.conversation_effect(content, relationship_signal)
-        user_state.affection = self._clamp(user_state.affection + effect.affection)
+        # Warmth grows through spaced interactions rather than repeated praise.
+        affection_gain = effect.affection if effect.affection <= 0 or counted_interaction else 0
+        user_state.affection = self._clamp(user_state.affection + affection_gain)
         user_state.annoyance = self._clamp(user_state.annoyance + effect.user_annoyance)
         global_state.energy = self._clamp(global_state.energy + effect.energy)
         global_state.annoyance = self._clamp(global_state.annoyance + effect.global_annoyance)
@@ -450,6 +453,21 @@ class MeyayaSystemService:
             f"Relationship with {display_name} (Discord ID {user_id}): {relationship}.",
             f"Familiarity: {familiarity}/100; affection: {affection}/100; annoyance with them: {user_annoyance}/100.",
         ]
+        if familiarity < 15:
+            style = "Be curious and welcoming; learn their preferences without assuming closeness."
+        elif familiarity < 40:
+            style = "Be relaxed and lightly playful; recognise supplied shared interests naturally."
+        elif familiarity < 70:
+            style = "Use comfortable banter and occasional thoughtful check-ins, suited to their mood."
+        else:
+            style = "Speak with easy, familiar warmth; subtle callbacks may use supplied shared memories."
+        lines.append("Relationship tone: " + style)
+        lines.append(
+            "Familiarity is gradual comfort, not automatic romance, dependency, or permission to insult. "
+            "Never invent shared events or preferences; use only supplied memories and conversation. "
+            "Respect their boundaries and seriousness over teasing. Do not announce relationship scores "
+            "or change private family identities."
+        )
         if nickname:
             lines.append(f'Meyaya currently calls this member "{nickname}".')
         if reason:

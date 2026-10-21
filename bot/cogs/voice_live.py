@@ -35,6 +35,9 @@ class VoiceLiveCog(commands.Cog):
 
     @tasks.loop(seconds=15)
     async def _empty_watch(self):
+        for session in list(self._sessions.values()):
+            if hasattr(session, 'checkpoint_voice_usage'):
+                await session.checkpoint_voice_usage()
         await self._check_empty_sessions()
 
     @_empty_watch.before_loop

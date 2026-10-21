@@ -402,6 +402,9 @@ class MeyayaBot(commands.Bot):
         # Hybrid commands also emit app-command completion; count them only there.
         if ctx.guild is not None and ctx.interaction is None:
             await self._count_command(ctx.guild.id, ctx.command.qualified_name)
+            await self.request_log.record_command(event_id=ctx.message.id, guild_id=ctx.guild.id,
+                channel_id=ctx.channel.id, user=ctx.author, command=ctx.command.qualified_name,
+                invocation='prefix', message_id=ctx.message.id)
 
     async def on_command(self, ctx):
         # Review logs are AI-chat only; command counts are recorded on completion.
@@ -433,6 +436,9 @@ class MeyayaBot(commands.Bot):
     async def on_app_command_completion(self, interaction, command):
         if interaction.guild_id is not None:
             await self._count_command(interaction.guild_id, command.qualified_name)
+            await self.request_log.record_command(event_id=interaction.id, guild_id=interaction.guild_id,
+                channel_id=interaction.channel_id, user=interaction.user, command=command.qualified_name,
+                invocation='slash')
 
     async def _count_command(self, guild_id, command_name):
         try:
@@ -512,27 +518,51 @@ class MeyayaBot(commands.Bot):
             except SQLAlchemyError:
                 logger.warning("Could not refresh owner dashboard settings; retrying next minute")
 
+    async def _remember_guild_identity(self, guild, *, membership=True) -> None:
+        from bot.services.guild_identity import remember_identity
+        owner = guild.owner or self.get_user(guild.owner_id)
+        if owner is None and guild.owner_id:
+            try:
+                owner = await self.fetch_user(guild.owner_id)
+            except discord.HTTPException:
+                pass
+        try:
+            await remember_identity(self.db_session, dict(id=str(guild.id), name=guild.name,
+                owner_id=guild.owner_id, owner_name=owner.display_name if owner else None,
+                icon_url=str(guild.icon.url) if guild.icon else None), membership=membership,
+                joined_at=guild.me.joined_at if guild.me else None)
+        except SQLAlchemyError:
+            logger.warning("Could not save server identity for guild=%s", guild.id)
+
+    async def on_guild_update(self, before, after) -> None:
+        await self._remember_guild_identity(after)
+
     async def on_ready(self) -> None:
         """Log the connected bot account."""
 
         print(f"Logged in as {self.user} ({self.user.id if self.user else 'unknown'})")
         from bot.services.bot_profile_style import apply_all_guild_name_styles
 
+        for guild in self.guilds:
+            await self._remember_guild_identity(guild)
         await apply_all_guild_name_styles(self)
 
     async def on_guild_available(self, guild) -> None:
+        await self._remember_guild_identity(guild)
         if self.is_ready():
             from bot.services.bot_profile_style import apply_guild_name_style
 
             await apply_guild_name_style(self, guild)
 
     async def on_guild_join(self, guild) -> None:
+        await self._remember_guild_identity(guild)
         if self.is_ready():
             from bot.services.bot_profile_style import apply_guild_name_style
 
             await apply_guild_name_style(self, guild)
 
     async def on_guild_remove(self, guild) -> None:
+        await self._remember_guild_identity(guild, membership=False)
         getattr(self, "_guild_name_style_attempted", set()).discard(guild.id)
 
 

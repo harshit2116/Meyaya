@@ -1,4 +1,4 @@
-"""Capture explicit AI requests and delivered replies, never prompts or ambient chat."""
+"""Retain direct chats, delivered automatic exchanges, and command names for seven days."""
 
 import asyncio
 import json
@@ -92,7 +92,9 @@ class RequestLogService:
     async def record_message(self, message, kind="chat", *, response=None):
         if message.guild is None or message.author.bot:
             return
-        if self._closing or kind != "chat":
+        if self._closing or kind not in {"chat", "auto_chat"}:
+            return
+        if kind == "auto_chat" and response is None:
             return
         if len(self._pending) >= 8:
             now = time.monotonic()
@@ -106,12 +108,21 @@ class RequestLogService:
             guild_id=message.guild.id,
             channel_id=message.channel.id,
             user_id=message.author.id,
-            user_name=str(message.author),
+            user_name=getattr(message.author, "display_name", str(message.author)),
             kind=kind,
             content=(message.content or "[No text supplied]")[:MAX_CONTENT],
             message_id=message.id,
             response=response[:MAX_CONTENT] if response is not None else None,
         ), name="chat-request-log")
+        self._pending.add(task)
+        task.add_done_callback(self._record_done)
+
+    async def record_command(self, *, event_id, guild_id, channel_id, user, command, invocation, message_id=None):
+        if self._closing or guild_id is None or channel_id is None or len(self._pending) >= 8:
+            return
+        task = asyncio.create_task(self._queued_record(event_id=event_id, guild_id=guild_id,
+            channel_id=channel_id, user_id=user.id, user_name=str(user)[:200], kind='command',
+            content=str(command)[:100], response=invocation, message_id=message_id), name='command-history-log')
         self._pending.add(task)
         task.add_done_callback(self._record_done)
 
@@ -132,11 +143,14 @@ class RequestLogService:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
 
-    async def page(self, guild_id: int, before: int | None = None):
+    async def page(self, guild_id: int, before: int | None = None, *, kind="all"):
+        kinds = {"all": ("chat", "auto_chat"), "direct": ("chat",), "automatic": ("auto_chat",), "command": ("command",)}
+        if kind not in kinds:
+            raise ValueError("Invalid log kind")
         cutoff = datetime.now(UTC) - timedelta(days=RETENTION_DAYS)
         statement = select(RequestLog).where(
             RequestLog.guild_id == guild_id, RequestLog.created_at >= cutoff,
-            RequestLog.kind == 'chat',
+            RequestLog.kind.in_(kinds[kind]),
         )
         if before is not None:
             statement = statement.where(RequestLog.event_id < before)

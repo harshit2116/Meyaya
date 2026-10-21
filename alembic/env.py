@@ -23,6 +23,8 @@ from bot.models import ai_budget  # noqa: F401
 from bot.models import fantasy_profile  # noqa: F401
 from bot.models import fantasy_duel  # noqa: F401
 from bot.models import fantasy_dungeon  # noqa: F401
+from bot.models import voice_usage  # noqa: F401
+from bot.models import guild_identity  # noqa: F401
 
 config = context.config
 

@@ -5,13 +5,15 @@ let requestVersion = 0, memoryOffset = null, nicknameOffset = null;
 let healthLoading = false, healthVersion = 0;
 const $ = id => document.getElementById(id);
 const notice = message => { $("notice").textContent = message; };
-const pageServerId = new URLSearchParams(location.search).get("server");
+let pageServerId = new URLSearchParams(location.search).get("server");
+let selectedServerPanel = new URLSearchParams(location.search).get("panel") || "main";
+let commandHistoryCursor = null, commandHistoryVersion = 0;
 const serverWindows = new Map();
 const serverWindowTimers = new Map();
 
 async function api(path, options = {}) {
   const session = token;
-  const response = await fetch(path, {...options, headers: {"Authorization": `Bearer ${token}`, "Content-Type": "application/json"}});
+  const response = await fetch(path, {signal: AbortSignal.timeout(20000), ...options, headers: {"Authorization": `Bearer ${token}`, "Content-Type": "application/json"}});
   if (token !== session) throw new Error("Dashboard locked. Sign in again.");
   if (!response.ok) {
     if (response.status === 401) lock();
@@ -41,6 +43,7 @@ const channelTypes = {0: "Text", 2: "Voice", 4: "Category", 5: "Announcements", 
 
 function renderServerDetails(target, data) {
     target.replaceChildren();
+  if (data.stale) target.append(element("p", "Last-known information. Live Discord details are unavailable; saved records are retained.", "details"));
   const facts = element("div", undefined, "metrics server-facts");
   const channelName = id => id ? `${data.channels?.find(c => c.id === id)?.name || "Channel"} (${id})` : "Not set";
   for (const [label, value] of [
@@ -54,9 +57,9 @@ function renderServerDetails(target, data) {
   ]) facts.append(metric(label, known(value)));
   if (data.description) target.append(element("p", data.description, "details"));
   target.append(facts);
-  const memberSection = element("section", undefined, "server-members");
+  const memberSection = element("details", undefined, "server-members");
   const humans = (data.member_preview || []).filter(member => !member.bot).slice(0, 50);
-  memberSection.append(element("h4", `Members (${humans.length} shown · up to 50 · bots excluded)`));
+  memberSection.append(element("summary", `Members (${humans.length} shown · up to 50 · bots excluded)`));
   if (data.member_preview_error) memberSection.append(element("p", data.member_preview_error, "details"));
   const memberList = element("div", undefined, "inventory-list");
   if (data.member_preview?.length === 0 && !data.member_preview_error) memberList.append(element("p", "No members returned.", "details"));
@@ -116,7 +119,13 @@ function lock() {
 }
 
 function switchView(name, autoLoad = true) {
+  if (name !== "server") $("dashboard-header").hidden = false;
+  $("global-navigation").hidden = name === "server";
+  $("server-navigation").hidden = name !== "server";
+  if (name !== "server" && pageServerId) { pageServerId = null; history.replaceState(null, "", "/"); }
   $("global-stats").hidden = name === "server";
+  $("live-stats").hidden = name !== "overview";
+  $("overview-scope").hidden = name !== "overview";
   for (const view of document.querySelectorAll(".view")) view.hidden = view.id !== `view-${name}`;
   for (const button of document.querySelectorAll(".nav")) button.classList.toggle("active", button.dataset.view === name);
   const copy = {
@@ -242,16 +251,20 @@ function renderServerControls(target, server) {
       metrics.append(metric("Members (approx.)", server.members ?? "Unavailable"), metric("Commands today", server.today_commands), metric("Meyaya replies / 7 days", server.week_chats), metric("Commands / 7 days", server.week_commands));
       card.append(metrics, element("p", "Discord metadata is fetched on demand. Process counters are available on the hosted dashboard. Settings apply on the updated host within 60 seconds.", "details"));
     } else {
-    metrics.append(metric("Members", server.members ?? "Unknown"), metric("Commands today", server.today_commands), metric("Meyaya replies / 7 days", server.week_chats), metric("Commands / 7 days", server.week_commands), metric("Response success", `${server.model_success_rate}%`), metric("Failed responses", server.model_failures), metric("Average latency", server.model_average_latency_ms === null ? "No data" : `${server.model_average_latency_ms} ms`), metric("Tokens this process", server.model_tokens.toLocaleString())); card.append(metrics);
+    metrics.append(metric("Members", server.members ?? "Unknown"), metric("Commands today", server.today_commands), metric("Meyaya replies / 7 days", server.week_chats), metric("Commands / 7 days", server.week_commands), metric("Response success", `${server.model_success_rate}%`), metric("Failed responses", server.model_failures), metric("Average latency", server.model_average_latency_ms === null ? "No data" : `${server.model_average_latency_ms} ms`), metric("Tokens this process", (server.model_tokens ?? 0).toLocaleString())); card.append(metrics);
     card.append(element("p", `${server.available ? "Available" : "Unavailable"} - ${server.readable_channels} readable - ${server.monitored_channels} monitored - Timeout: ${server.can_timeout ? "yes" : "no"}`, "details"));
-    card.append(element("p", `${server.active_games} active games - Voice ${server.voice_active ? "connected" : "disconnected"}`, "details"));
+    card.append(element("p", `Voice ${server.voice_active ? "connected" : "disconnected"}`, "details"));
     }
+    const voiceTime = element("div", undefined, "metrics");
+    const hours = value => `${((value || 0)/3600).toFixed(2)} h`;
+    voiceTime.append(metric("Voice today", hours(server.today_voice_seconds)), metric("Voice / 7 days", hours(server.week_voice_seconds)), metric("Voice all time", hours(server.total_voice_seconds)));
+    card.append(element("h4", "Voice chat usage"), voiceTime, element("p", "Meyaya session time, including active sessions. UTC days; tracking starts with this update.", "details"));
     const prefixLabel = element("label", "Command prefix"), prefix = element("input"); prefix.value = server.prefix; prefix.maxLength = 10; prefix.required = true; prefixLabel.append(prefix);
     const limitLabel = element("label", "Daily Meyaya reply allowance (0 disables chat)"), limit = element("input"); limit.type = "number"; limit.min = "0"; limit.max = "10000"; limit.required = true; limit.value = server.limit; limit.disabled = server.exempt; limitLabel.append(limit);
     const toggle = element("label", undefined, "toggle"), auto = element("input"); auto.type = "checkbox"; auto.checked = server.autoresponder; toggle.append(auto, element("span", "Automatic replies enabled"));
-    const save = element("button", "Save changes", "save"); card.append(prefixLabel, limitLabel, toggle, save);
+    const save = element("button", server.readOnly ? "Read-only AWS console" : "Save changes", "save"); save.disabled = !!server.readOnly; if (server.readOnly) { prefix.disabled = true; limit.disabled = true; auto.disabled = true; } card.append(prefixLabel, limitLabel, toggle, save);
     const review = element("button", "View AI chat log", "quiet save"); review.type = "button";
-    review.addEventListener("click", () => { closeRequests(); selectedServer = server; $("request-title").textContent = `Requests - ${server.name}`; $("request-panel").hidden = false; $("request-panel").scrollIntoView({behavior: "smooth"}); loadRequests(false); }); card.append(review);
+    review.addEventListener("click", () => switchServerPanel("chat")); card.append(review);
     const shortcuts = element("div", undefined, "card-actions");
     const memories = element("button", "Memories", "quiet"); memories.type = "button";
     memories.addEventListener("click", () => { $("memory-guild").value = server.id; switchView("memories", false); loadMemories(false); });
@@ -303,24 +316,42 @@ async function showWindowFallback(server) {
   $("notice").replaceChildren(document.createTextNode("If your browser didn't open the window, "), link);
 }
 
+const isFormerServer = server => server.membership === "removed" || (server.local && server.available === false);
+
 function renderServers() {
   const query = $("search").value.toLowerCase();
-  const visible = servers.filter(server => `${server.name} ${server.id} ${server.owner_name || ""}`.toLowerCase().includes(query));
-  $("servers").replaceChildren(); $("empty").hidden = visible.length > 0;
+  const filter = $("server-filter").value;
+  const visible = servers.filter(server => `${server.name} ${server.id} ${server.owner_name || ""}`.toLowerCase().includes(query))
+    .filter(server => filter === "all" || (filter === "active" && (server.today_chats + server.today_commands > 0)) ||
+      (filter === "quota" && !isFormerServer(server) && !server.exempt && server.today_chats >= server.limit) ||
+      (filter === "unavailable" && (isFormerServer(server) || server.available === false)));
+  const sort = $("server-sort").value;
+  visible.sort((a,b) => {
+    const score = server => sort === "activity" ? (server.today_chats + server.today_commands) :
+      sort === "members" ? (server.members ?? -1) : sort === "joined" ? (Date.parse(server.joined_at) || 0) : 0;
+    return score(b) - score(a) || a.name.localeCompare(b.name);
+  });
+  const current = visible.filter(server => !isFormerServer(server));
+  const former = visible.filter(isFormerServer);
+  $("servers").replaceChildren(); $("former-servers").replaceChildren();
+  $("empty").hidden = current.length > 0; $("former-empty").hidden = former.length > 0;
+  $("current-server-count").textContent = current.length;
+  $("former-server-count").textContent = former.length;
   for (const server of visible) {
     const card = element("button", undefined, "server-tile"); card.type = "button";
-    const icon = serverIcon(server), owner = element("p", `Owner · ${server.owner_name || "Loading…"}`, "server-owner");
+    const icon = serverIcon(server), owner = element("p", `Owner · ${server.owner_name || (isFormerServer(server) ? "Not previously recorded" : "Loading…")}`, "server-owner");
     const activity = element("div", undefined, "server-tile-activity");
     activity.append(metric("AI chats today", known(server.today_chats)), metric("Commands today", known(server.today_commands)));
-    card.append(icon, element("h3", server.name), owner, activity, element("span", server.id, "id"), element("span", "Open server ↗", "tile-link"));
-    card.setAttribute("aria-label", `Open ${server.name} in a new window`);
-    card.addEventListener("click", () => openServerWindow(server)); $("servers").append(card);
-    if (!server.owner_name) api(`/api/servers/${server.id}/summary`).then(data => {
+    card.append(icon, element("h3", server.name), owner, activity, element("span", server.id, "id"), element("span", "View server →", "tile-link"));
+    if (server.membership === "removed" || (server.local && server.available === false)) card.append(element("span", "No longer in server · saved records", "details"));
+    card.setAttribute("aria-label", `View ${server.name}`);
+    card.addEventListener("click", () => navigateServer(server.id)); $(isFormerServer(server) ? "former-servers" : "servers").append(card);
+    if (!server.owner_name && !isFormerServer(server)) api(`/api/servers/${server.id}/summary`).then(data => {
       if (!card.isConnected || !token) return;
       server.owner_name = data.owner_name; server.icon_url = data.icon_url || server.icon_url;
       owner.textContent = `Owner · ${data.owner_name || "Unavailable"}`;
       icon.replaceWith(serverIcon(server));
-    }).catch(() => { if (card.isConnected) owner.textContent = "Owner · Unavailable"; });
+    }).catch(() => { if (card.isConnected) owner.textContent = `Owner · ${server.owner_name || "Temporarily unavailable"}`; });
   }
 }
 
@@ -331,15 +362,21 @@ async function showServer(guildId) {
   $("page-title").textContent = server.name;
   $("server-heading").replaceChildren(serverIcon(server), element("div", `Owner · ${server.owner_name || "Loading…"}`));
   renderServerControls($("server-controls"), server);
-  loadServerCommands(guildId);
+  $("sidebar-server-name").textContent = server.name;
+  switchServerPanel(selectedServerPanel, false);
+}
+
+async function loadServerBasics(guildId) {
+  const server = servers.find(item => item.id === guildId);
+  if (!server) return;
   $("server-state").textContent = "Loading server details…";
   try {
     const data = await api(`/api/servers/${guildId}/details`);
-    if (!token) return;
+    if (!token || pageServerId !== guildId) return;
     renderServerDetails($("server-detail-content"), data);
     $("server-heading").replaceChildren(serverIcon({...server, icon_url: data.icon_url || server.icon_url}), element("div", `Owner · ${data.owner_name || "Unavailable"}`));
     $("server-state").textContent = "";
-  } catch (error) { $("server-state").textContent = error.message; }
+  } catch (error) { if (pageServerId === guildId) $("server-state").textContent = error.message; }
 }
 
 async function loadServerCommands(guildId) {
@@ -365,10 +402,11 @@ async function loadServerCommands(guildId) {
 
 async function refresh() {
   const data = await api("/api/servers"); servers = data.servers;
-  $("connection").textContent = data.mode === "local" ? "● Local dashboard · cloud database" : data.ready ? "● Connected" : "Connecting to Discord";
-  $("total").textContent = servers.length; $("chats").textContent = servers.reduce((n, server) => n + server.today_chats, 0); $("commands").textContent = servers.reduce((n, server) => n + server.today_commands, 0);
+  if (data.mode === "remote") servers.forEach(server => { server.readOnly = !data.can_edit || isFormerServer(server); });
+  $("connection").textContent = data.mode === "remote" ? `● Live AWS bot · ${data.can_edit ? "editing enabled" : "read-only"}` : data.mode === "local" ? "● Local dashboard · cloud database" : data.ready ? "● Connected" : "Connecting to Discord";
+  $("total").textContent = servers.filter(server => !isFormerServer(server)).length; $("chats").textContent = servers.reduce((n, server) => n + server.today_chats, 0); $("commands").textContent = servers.reduce((n, server) => n + server.today_commands, 0);
   populateGuildFilters();
-  if (!pageServerId) renderServers();
+  if (!pageServerId) { renderServers(); loadOverviewInsights(); }
   if (pageServerId) {
     for (const id of ["memory-guild", "nickname-guild", "operations-guild"]) $(id).value = pageServerId;
     await showServer(pageServerId);
@@ -385,15 +423,18 @@ async function loadRequests(older) {
   const version = ++requestVersion, guildId = selectedServer.id;
   $("request-state").textContent = "Loading"; $("request-more").disabled = true;
   try {
-    const query = older && requestCursor ? `?before=${encodeURIComponent(requestCursor)}` : "";
+    const params = new URLSearchParams({kind: $("chat-kind").value});
+    if (older && requestCursor) params.set("before", requestCursor);
+    const query = `?${params}`;
     const data = await api(`/api/servers/${guildId}/requests${query}`);
     if (version !== requestVersion || selectedServer?.id !== guildId) return;
     if (!older) $("request-items").replaceChildren();
     for (const item of data.items) {
-      const entry = element("article", undefined, "request-entry");
-      entry.append(element("h3", `${item.user_name} - ${item.kind}`), element("p", `${new Date(item.created_at).toLocaleString()} - User ${item.user_id} - Channel ${item.channel_id}`, "details"), element("h4", "User request"), element("pre", item.content, "request-content"), element("h4", "Meyaya's response"));
-      entry.append(item.response === null || item.response === undefined ? element("p", "Reply not recorded.", "details") : element("pre", item.response, "request-content response-content"));
-      const link = element("a", item.kind === "slash" ? "Open channel in Discord" : "Open message in Discord"); link.href = item.url; link.target = "_blank"; link.rel = "noopener noreferrer"; entry.append(link); $("request-items").append(entry);
+      const entry = element("article", undefined, "discord-exchange");
+      const user = discordMessage(item.user_name, item.content);
+      const reply = discordMessage("Meyaya", item.response ?? "Reply not recorded.", true);
+      if (item.kind === "auto_chat") user.querySelector(".discord-message-heading").append(element("span", "Automatic reply", "conversation-type auto-reply"));
+      entry.append(user, reply); $("request-items").append(entry);
     }
     requestCursor = data.next_cursor; $("request-more").hidden = !requestCursor;
     $("request-state").textContent = $("request-items").children.length ? `${$("request-items").children.length} AI chats shown` : "No recorded AI chats in the last seven days.";
@@ -544,10 +585,23 @@ async function useOwnerLink() {
 if (document.body.dataset.localDashboard === "true") {
   token = "local"; // UI state only; local server enforces loopback and origin checks.
   $("logout").hidden = true;
-  refresh().then(() => {
-    $("workspace").hidden = false; $("navigation").hidden = false; $("login").hidden = true;
-    if (!pageServerId) switchView("overview"); notice("");
-  }).catch(error => notice(error.message));
+  $("workspace").hidden = false; $("navigation").hidden = false; $("login").hidden = true;
+  $("connection").textContent = "Connecting";
+  if (!pageServerId) switchView("overview");
+  $("servers").replaceChildren(element("p", "Loading your servers…", "details"));
+  async function loadLocalOverview() {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await refresh(); notice(""); return;
+      } catch (error) {
+        if (!attempt) { notice("The first request did not finish. Retrying…"); continue; }
+        $("connection").textContent = "Could not load servers";
+        $("servers").replaceChildren(element("p", "Server loading failed. Use Refresh to try again.", "details"));
+        notice(error.name === "TimeoutError" ? "The dashboard took too long to respond. Check its terminal for errors, then select Refresh." : error.message);
+      }
+    }
+  }
+  loadLocalOverview();
 } else {
   useOwnerLink();
 }
@@ -592,14 +646,14 @@ $("logout").addEventListener("click", () => {
 $("refresh").addEventListener("click", () => refresh().catch(error => notice(error.message)));
 $("search").addEventListener("input", renderServers);
 for (const button of document.querySelectorAll(".nav")) button.addEventListener("click", () => switchView(button.dataset.view));
-$("request-close").addEventListener("click", closeRequests); $("request-refresh").addEventListener("click", () => loadRequests(false)); $("request-more").addEventListener("click", () => loadRequests(true));
+$("request-refresh").addEventListener("click", () => loadRequests(false)); $("request-more").addEventListener("click", () => loadRequests(true));
 $("memory-refresh").addEventListener("click", () => loadMemories(false)); $("memory-more").addEventListener("click", () => loadMemories(true));
 $("memory-guild").addEventListener("change", () => loadMemories(false)); $("memory-status").addEventListener("change", () => loadMemories(false)); $("memory-query").addEventListener("change", () => loadMemories(false));
 $("nickname-refresh").addEventListener("click", () => loadNicknames(false)); $("nickname-more").addEventListener("click", () => loadNicknames(true));
 $("nickname-guild").addEventListener("change", () => loadNicknames(false)); $("nickname-query").addEventListener("change", () => loadNicknames(false));
 $("operations-refresh").addEventListener("click", loadOperations); $("operations-guild").addEventListener("change", loadOperations);
 $("server-refresh").addEventListener("click", () => refresh().catch(error => notice(error.message)));
-$("workspace").append($("request-panel"));
+$("server-panel-chat").append($("request-panel"));
 window.addEventListener("message", event => {
   if (event.origin === location.origin && event.data?.type === "meyaya-server-ready" && serverWindows.get(event.data.guild_id) === event.source) {
     clearTimeout(serverWindowTimers.get(event.data.guild_id)); serverWindowTimers.delete(event.data.guild_id);
@@ -610,3 +664,161 @@ window.addEventListener("message", event => {
   if (session && session !== "local") fetch("/api/logout", {method: "POST", headers: {"Authorization": `Bearer ${session}`, "Content-Type": "application/json"}, body: "{}"}).catch(() => {});
 });
 if (pageServerId && window.opener) window.opener.postMessage({type: "meyaya-server-ready", guild_id: pageServerId}, location.origin);
+
+// Keep the overview current without interrupting an open server or an edit.
+let autoRefreshRunning = false;
+setInterval(async () => {
+  if (!token || document.hidden || $("view-overview").hidden || autoRefreshRunning) return;
+  autoRefreshRunning = true;
+  try { await refresh(); } catch (error) { notice(error.message); }
+  finally { autoRefreshRunning = false; }
+}, 15000);
+
+async function navigateServer(guildId) {
+  pageServerId = guildId; selectedServerPanel = "main";
+  history.pushState(null, "", `/?server=${encodeURIComponent(guildId)}`);
+  closeRequests(); await showServer(guildId); window.scrollTo({top:0});
+}
+$("server-back").addEventListener("click", () => {
+  pageServerId = null; history.pushState(null, "", "/"); closeRequests(); switchView("overview");
+});
+window.addEventListener("popstate", () => {
+  closeRequests();
+  pageServerId = new URLSearchParams(location.search).get("server");
+  selectedServerPanel = new URLSearchParams(location.search).get("panel") || "main";
+  if (pageServerId) showServer(pageServerId); else switchView("overview");
+});
+for (const id of ["server-sort", "server-filter"]) $(id).addEventListener("change", renderServers);
+
+let overviewLoading = false;
+async function loadOverviewInsights() {
+  if (overviewLoading) return;
+  overviewLoading = true;
+  try {
+    const data = await api("/api/overview");
+    if (!token) return;
+    const seconds = data.uptime_seconds;
+    $("bot-uptime").textContent = `${Math.floor(seconds/86400)}d ${Math.floor(seconds/3600)%24}h ${Math.floor(seconds/60)%60}m`;
+    $("bot-response-latency").textContent = data.response_latency_ms == null ? "No data yet" : `${(data.response_latency_ms/1000).toFixed(2)}s`;
+    $("bot-voice").textContent = data.active_voice_sessions;
+    $("bot-failures").textContent = data.failed_requests_today;
+    $("overview-scope").textContent = `Updated ${new Date(data.generated_at).toLocaleTimeString()} · Gateway ${data.gateway_latency_ms ?? "unavailable"} ms · ${data.observation_scope}`;
+    $("attention-items").replaceChildren();
+    if (!data.issues.length) $("attention-items").append(element("p", "All quiet for now. No server issues detected in the available observations.", "status-ok"));
+    for (const issue of data.issues) {
+      const row = element("article", undefined, "attention-item"), copy = element("div");
+      const server = servers.find(s => s.id === issue.guild_id);
+      copy.append(element("strong", `${server?.name || issue.guild_id} · ${issue.title}`), element("p", issue.detail, "details"));
+      const open = element("button", "View diagnostics", "quiet"); open.addEventListener("click", async () => {
+        await navigateServer(issue.guild_id);
+        if (issue.diagnostic === "errors") switchServerPanel("diagnostics");
+        const section = issue.diagnostic === "settings" ? "server-controls" : issue.diagnostic === "permissions" ? "server-detail-content" : "server-insights";
+        $(section).scrollIntoView({behavior:"smooth"});
+      });
+      row.append(copy, open); $("attention-items").append(row);
+    }
+  } catch (error) {
+    for (const id of ["bot-uptime", "bot-response-latency", "bot-voice", "bot-failures"]) $(id).textContent = "Unavailable";
+    $("overview-scope").textContent = error.message;
+    $("attention-items").replaceChildren(element("p", "Diagnostics could not be refreshed. Use Refresh to try again.", "details"));
+  } finally { overviewLoading = false; }
+}
+
+async function loadServerInsights(guildId) {
+  const target = $("server-insights"); target.dataset.guildId = guildId;
+  target.replaceChildren(element("p", "Loading server history and diagnostics…", "details"));
+  try {
+    const data = await api(`/api/servers/${guildId}/insights`);
+    if (!token || target.dataset.guildId !== guildId) return;
+    target.replaceChildren();
+    const identity = data.identity || {}, facts = element("div", undefined, "metrics");
+    const date = value => value ? new Date(value).toLocaleString() : "Not recorded";
+    const server = servers.find(s => s.id === guildId);
+    facts.append(metric("Membership", isFormerServer(server || {}) ? "Removed" : "Current"),
+      metric("Joined", date(identity.joined_at || server?.joined_at)), metric("Left", date(identity.left_at)), metric("Last activity", date(identity.last_activity_at)));
+    target.append(element("h3", "Server history & diagnostics"), facts);
+    const historyPanel = element("details"); historyPanel.open = true; historyPanel.append(element("summary", "Membership history & settings audit"));
+    const events = element("ol", undefined, "history-list");
+    for (const event of data.history) {
+      const labels = {joined:"Meyaya joined", left:"Meyaya left", first_observed:"First observed", settings_changed:"Settings updated"};
+      const item = element("li"); item.append(element("strong", `${labels[event.type] || event.type} · ${date(event.timestamp)}`));
+      if (event.type === "settings_changed") {
+        const changes = Object.entries(event.details.after || {}).filter(([key,value]) => event.details.before?.[key] !== value)
+          .map(([key,value]) => `${key}: ${event.details.before?.[key]} → ${value}`);
+        item.append(element("p", `${event.actor || "Owner"} · ${changes.join(" · ") || "Settings saved without changes"}`, "details"));
+      } else item.append(element("p", `${event.details.name || "Server"}${event.details.owner_name ? ` · Owner: ${event.details.owner_name}` : ""}`, "details"));
+      events.append(item);
+    }
+    if (!data.history.length) historyPanel.append(element("p", "No history recorded yet. New membership events and settings changes will appear here.", "details"));
+    historyPanel.append(events); target.append(historyPanel);
+    const trends = element("details"); trends.open = true; trends.append(element("summary", "Usage over the last 14 days"));
+    const table = element("table", undefined, "trend-table"), head = element("tr");
+    for (const text of ["Day (UTC)", "Replies", "Commands"]) head.append(element("th", text)); table.append(head);
+    for (const day of data.trend) { const row = element("tr"); for (const value of [day.day, day.chats, day.commands]) row.append(element("td", String(value))); table.append(row); }
+    if (!data.trend.length) trends.append(element("p", "No usage recorded in this period.", "details")); else trends.append(table);
+    target.append(trends, element("h3", "Recent server errors"));
+    if (!data.errors.length) target.append(element("p", "No errors retained for this server in the current bot process.", "status-ok"));
+    for (const error of data.errors) {
+      const row = element("article", undefined, "attention-item"), copy = element("div");
+      copy.append(element("strong", `${error.command} · ${error.exception}`), element("p", `${date(error.timestamp)} · Stage: ${error.stage}`, "details"));
+      const button = element("button", error.error_id, "quiet"); button.addEventListener("click", () => { switchView("health", false); $("error-id").value = error.error_id; searchErrors({preventDefault(){}}); });
+      row.append(copy,button); target.append(row);
+    }
+  } catch (error) { if (target.dataset.guildId === guildId) target.replaceChildren(element("p", error.message, "details")); }
+}
+
+function switchServerPanel(panel, updateUrl = true) {
+  if (!["main", "chat", "commands", "diagnostics"].includes(panel)) panel = "main";
+  selectedServerPanel = panel;
+  $("dashboard-header").hidden = panel !== "main";
+  $("server-main-chrome").hidden = panel !== "main";
+  for (const node of document.querySelectorAll(".server-panel")) node.hidden = node.id !== `server-panel-${panel}`;
+  for (const node of document.querySelectorAll(".server-nav")) node.classList.toggle("active", node.dataset.panel === panel);
+  const server = servers.find(s => s.id === pageServerId);
+  if (!server) return;
+  const subtitles = {main:"Basic server information and settings.",chat:"Conversations with Meyaya, including automatic replies.",commands:"Successful commands and usage counts.",diagnostics:"Membership history, settings audit, and diagnostics."};
+  $("page-title").textContent = server.name; $("page-subtitle").textContent = subtitles[panel];
+  if (updateUrl) history.pushState(null, "", `/?server=${server.id}&panel=${panel}`);
+  if (panel === "main") loadServerBasics(server.id);
+  if (panel === "chat") {
+    closeRequests(); selectedServer = server; $("request-panel").hidden = false;
+    $("request-title").textContent = "AI chat"; loadRequests(false);
+  } else { requestVersion++; }
+  if (panel === "commands") { loadServerCommands(server.id); loadCommandHistory(false); }
+  if (panel === "diagnostics") loadServerInsights(server.id);
+}
+for (const button of document.querySelectorAll(".server-nav")) button.addEventListener("click", () => switchServerPanel(button.dataset.panel));
+$("sidebar-all-servers").addEventListener("click", () => $("server-back").click());
+$("chat-kind").addEventListener("change", () => loadRequests(false));
+$("command-history-refresh").addEventListener("click", () => loadCommandHistory(false));
+$("command-history-more").addEventListener("click", () => loadCommandHistory(true));
+async function loadCommandHistory(older) {
+  const gid = pageServerId, version = ++commandHistoryVersion;
+  if (!gid) return;
+  $("command-history-state").textContent = "Loading command history…";
+  $("command-history-more").disabled = true;
+  try {
+    const query = older && commandHistoryCursor ? `?before=${encodeURIComponent(commandHistoryCursor)}` : "";
+    const data = await api(`/api/servers/${gid}/command-history${query}`);
+    if (!token || pageServerId !== gid || version !== commandHistoryVersion) return;
+    if (!older) $("command-history-items").replaceChildren();
+    for (const item of data.items) {
+      const row = element("article", undefined, "command-history-row");
+      row.append(element("code", `${item.response === "slash" ? "/" : ""}${item.content}`), element("span", item.user_name), element("span", item.response === "slash" ? "Slash command" : "Prefix command", "conversation-type"), element("time", new Date(item.created_at).toLocaleString(), "details"));
+      $("command-history-items").append(row);
+    }
+    commandHistoryCursor = data.next_cursor;
+    $("command-history-more").hidden = !commandHistoryCursor;
+    $("command-history-state").textContent = $("command-history-items").children.length ? `${$("command-history-items").children.length} completed commands shown` : "No command history yet. New completed commands will appear here.";
+  } catch (error) { if (version === commandHistoryVersion) $("command-history-state").textContent = error.message; }
+  finally { if (version === commandHistoryVersion) $("command-history-more").disabled = false; }
+}
+
+function discordMessage(name, content, isBot = false) {
+  const row = element("div", undefined, `discord-message${isBot ? " discord-bot-message" : ""}`);
+  const heading = element("div", undefined, "discord-message-heading");
+  heading.append(element("strong", name));
+  row.append(heading, element("div", content, "discord-message-text"));
+  return row;
+}
+$("diagnostics-refresh").addEventListener("click", () => { if (pageServerId) loadServerInsights(pageServerId); });

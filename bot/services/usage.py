@@ -6,6 +6,7 @@ from sqlalchemy import select, update, func, case, cast, Integer, true
 from sqlalchemy.dialects.postgresql import insert, array
 from bot.models.usage import GuildUsage
 from bot.models.guild_settings import GuildSettings
+from bot.models.guild_identity import GuildIdentity
 
 
 class ChatLimitReached(Exception):
@@ -42,6 +43,8 @@ class UsageService:
                 raise ChatLimitReached(
                     f"This server has used its {limit} daily Meyaya messages. The allowance resets at midnight UTC."
                 )
+            await session.execute(update(GuildIdentity).where(GuildIdentity.guild_id == guild_id)
+                                  .values(last_activity_at=datetime.now(UTC)))
             await session.commit()
         return day
 
@@ -52,6 +55,8 @@ class UsageService:
                 .where(GuildUsage.guild_id == guild_id, GuildUsage.day == day)
                 .values(chats=func.greatest(0, GuildUsage.chats - 1))
             )
+            await session.execute(update(GuildIdentity).where(GuildIdentity.guild_id == guild_id)
+                                  .values(last_activity_at=datetime.now(UTC)))
             await session.commit()
 
     async def command_completed(self, guild_id, command_name=None):
@@ -71,6 +76,8 @@ class UsageService:
                     set_=changes,
                 )
             )
+            await session.execute(update(GuildIdentity).where(GuildIdentity.guild_id == guild_id)
+                                  .values(last_activity_at=datetime.now(UTC)))
             await session.commit()
 
     async def command_report(self, guild_id):
