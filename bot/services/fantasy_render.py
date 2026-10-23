@@ -1,6 +1,7 @@
 """Meyaya's Soul Interface: portrait crest, affinity glyphs and a local ritual."""
 
 from io import BytesIO
+from functools import lru_cache
 import math
 from dataclasses import replace
 
@@ -182,6 +183,18 @@ def centered(draw, y, text, size, color, width=760):
     draw.text((450, y), text, font=font(size), fill=color, anchor="mt")
 
 
+@lru_cache(maxsize=32)
+def _soul_gradient(dark, accent):
+    # Cache just a 3 KB column per theme, not a multi-megabyte user card.
+    return bytes(channel for y in range(CARD_SIZE[1])
+                 for channel in blend(dark, accent, max(0, 1 - abs(y - 345) / 700) * 0.17))
+
+
+def _soul_background(dark, accent):
+    strip = Image.frombytes("RGB", (1, CARD_SIZE[1]), _soul_gradient(dark, accent))
+    return strip.resize(CARD_SIZE, Image.Resampling.NEAREST)
+
+
 def render_soul_card(profile, name, avatar=b""):
     if getattr(profile, "is_meyaya_boss", False):
         from bot.services.meyaya_boss_renderer import render_boss_profile
@@ -189,11 +202,8 @@ def render_soul_card(profile, name, avatar=b""):
         return render_boss_profile(profile, avatar)
     theme = theme_for(profile)
     dark, accent = rgb(theme.dark), rgb(theme.color)
-    image = Image.new("RGB", CARD_SIZE)
+    image = _soul_background(dark, accent)
     d = ImageDraw.Draw(image)
-    for y in range(1000):
-        glow = max(0, 1 - abs(y - 345) / 700) * 0.17
-        d.line((0, y, 900, y), fill=blend(dark, accent, glow))
     # Constellation geometry and an affinity-specific seal, drawn locally.
     for i in range(34):
         x, y = (i * 191 + profile.user_id % 73) % 860 + 20, (i * 137) % 930 + 30

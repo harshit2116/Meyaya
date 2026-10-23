@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 CYCLE = 33_550_336
 PREVIOUS_CYCLES = CYCLE - 1
-STORY_VERSION = 3
+STORY_VERSION = 4
 ORIGIN_COLOR = 0xE7A9CB
 ENDING_TITLES = {"meyaya": "THE WORLD THAT CONTINUES", "veyra": "THE LAST SILENCE"}
 
@@ -87,9 +87,22 @@ CORE = (
     scene("break", "THE SEAL BREAKS", "The last restraint opens. Across the Core, the ten anchors go dark. This is the end of a containment system, not the creation of a new force. Veyra reaches for the power that was always hers.", "cinematic/seal-break", floor=10, flags=("seal_broken",)),
     scene("release", "UNBOUND ERASURE", "Her imprisoned presence and borrowed projection become one. Erasure flows through channels the seal kept closed. Meyaya no longer has to hold the mechanism together; Veyra no longer has to reach through its cracks.", "cinematic/veyra-release", floor=10),
     scene("power", "WHAT THE PRISON WITHHELD", "For the first time in this journey, Veyra can draw freely upon Erasure beyond the artificial world. Her restored access changes the scale of the danger. You have not become stronger than her by opening the lock.", "cinematic/veyra-power", floor=10, flags=("full_erasure",)),
-    scene("passage", "OUTSIDE MEMORY", "The broken boundary opens onto the real universe. Meyaya and Veyra pass beyond the structure that held them. You follow as the witness to what happened inside it. The worlds behind you will not secretly reconstruct after this.", "cinematic/real-transition", floor=10),
+    scene("joint-battle", "STAND BESIDE ME", "Veyra raises Mournfang toward the remembered worlds. The real Meyaya steps between her and the last bridge.\n\n‘You opened the way here,’ Meyaya tells you. ‘Help me hold it long enough to get you out.’\n\nFor the first time, she stands beside you in person. You are not her equal in power. Your strikes can make an opening; your guard can buy her a breath. Survive six exchanges together. Defeating Veyra is not the objective.", "cinematic/core-alliance", floor=10),
+    scene("memory-destruction", "THE WORLD SHE CUTS", "Veyra stops aiming at either of you. Mournfang turns toward the mechanism itself.\n\n‘You keep trying to save the prison,’ she says. ‘I am leaving it.’\n\nSolenne's sun splits. Nymora's suspended sea loses its shores. The ten remembered worlds come apart around you. Meyaya catches your wrist and holds a narrow passage open with Everbloom. The bridge you defended is enough for one escape.\n\nThe Memory World is destroyed. Its failsafe will never reconstruct it again.", "cinematic/gate-collapse", floor=10, flags=("memory_destroyed",)),
+    scene("passage", "OUTSIDE MEMORY", "You fall through Meyaya's last open passage as the Memory World vanishes behind you. The real universe is still alive beyond it. Meyaya and Veyra face each other where no prison holds them now. You survived the battle inside; what comes next is beyond a mortal combatant. You will be its Witness.", "cinematic/real-transition", floor=10),
     scene("judge", "THE WITNESS", "You have seen lives preserved beyond endurance and endings that took more than suffering away. Neither woman can claim you have seen only her side.\n\nYou cannot fight this battle for them. You can decide whose purpose you stand behind. Your first oath does not make that decision for you.", "cinematic/witness", floor=10, flags=("witness",)),
 )
+
+# Map pre-upgrade positional saves without replaying already completed scenes.
+LEGACY_CORE_IDS = tuple(s.id for s in CORE if s.id not in {"joint-battle", "memory-destruction"})
+
+
+def core_scene_index(run):
+    index = run.state.get("scene", 0)
+    if run.state.get("story_version", 3) < STORY_VERSION:
+        old_id = LEGACY_CORE_IDS[min(index, len(LEGACY_CORE_IDS) - 1)]
+        return next(i for i, s in enumerate(CORE) if s.id == old_id)
+    return index
 
 CHOICE = scene("choice", "CONTINUATION OR FINALITY", "🌸 **STAND WITH MEYAYA**\nLet the world continue.\n\n⚫ **STAND WITH VEYRA**\nLet the cycle end.\n\nThis records your permanent worldline. It can differ from your awakening alignment. Rebirth will not change it.", "cinematic/final-choice", floor=10)
 
@@ -123,8 +136,13 @@ VEYRA_ENDING = (
 )
 
 
-def ending_scenes(route):
-    return COSMIC + (VEYRA_ENDING if route == "veyra" else MEYAYA_ENDING)
+def ending_scenes(route, *, battle_played=False):
+    aftermath = (scene("duel-aftermath", "THE PRICE OF THE VERDICT",
+        ("Meyaya wins the duel. Everbloom breaks through Mournfang's final advance, and Veyra falls back. Your chosen worldline has its victor.\n\nBut Veyra will not survive what she has gathered. Unable to break Meyaya's guard, she abandons the contest and turns herself into the medium of a final release. Meyaya's victory has left her one chance to make a beginning beyond it."
+         if route == "meyaya" else
+         "Veyra wins the duel. Mournfang cuts through the last prismatic crown. Meyaya falls back, her remaining Origin barely holding her outline together. Your chosen worldline has its victor.\n\nVeyra has not spared herself. Winning gives her the opening to finish what she began, at the cost of her own existence."),
+        "cinematic/last-appeal", floor=10, route=route),)
+    return (aftermath + COSMIC[4:] if battle_played else COSMIC) + (VEYRA_ENDING if route == "veyra" else MEYAYA_ENDING)
 
 
 def current_scene(run, profile):
@@ -134,5 +152,5 @@ def current_scene(run, profile):
     if sequence == "choice":
         return CHOICE
     if sequence == "ending":
-        return ending_scenes(profile.ending_route)[run.state.get("scene", 0)]
-    return CORE[run.state.get("scene", 0)]
+        return ending_scenes(profile.ending_route, battle_played=bool(run.state.get("clash_winner")))[run.state.get("scene", 0)]
+    return CORE[core_scene_index(run)]

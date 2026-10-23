@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Select, select, update
+from sqlalchemy import Select, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -58,40 +58,27 @@ class UserRepository(Repository):
             .values([{"user_id": user_id} for user_id in user_ids])
             .on_conflict_do_nothing(index_elements=[User.user_id])
         )
-        await self.session.execute(
-            insert(UserStatistics)
-            .values([{"user_id": user_id} for user_id in user_ids])
-            .on_conflict_do_nothing(index_elements=[UserStatistics.user_id])
-        )
-
-        actor_values: dict[str, object] = {
-            "total_given": UserStatistics.total_given + 1,
-            "total_interactions": UserStatistics.total_interactions + 1,
-        }
-        target_values: dict[str, object] = {
-            "total_received": UserStatistics.total_received + 1,
-            "total_interactions": UserStatistics.total_interactions + 1,
-        }
-        given_field = {
-            "hug": "hugs_given",
-            "kiss": "kisses_given",
-            "pat": "pats_given",
-        }.get(interaction_name)
-        received_field = {
-            "hug": "hugs_received",
-            "kiss": "kisses_received",
-            "pat": "pats_received",
-        }.get(interaction_name)
-        if given_field is not None:
-            actor_values[given_field] = getattr(UserStatistics, given_field) + 1
-        if received_field is not None:
-            target_values[received_field] = getattr(UserStatistics, received_field) + 1
-
-        await self.session.execute(
-            update(UserStatistics).where(UserStatistics.user_id == actor_id).values(**actor_values)
-        )
-        await self.session.execute(
-            update(UserStatistics)
-            .where(UserStatistics.user_id == target_id)
-            .values(**target_values)
-        )
+        # One atomic upsert for both members. Merge self-interactions before
+        # insertion: PostgreSQL cannot update the same conflict row twice.
+        counters = ("total_given", "total_received", "total_interactions",
+                    "hugs_given", "hugs_received", "kisses_given", "kisses_received",
+                    "pats_given", "pats_received")
+        increments = {uid: dict.fromkeys(counters, 0) for uid in user_ids}
+        increments[actor_id]["total_given"] += 1
+        increments[target_id]["total_received"] += 1
+        increments[actor_id]["total_interactions"] += 1
+        increments[target_id]["total_interactions"] += 1
+        stem = {"hug": "hugs", "kiss": "kisses", "pat": "pats"}.get(interaction_name)
+        if stem:
+            increments[actor_id][stem + "_given"] += 1
+            increments[target_id][stem + "_received"] += 1
+        statement = insert(UserStatistics).values([
+            dict(user_id=uid, **increments[uid]) for uid in user_ids
+        ])
+        result = await self.session.scalars(statement.on_conflict_do_update(
+            index_elements=[UserStatistics.user_id],
+            set_={field: getattr(UserStatistics, field) + getattr(statement.excluded, field)
+                  for field in counters},
+        ).returning(UserStatistics), execution_options={"populate_existing": True})
+        # Keep any statistics already loaded in this session current as well.
+        result.all()

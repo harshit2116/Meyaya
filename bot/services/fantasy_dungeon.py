@@ -7,7 +7,8 @@ from uuid import uuid4
 from sqlalchemy.exc import DBAPIError
 
 from bot.data.fantasy_dungeon import world_for
-from bot.data.fantasy_memory_world import OPENING, CORE, STORY_VERSION, CYCLE, ending_scenes
+from bot.data.fantasy_memory_world import OPENING, CORE, STORY_VERSION, CYCLE, ending_scenes, core_scene_index
+from bot.services.dungeon_finale import MemoryCoreBattle, advance_clash
 from bot.data.fantasy_dungeon_lore import lore_scenes
 from bot.models.fantasy_dungeon import FantasyDungeonRun, ACTIVE_PHASES
 from bot.repositories.fantasy_dungeon import FantasyDungeonRepository
@@ -45,8 +46,8 @@ class DungeonService:
     async def owner_control(self, user_id, action, *, guild_id):
         if user_id != AYAYA_USER_ID:
             raise DungeonUnavailable("These dungeon controls are owner-only.")
-        if action not in {"restart", "skip"}:
-            raise DungeonUnavailable("Use `uwu dungeon restart` or `uwu dungeon skip`.")
+        if action not in {"restart", "skip", "skip floor"}:
+            raise DungeonUnavailable("Use `uwu dungeon restart`, `uwu dungeon skip`, or `uwu dungeon skip floor`.")
         async with self.session.begin():
             profile = await self.profiles.locked(user_id)
             if profile is None or profile.alignment not in {"meyaya", "veyra"}:
@@ -63,6 +64,22 @@ class DungeonService:
                 run.floor, run.encounter, run.revision = 1, 0, 0
                 run.phase, run.hp, run.mp = "intro", profile.max_hp, profile.max_mp
                 run.state = dict(guild_id=guild_id, scene=0, sequence="opening", story_version=STORY_VERSION)
+            elif action == "skip floor":
+                if profile.ending_route or (run is not None and run.floor == 10):
+                    raise DungeonUnavailable("The final floor cannot be skipped. Continue `/dungeon` to play its battles and choose your worldline.")
+                if run is None or run.phase not in ACTIVE_PHASES:
+                    raise DungeonUnavailable("There is no active dungeon floor to skip. Begin `/dungeon` first.")
+                if profile.weapon_level not in {run.floor - 1, run.floor}:
+                    raise DungeonUnavailable("This floor does not match your saved progression. Open `/dungeon` to resume.")
+                skipped = run.floor
+                # Owner navigation unlocks the next floor without inventing
+                # battle wins or granting XP for encounters that never happened.
+                profile.weapon_level = skipped
+                run.phase = "cleared"
+                run.state = dict(guild_id=run.state.get("guild_id", guild_id))
+                self.advance(profile, run)
+                run.state = dict(run.state, owner_skipped_floor=skipped)
+                run.revision += 1
             else:
                 if run is None or run.phase != "combat" or run.floor == 10:
                     raise DungeonUnavailable("There is no current battle to skip.")
@@ -135,6 +152,8 @@ class DungeonService:
                     raise DungeonStale("This button belongs to an earlier turn. Open `/dungeon` to resume.")
                 if run.phase not in ACTIVE_PHASES:
                     raise DungeonStale("This run has ended. Open `/dungeon` again.")
+                if run.phase == "seal" and run.state.get("sequence", "core") == "core":
+                    run.state = dict(run.state, scene=core_scene_index(run), story_version=STORY_VERSION)
                 if action == "abandon":
                     if profile.ending_route:
                         raise DungeonUnavailable("Your worldline is sealed. Continue the ending with `/dungeon`.")
@@ -144,7 +163,23 @@ class DungeonService:
                         raise DungeonUnavailable("The final choice is not available here.")
                     profile.ending_route = action.removeprefix("choose_")
                     profile.ending_chosen_at = datetime.now(UTC)
-                    run.state = dict(run.state, sequence="ending", scene=0)
+                    run.state = dict(run.state, sequence="clash", scene=0, clash_moves=0, clash_frame="opening")
+                elif run.phase == "seal" and run.state.get("sequence") == "allied":
+                    try:
+                        combat = MemoryCoreBattle.restore(run.state["allied_battle"], run.seed)
+                        state = combat.player_turn(action)
+                    except ValueError as error:
+                        raise DungeonUnavailable(str(error)) from error
+                    run.hp, run.mp = state.left.hp, state.left.mp
+                    run.state = dict(run.state, allied_battle=combat.export())
+                    if state.finished:
+                        run.state = dict(run.state, sequence="core",
+                            scene=next(i for i, s in enumerate(CORE) if s.id == "memory-destruction"),
+                            allied_complete=True, story_version=STORY_VERSION)
+                elif run.phase == "seal" and run.state.get("sequence") == "clash":
+                    if action != "witness":
+                        raise DungeonUnavailable("You are the Witness here. Continue the clash.")
+                    advance_clash(run, profile.ending_route)
                 elif action == "continue":
                     self.advance(profile, run)
                 elif run.phase == "combat" and action in {"attack", "ability", "guard"}:
@@ -158,7 +193,7 @@ class DungeonService:
 
     def enter_combat(self, profile, run):
         if run.floor == 10:
-            raise DungeonUnavailable("At the Memory Core you are the Witness, not a combatant.")
+            raise DungeonUnavailable("The Memory Core has its own story battles. Continue the saved scene.")
         player = Fighter.snapshot(profile, "Your soul")
         player.hp, player.mp = run.hp, run.mp
         # Enhancement scales the existing offense, only in dungeon combat.
@@ -209,7 +244,14 @@ class DungeonService:
             sequence = run.state.get("sequence", "core")
             if sequence == "choice":
                 raise DungeonUnavailable("Choose the worldline you stand with.")
-            scenes = ending_scenes(profile.ending_route) if sequence == "ending" else CORE
+            if sequence in {"allied", "clash"}:
+                raise DungeonUnavailable("Finish the current finale battle first.")
+            scenes = ending_scenes(profile.ending_route, battle_played=bool(run.state.get("clash_winner"))) if sequence == "ending" else CORE
+            if sequence == "core" and scenes[scene].id == "joint-battle":
+                combat = MemoryCoreBattle.begin(profile, run.seed)
+                run.hp, run.mp = combat.state.left.hp, combat.state.left.mp
+                run.state = dict(run.state, sequence="allied", allied_battle=combat.export())
+                return
             flags = set(run.state.get("reveals", ())) | set(scenes[scene].reveal_flags)
             if scenes[scene].anchor:
                 run.state = dict(run.state, anchors_released=scenes[scene].anchor)

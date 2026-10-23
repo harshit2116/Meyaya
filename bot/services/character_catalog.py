@@ -132,8 +132,12 @@ class CatalogService:
                 return None
             rarity = RNG.choices(tiers, weights=[DRAW_RATES[tier] for tier in tiers], k=1)[0]
             rows = list(
-                await db.scalars(
-                    select(CatalogCharacter).where(
+                await db.execute(
+                    select(CatalogCharacter.id, CatalogCharacter.provider,
+                           CatalogCharacter.provider_character_id, CatalogCharacter.rarity_stars,
+                           CatalogCharacter.summon_weight, CatalogCharacter.class_name,
+                           CatalogCharacter.traits, CatalogCharacter.passive,
+                           CatalogCharacter.image_disabled).where(
                         CatalogCharacter.provider == "anilist",
                         CatalogCharacter.rarity_stars == rarity,
                         CatalogCharacter.enabled.is_(True),
@@ -245,12 +249,11 @@ class CatalogService:
 
     async def status(self) -> dict:
         async with self.bot.session_factory() as db:
-            total = await db.scalar(select(func.count()).select_from(CatalogCharacter))
-            enabled = await db.scalar(
-                select(func.count())
-                .select_from(CatalogCharacter)
-                .where(CatalogCharacter.enabled.is_(True), CatalogCharacter.disabled.is_(False))
-            )
+            total, enabled = (await db.execute(select(
+                func.count(),
+                func.count().filter(CatalogCharacter.enabled.is_(True),
+                                    CatalogCharacter.disabled.is_(False)),
+            ).select_from(CatalogCharacter))).one()
             blocked = await db.get(CatalogProviderState, "anilist")
             return {
                 "total": total or 0,

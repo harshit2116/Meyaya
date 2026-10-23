@@ -1065,12 +1065,12 @@ class FantasyCog(commands.Cog):
     async def dungeon(self, ctx):
         control = ""
         if getattr(ctx, "interaction", None) is None and getattr(ctx, "view", None) is not None:
-            control = ctx.view.read_rest().strip().casefold()
+            control = " ".join(ctx.view.read_rest().split()).casefold()
         if control and (ctx.author.id != AYAYA_USER_ID or (ctx.prefix or "").strip().casefold() != "uwu"):
             await ctx.send(view=dungeon_notice("These dungeon controls are owner-only and use the `uwu` prefix."))
             return
-        if control and control not in {"restart", "skip"}:
-            await ctx.send(view=dungeon_notice("Use `uwu dungeon restart` or `uwu dungeon skip`."))
+        if control and control not in {"restart", "skip", "skip floor"}:
+            await ctx.send(view=dungeon_notice("Use `uwu dungeon restart`, `uwu dungeon skip`, or `uwu dungeon skip floor`."))
             return
         await ctx.defer()
         owner = ctx.author.id

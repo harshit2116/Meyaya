@@ -19,6 +19,10 @@ from bot.models.fantasy_dungeon import ACTIVE_PHASES
 from bot.services.fantasy_dungeon import DungeonService, DungeonUnavailable, DungeonStale
 from bot.services.fantasy_dungeon_combat import enemy_intent
 from bot.services.fantasy_dungeon_renderer import render_scene_art
+from bot.services.dungeon_finale import story_clash, ALLY_TURNS
+from bot.services.patron_clash_hud import battle_layout, scene_for, media_bytes
+from bot.services.patron_clash_spectacle import awakening_media, dungeon_clash_opening
+from bot.utils.image_work import animation_work
 from bot.logging.telemetry import event
 
 logger = logging.getLogger(__name__)
@@ -147,6 +151,25 @@ def dungeon_presentation(profile, run, *, available_emojis=None):
     title = "THE SEAL" if run.floor == 10 else f"{world.name} · {ROMAN[run.floor]}"
     asset = world.asset()
     phase = run.phase
+    if phase == "seal" and run.state.get("sequence") == "clash":
+        return DungeonScreen("MEYAYA VS VEYRA · THE WITNESS",
+            "The Memory World is gone. Your chosen worldline guides their final duel.",
+            color=ORIGIN_COLOR), campaign_asset("cinematic/final-duel")
+    if phase == "seal" and run.state.get("sequence") == "allied":
+        battle = run.state["allied_battle"]
+        player, ally = battle["player"], battle["ally"]
+        screen = DungeonScreen("MEYAYA & YOU · HOLD THE BOUNDARY",
+            f"**Exchange {battle['turn']} / {ALLY_TURNS}** · Fight beside the real Meyaya.\n"
+            "Make openings for her and survive until the escape passage holds. Veyra cannot be defeated here.",
+            color=ORIGIN_COLOR,
+            fields=[("Your soul", vitality("HP", run.hp, player["max_hp"], available_emojis=set())
+                     + "\n" + vitality("MP", run.mp, player["max_mp"], available_emojis=set())),
+                    ("Meyaya · Everbloom", f"{ally['last_move'] or 'Prismatic Ward'}\n"
+                     "She attacks with you and intercepts fatal blows."),
+                    ("Veyra · Enemy of All", "HP **UNKNOWN** · Mournfang is tearing apart the remembered sky."),
+                    ("Battle record", recent_battle_log(battle.get("log", [])))],
+            footer="Your turns are saved · /dungeon resumes this battle")
+        return screen, campaign_asset("cinematic/core-alliance")
     cinematic = run.state.get("sequence") == "opening" or phase == "seal"
     if phase == "complete" and getattr(profile, "ending_route", None):
         if profile.ending_route == "veyra":
@@ -244,6 +267,9 @@ class DungeonView(discord.ui.LayoutView):
         self.asset_key = None
         self.player_user = player_user
         self.ability_menu_open = False
+        self.motion = True
+        self._clash_task = None
+        self._clash_art_failed = False
         self.confirm_abandon = False
         self.landing = bool(show_landing and run and run.phase in ACTIVE_PHASES)
         self.participant_ids = (owner,)
@@ -253,6 +279,8 @@ class DungeonView(discord.ui.LayoutView):
         if self.cog.duel_users.get(self.owner) is self:
             self.cog.duel_users.pop(self.owner, None)
         self.closed = True
+        if self._clash_task and self._clash_task is not asyncio.current_task():
+            self._clash_task.cancel()
         self.disable()
         self.stop()
         self.cog.release_view(self)
@@ -293,6 +321,21 @@ class DungeonView(discord.ui.LayoutView):
 
     def build_layout(self):
         profile, run = self.profile, self.run
+        if self.is_clash and not self.landing and not self.confirm_abandon:
+            engine = story_clash(run, profile.ending_route)
+            frame = run.state["clash_frame"]
+            phase = min(2, engine.state.moves // 4) if frame == "awakening" else None
+            filename = "dungeon-clash.gif" if self.motion else "dungeon-clash.jpg"
+            layout = battle_layout(engine.state,
+                media=None if self._clash_art_failed else f"attachment://{filename}",
+                intro=frame == "opening", final=frame == "verdict",
+                exchange=frame == "exchange", awakening=phase)
+            self.container = layout.children[0]
+            layout.remove_item(self.container)
+            self.add_item(self.container)
+            self.container.children[-1].content = "-# You are the Witness · Your permanent worldline guides this duel · Progress saves after every scene"
+            self.display_asset = None
+            return
         available_emojis = usable_bar_emojis(self.cog.bot) if run and run.phase == "combat" else None
         screen, asset = dungeon_presentation(profile, run, available_emojis=available_emojis)
         phase = run.phase if run else "abandoned"
@@ -417,6 +460,12 @@ class DungeonView(discord.ui.LayoutView):
             actions = [("attack", "Attack", discord.ButtonStyle.primary),
                        ("ability", "Ability", discord.ButtonStyle.primary),
                        ("guard", "Guard · +8 MP", discord.ButtonStyle.secondary)]
+        elif phase == "seal" and run.state.get("sequence") == "allied":
+            actions = [("attack", "Attack with Meyaya", discord.ButtonStyle.primary),
+                       ("core_ability", "Awakened signature", discord.ButtonStyle.primary),
+                       ("guard", "Guard · +8 MP", discord.ButtonStyle.secondary)]
+        elif self.is_clash:
+            actions = [("motion", "Use static artwork" if self.motion else "Enable cinematics", discord.ButtonStyle.secondary)]
         else:
             label = "Face Guardian" if phase == "boss_intro" else "Continue"
             if phase == "cleared":
@@ -435,7 +484,7 @@ class DungeonView(discord.ui.LayoutView):
             elif phase == "seal" and run.state.get("sequence") == "ending":
                 label = "Witness" if self.profile.ending_route == "meyaya" else "Continue"
                 from bot.data.fantasy_memory_world import ending_scenes
-                if run.state.get("scene", 0) == len(ending_scenes(self.profile.ending_route)) - 1:
+                if run.state.get("scene", 0) == len(ending_scenes(self.profile.ending_route, battle_played=bool(run.state.get("clash_winner")))) - 1:
                     label = "Let the text disappear" if self.profile.ending_route == "veyra" else "The world continues"
                 actions = [("continue", label, discord.ButtonStyle.primary)]
         if phase in ACTIVE_PHASES and not getattr(self.profile, "ending_route", None):
@@ -458,14 +507,19 @@ class DungeonView(discord.ui.LayoutView):
                 cost = 16 if player["passive"] == "discount" and player["skills_used"] == 0 else 22
                 button.label = f"Ability · {cost} MP"
                 button.disabled = not player.get("signature") or player["mp"] < cost or player["skills_used"] >= 2
+            if action == "core_ability":
+                player = run.state["allied_battle"]["player"]
+                cost = 16 if player["passive"] == "discount" and player["skills_used"] == 0 else 22
+                button.label = f"{player['signature_name'] or 'Signature'} · {cost} MP"[:80]
+                button.disabled = not player.get("signature") or player["mp"] < cost or player["skills_used"] >= 2
 
             async def callback(interaction, action=action, token=token, revision=revision):
                 if action == "ability":
                     await self.show_abilities(interaction, token, revision)
-                elif action in {"resume", "abandon", "cancel_abandon"}:
+                elif action in {"resume", "abandon", "cancel_abandon", "motion"}:
                     await self.local_action(interaction, action, token, revision)
                 else:
-                    await self.play(interaction, "abandon" if action == "confirm_abandon" else action, token, revision)
+                    await self.play(interaction, "abandon" if action == "confirm_abandon" else "ability" if action == "core_ability" else action, token, revision)
 
             button.callback = callback
             row.add_item(button)
@@ -496,6 +550,8 @@ class DungeonView(discord.ui.LayoutView):
                 await self.notice(interaction, "This scene has changed. Open `/dungeon` to resume.")
                 return
             self.landing = False
+            if action == "motion" and self.is_clash:
+                self.motion = not self.motion
             self.confirm_abandon = action == "abandon"
             await self.deliver(interaction.edit_original_response)
 
@@ -618,7 +674,10 @@ class DungeonView(discord.ui.LayoutView):
 
         try:
             async with asyncio.timeout(15):
-                return await self._deliver(measured_sender, initial=initial)
+                result = await self._deliver(measured_sender, initial=initial)
+            if self.is_clash and not self.landing and not self.closed and (self._clash_task is None or self._clash_task.done()):
+                self._clash_task = asyncio.create_task(self.animate_clash())
+            return result
         finally:
             elapsed = (perf_counter() - started) * 1000
             event("dungeon_delivery_timing", command="dungeon", initial=initial,
@@ -627,6 +686,8 @@ class DungeonView(discord.ui.LayoutView):
 
     async def _deliver(self, sender, *, initial=False):
         self.refresh_buttons()
+        if self.is_clash and not self.landing:
+            return await self.deliver_clash(sender, initial=initial)
         asset = self.display_asset
         hero = None
         enemy_name = (self.run.state["battle"]["enemy"]["name"]
@@ -660,3 +721,73 @@ class DungeonView(discord.ui.LayoutView):
             self.asset_key = None
         if initial:
             self.message = result
+
+    @property
+    def is_clash(self):
+        return bool(self.run and self.run.phase == "seal" and self.run.state.get("sequence") == "clash")
+
+    async def deliver_clash(self, sender, *, initial=False):
+        run = self.run
+        engine = story_clash(run, self.profile.ending_route)
+        frame = run.state["clash_frame"]
+        phase = min(2, engine.state.moves // 4)
+        scene = scene_for(engine.state, intro=frame == "opening", final=frame == "verdict", exchange=frame == "exchange")
+        key = ("clash", frame, run.state["clash_moves"], self.motion)
+        kwargs = dict(view=self, allowed_mentions=discord.AllowedMentions.none())
+        if not initial:
+            kwargs.update(content=None, embeds=[])
+        if not self._clash_art_failed and (initial or self.asset_key != key):
+            try:
+                if frame == "awakening":
+                    data, _ = await animation_work(awakening_media, phase, self.motion)
+                elif frame == "opening":
+                    data, _ = await animation_work(dungeon_clash_opening, self.motion)
+                else:
+                    data, _ = await animation_work(media_bytes, scene, self.motion)
+                filename = "dungeon-clash.gif" if self.motion else "dungeon-clash.jpg"
+                with closing(discord.File(BytesIO(data), filename=filename)) as image:
+                    kwargs["file" if initial else "attachments"] = image if initial else [image]
+                    result = await sender(**kwargs)
+            except (OSError, ValueError, discord.HTTPException):
+                logger.warning("Dungeon clash art unavailable; keeping the saved story readable", exc_info=True)
+                self._clash_art_failed = True
+                self.refresh_buttons()
+                kwargs.pop("file", None)
+                kwargs["attachments"] = []
+                result = await sender(**kwargs)
+        else:
+            if self._clash_art_failed and not initial:
+                kwargs["attachments"] = []
+            result = await sender(**kwargs)
+        self.asset_key = key
+        if initial:
+            self.message = result
+        return result
+
+    async def animate_clash(self):
+        """Each frame commits before delivery; restart resumes at the saved cursor."""
+        try:
+            while self.is_clash and not self.closed:
+                frame = self.run.state["clash_frame"]
+                delay = {"opening": 10.5, "awakening": 6.5, "attack": 4.5, "exchange": 2.8, "verdict": 6}[frame]
+                await asyncio.sleep(delay)
+                async with self.lock:
+                    if not self.is_clash or self.closed:
+                        return
+                    async with asyncio.timeout(10):
+                        async with self.cog.bot.db_session() as session:
+                            self.profile, self.run = await DungeonService(session).transition(
+                                self.owner, "witness", token=self.run.token, revision=self.run.revision,
+                                guild_id=self.guild_id or 0)
+                    await self.deliver(self.message.edit)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            self.cog.report(error, "dungeon_finale_playback")
+            self.finish()
+            if self.message:
+                try:
+                    await self.message.edit(view=dungeon_notice(
+                        "The cinematic paused. Your last frame is saved. Open `/dungeon` to resume."), attachments=[])
+                except discord.HTTPException:
+                    pass

@@ -295,24 +295,24 @@ class Dashboard:
         return web.json_response({"ok": True})
 
     async def index(self, request):
-        return web.Response(
-            text=Path(__file__).with_name("index.html").read_text(encoding="utf-8"),
-            content_type="text/html",
+        return web.FileResponse(
+            Path(__file__).with_name("index.html"),
+            headers={"Content-Type": "text/html; charset=utf-8"},
         )
 
     async def avatar(self, request):
         return web.FileResponse(Path(__file__).parents[1] / "assets/listing/chat-meyaya.jpg")
 
     async def script(self, request):
-        return web.Response(
-            text=Path(__file__).with_name("dashboard.js").read_text(encoding="utf-8"),
-            content_type="application/javascript",
+        return web.FileResponse(
+            Path(__file__).with_name("dashboard.js"),
+            headers={"Content-Type": "application/javascript; charset=utf-8"},
         )
 
     async def style(self, request):
-        return web.Response(
-            text=Path(__file__).with_name("dashboard.css").read_text(encoding="utf-8"),
-            content_type="text/css",
+        return web.FileResponse(
+            Path(__file__).with_name("dashboard.css"),
+            headers={"Content-Type": "text/css; charset=utf-8"},
         )
 
     async def _identities(self):

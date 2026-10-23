@@ -6,6 +6,7 @@ Presentation only: these helpers never touch combat state or its random stream.
 from functools import lru_cache
 from io import BytesIO
 import math
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageOps
 
@@ -166,3 +167,12 @@ def victory_animation(path, origin):
     if output.tell() > 3_000_000:
         raise ValueError("Victory animation exceeds upload budget")
     return output.getvalue()
+
+
+@lru_cache(maxsize=2)
+def dungeon_clash_opening(animated):
+    """The story duel begins outside the destroyed prison, with its own artwork."""
+    path = Path(__file__).resolve().parents[1] / "assets/fantasy/dungeon/cinematic/final-duel.jpg"
+    if animated:
+        return victory_animation(path, True), "dungeon-clash.gif"
+    return path.read_bytes(), "dungeon-clash.jpg"
