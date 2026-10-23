@@ -4,6 +4,9 @@ import json
 import os
 
 import discord
+from bot.prompts.elation import APPROACHES
+
+CHANNEL_NAME = "⛧ 𝔏𝔢𝔱 𝔱𝔥𝔢𝔯𝔢 𝔟𝔢 𝔢𝔩𝔞𝔱𝔦𝔬𝔫 ⛧"
 
 
 TITLES = {
@@ -41,6 +44,8 @@ def parse_decree(text):
         "reply": reply,
         "appointment": value.get("appointment") if isinstance(value.get("appointment"), str) and value["appointment"] in TITLES else None,
         "convinced": value.get("convinced") is True,
+        "approaches": [x for x in value.get("approaches", []) if isinstance(x, str) and x in APPROACHES]
+        if isinstance(value.get("approaches"), list) else [],
     }
 
 
