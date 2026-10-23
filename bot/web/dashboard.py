@@ -19,6 +19,7 @@ from bot.models.guild_settings import GuildSettings
 from bot.services.guild_identity import saved_identities
 from bot.models.memory import BotMemory, MemoryStatus
 from bot.models.meyaya_state import MeyayaUserState
+from bot.web.cache import AsyncTTLCache
 from bot.web.security import DashboardSecurity, SESSION_SECONDS
 from bot.web.server_info import cached_server_info, cached_member_preview
 from bot.services.owner_health import OwnerHealth
@@ -30,8 +31,8 @@ from bot.models.guild_identity import GuildEvent
 logger = logging.getLogger(__name__)
 
 
-async def server_report(bot):
-    usage, limits = await bot.usage.report()
+async def server_report(bot, usage_report=None):
+    usage, limits = usage_report if usage_report is not None else await bot.usage.report()
     monitor = bot.get_cog("MonitorCog")
     games = bot.get_cog("SocialGamesCog")
     voice = bot.get_cog("VoiceLiveCog")
@@ -75,6 +76,7 @@ async def server_report(bot):
 class Dashboard:
     def __init__(self, bot, *, local_no_auth=False):
         self.bot = bot
+        self._data_cache = AsyncTTLCache()
         self.owner_health = OwnerHealth(bot)
         self._error_search_lock = asyncio.Lock()
         self._error_search_cache = {}
@@ -314,6 +316,9 @@ class Dashboard:
         )
 
     async def _identities(self):
+        return await self._data_cache.get("identities", self._read_identities, 60)
+
+    async def _read_identities(self):
         from sqlalchemy import union
         from bot.models.usage import GuildUsage
         from bot.models.request_log import RequestLog
@@ -336,11 +341,17 @@ class Dashboard:
         return self.bot.get_guild(guild_id) is not None or await self._saved_server(guild_id) is not None
 
     async def servers(self, request):
-        rows = await server_report(self.bot)
+        return web.json_response(await self._server_data())
+
+    async def _server_data(self):
+        return await self._data_cache.get("servers", self._build_server_data, 15)
+
+    async def _build_server_data(self):
+        usage_report, saved, voice_totals = await asyncio.gather(
+            self.bot.usage.report(), self._identities(), self._voice_totals())
+        usage, limits = usage_report
+        rows = await server_report(self.bot, usage_report=usage_report)
         live_ids = {int(row['id']) for row in rows}
-        saved = await self._identities()
-        usage, limits = await self.bot.usage.report()
-        voice_totals = await self._voice_totals()
         for row in rows:
             row['membership'] = 'current'
             for key in ('joined_at', 'left_at', 'last_activity_at'):
@@ -357,7 +368,7 @@ class Dashboard:
                     **usage.get(gid, dict(today_chats=0, today_commands=0, week_chats=0, week_commands=0))))
         for row in rows:
             row.update(voice_totals.get(int(row['id']), dict(today_voice_seconds=0,week_voice_seconds=0,total_voice_seconds=0)))
-        return web.json_response({'ready': self.bot.is_ready(), 'servers': rows})
+        return {'ready': self.bot.is_ready(), 'servers': rows}
 
     async def _voice_totals(self):
         from bot.services.voice_usage import report
@@ -366,7 +377,7 @@ class Dashboard:
 
     async def overview(self, request):
         from bot.web.insights import overview
-        return web.json_response(overview(self.bot, await server_report(self.bot)))
+        return web.json_response(overview(self.bot, (await self._server_data())["servers"]))
 
     async def server_insights(self, request):
         from bot.models.usage import GuildUsage
@@ -431,7 +442,10 @@ class Dashboard:
             raise web.HTTPNotFound(text="Server not found")
         info = cached_server_info(guild)
         await self._fill_owner(info, guild)
-        info.update(await self._member_preview(guild))
+        if getattr(request, "query", {}).get("members") == "1":
+            info.update(await self._member_preview(guild))
+        else:
+            info.update(member_preview=cached_member_preview(guild.members), member_preview_lazy=True)
         return web.json_response(info)
 
     async def _fill_owner(self, info, guild):
@@ -760,6 +774,7 @@ class Dashboard:
                 actor=request.get('dashboard_actor', 'local owner'),
                 details={'before': before, 'after': data}))
             await session.commit()
+        self._data_cache.clear()
         self.bot.cache_guild_prefix(guild_id, prefix)
         self.bot.cache_autoresponder(guild_id, data["autoresponder"])
         logger.info("Owner dashboard updated settings for guild=%s", guild_id)

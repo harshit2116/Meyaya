@@ -113,7 +113,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
     "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "rebirth", "dungeon", "versus", "bossfight"),
     "Relationships": ("marry", "marriage", "renewvows", "divorce"),
     "Single Player Games": ("escape", "detective", "personalitytest"),
-    "Multiplayer Games": ("showdown", "survive", "excuse", "endgame"),
+    "Multiplayer Games": ("elation", "showdown", "survive", "excuse", "endgame"),
     "Meyaya Court": ("court", "setcourt", "removecourt"),
     "Roleplay": ("roleplay",),
     "Memory": ("memories", "nicknames"),
@@ -140,6 +140,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
 
 
 COMMANDS: tuple[HelpCommand, ...] = (
+    HelpCommand("elation", "elation [begin|stop|optout|status]", "Convince Queen Meyaya to end her temporary channel takeover. Includes nickname opt-out.", "Multiplayer Games"),
     HelpCommand("feedback", "feedback", "Join Pondside Lounge to report bugs or suggest features.", "Essentials"),
     HelpCommand("serversetup", "serversetup", "Set up chat access, automatic replies, and moderation with a guided menu.", "Server Admin"),
     HelpCommand("serverdashboard", "serverdashboard", "See this server's daily allowance, remaining messages, activity, and settings.", "Server Admin"),

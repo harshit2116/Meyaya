@@ -279,6 +279,7 @@ async def serve(port, *, open_browser=False):
         DASHBOARD_TOKEN=secrets.token_urlsafe(48))
     backend = None
     tunnel = None
+    tunnel_monitor = None
     if settings.dashboard_remote_url:
         from bot.web.remote import RemoteDashboard
         dashboard = RemoteDashboard(settings)
@@ -289,6 +290,18 @@ async def serve(port, *, open_browser=False):
         if settings.dashboard_ssh_host:
             from bot.web.tunnel import start_tunnel
             tunnel = await start_tunnel(settings)
+            async def monitor_tunnel():
+                nonlocal tunnel
+                while True:
+                    await tunnel.wait()
+                    print('AWS connection interrupted; reconnecting.', flush=True)
+                    while True:
+                        try:
+                            tunnel = await start_tunnel(settings)
+                            break
+                        except (OSError, RuntimeError, TimeoutError):
+                            await asyncio.sleep(5)
+            tunnel_monitor = asyncio.create_task(monitor_tunnel())
         if backend is not None:
             await backend.refresh()
         await dashboard.start()
@@ -303,6 +316,9 @@ async def serve(port, *, open_browser=False):
                 print('Could not open the browser automatically. Use the URL above.', flush=True)
         await asyncio.Event().wait()
     finally:
+        if tunnel_monitor is not None:
+            tunnel_monitor.cancel()
+            await asyncio.gather(tunnel_monitor, return_exceptions=True)
         await dashboard.close()
         if tunnel is not None:
             from bot.web.tunnel import stop_tunnel

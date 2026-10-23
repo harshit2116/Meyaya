@@ -10,8 +10,47 @@ let selectedServerPanel = new URLSearchParams(location.search).get("panel") || "
 let commandHistoryCursor = null, commandHistoryVersion = 0;
 const serverWindows = new Map();
 const serverWindowTimers = new Map();
-
+const apiCache = new Map(), apiPending = new Map();
+let cacheRevision = 0, lastServerRender = "", overviewScrollY = 0;
+function invalidateApiCache() { cacheRevision++; apiCache.clear(); apiPending.clear(); }
+function apiTTL(path) {
+  if (path === "/api/servers" || path === "/api/overview") return 15000;
+  if (/^\/api\/servers\/\d+\/(details|summary)(\?|$)/.test(path)) return 60000;
+  if (/^\/api\/servers\/\d+\/(requests|command-history|commands|insights)(\?|$)/.test(path)) return 10000;
+  return 0;
+}
 async function api(path, options = {}) {
+  const method = options.method || "GET", ttl = method === "GET" ? apiTTL(path) : 0;
+  const key = `${token}:${path}`, cached = apiCache.get(key);
+  if (ttl && cached && cached.expires > Date.now()) return cached.data;
+  if (ttl && apiPending.has(key)) return apiPending.get(key);
+  const revision = cacheRevision;
+  const task = fetchApi(path, options).then(data => {
+    if (method !== "GET") invalidateApiCache();
+    else if (ttl && revision === cacheRevision) {
+      if (apiCache.size >= 128) apiCache.delete(apiCache.keys().next().value);
+      apiCache.set(key, {expires: Date.now() + ttl, data});
+    }
+    return data;
+  }).finally(() => { if (apiPending.get(key) === task) apiPending.delete(key); });
+  if (ttl) apiPending.set(key, task);
+  return task;
+}
+function saveOverviewSnapshot(data) {
+  if (document.body.dataset.localDashboard !== "true") return;
+  try { sessionStorage.setItem("meyaya:overview", JSON.stringify({at: Date.now(), data})); } catch (_) {}
+}
+function restoreOverviewSnapshot() {
+  try {
+    const snapshot = JSON.parse(sessionStorage.getItem("meyaya:overview"));
+    if (snapshot && Date.now() - snapshot.at < 300000 && Array.isArray(snapshot.data?.servers)) {
+      applyServerData(snapshot.data);
+      $("connection").textContent = "● Showing recent data · updating…";
+    }
+  } catch (_) {}
+}
+
+async function fetchApi(path, options = {}) {
   const session = token;
   const response = await fetch(path, {signal: AbortSignal.timeout(20000), ...options, headers: {"Authorization": `Bearer ${token}`, "Content-Type": "application/json"}});
   if (token !== session) throw new Error("Dashboard locked. Sign in again.");
@@ -58,19 +97,35 @@ function renderServerDetails(target, data) {
   if (data.description) target.append(element("p", data.description, "details"));
   target.append(facts);
   const memberSection = element("details", undefined, "server-members");
-  const humans = (data.member_preview || []).filter(member => !member.bot).slice(0, 50);
-  memberSection.append(element("summary", `Members (${humans.length} shown · up to 50 · bots excluded)`));
-  if (data.member_preview_error) memberSection.append(element("p", data.member_preview_error, "details"));
+  const memberSummary = element("summary", "Members");
+  memberSection.append(memberSummary);
   const memberList = element("div", undefined, "inventory-list");
-  if (data.member_preview?.length === 0 && !data.member_preview_error) memberList.append(element("p", "No members returned.", "details"));
-  for (const member of humans) {
-    const row = element("article", undefined, "member-row");
-    row.append(element("strong", `${member.name}${member.bot ? " · Bot" : ""}`));
-    row.append(element("p", `@${member.username} · ${member.id}`, "details"));
-    if (member.joined_at) row.append(element("p", `Joined ${new Date(member.joined_at).toLocaleDateString()}`, "details"));
-    if (member.roles?.length) row.append(element("p", `Roles: ${member.roles.join(", ")}`, "details"));
-    memberList.append(row);
+  function drawMembers(details) {
+    const humans = (details.member_preview || []).filter(member => !member.bot).slice(0, 50);
+    memberSummary.textContent = `Members (${humans.length} shown · up to 50 · bots excluded)`;
+    memberList.replaceChildren();
+    if (details.member_preview_error) memberList.append(element("p", details.member_preview_error, "details"));
+    if (!humans.length && !details.member_preview_error) memberList.append(element("p", "No members returned.", "details"));
+    for (const member of humans) {
+      const row = element("article", undefined, "member-row");
+      row.append(element("strong", member.name), element("p", `@${member.username} · ${member.id}`, "details"));
+      if (member.joined_at) row.append(element("p", `Joined ${new Date(member.joined_at).toLocaleDateString()}`, "details"));
+      if (member.roles?.length) row.append(element("p", `Roles: ${member.roles.join(", ")}`, "details"));
+      memberList.append(row);
+    }
   }
+  drawMembers(data);
+  let memberLoading = false, membersLoaded = !data.member_preview_lazy;
+  memberSection.addEventListener("toggle", async () => {
+    if (!memberSection.open || membersLoaded || memberLoading || !data.id) return;
+    memberLoading = true;
+    try {
+      const details = await api(`/api/servers/${data.id}/details?members=1`);
+      if (memberSection.isConnected) drawMembers(details);
+      membersLoaded = true;
+    } catch (error) { if (memberSection.isConnected) memberList.append(element("p", error.message, "details")); }
+    finally { memberLoading = false; }
+  });
   memberSection.append(memberList); target.append(memberSection);
   const features = element("p", `Features: ${data.features?.join(", ") || "None"}`, "details"); target.append(features);
   const assets = element("div", undefined, "card-actions");
@@ -109,6 +164,8 @@ function lock() {
   serverWindowTimers.clear();
   $("safety-state").textContent = "";
   $("blacklist-items")?.replaceChildren();
+  invalidateApiCache(); lastServerRender = "";
+  try { sessionStorage.removeItem("meyaya:overview"); } catch (_) {}
   closeRequests(); token = ""; servers = [];
   $("servers").replaceChildren(); $("memory-items").replaceChildren(); $("nickname-items").replaceChildren();
   $("operations-summary").replaceChildren(); $("operations-features").replaceChildren(); $("operations-models").replaceChildren(); $("operations-recent").replaceChildren();
@@ -331,6 +388,9 @@ function renderServers() {
       sort === "members" ? (server.members ?? -1) : sort === "joined" ? (Date.parse(server.joined_at) || 0) : 0;
     return score(b) - score(a) || a.name.localeCompare(b.name);
   });
+  const signature = JSON.stringify(visible);
+  if (signature === lastServerRender && $("servers").children.length + $("former-servers").children.length) return;
+  lastServerRender = signature;
   const current = visible.filter(server => !isFormerServer(server));
   const former = visible.filter(isFormerServer);
   $("servers").replaceChildren(); $("former-servers").replaceChildren();
@@ -401,7 +461,12 @@ async function loadServerCommands(guildId) {
 }
 
 async function refresh() {
-  const data = await api("/api/servers"); servers = data.servers;
+  const data = await api("/api/servers");
+  saveOverviewSnapshot(data);
+  applyServerData(data);
+}
+function applyServerData(data) {
+  servers = data.servers;
   if (data.mode === "remote") servers.forEach(server => { server.readOnly = !data.can_edit || isFormerServer(server); });
   $("connection").textContent = data.mode === "remote" ? `● Live AWS bot · ${data.can_edit ? "editing enabled" : "read-only"}` : data.mode === "local" ? "● Local dashboard · cloud database" : data.ready ? "● Connected" : "Connecting to Discord";
   $("total").textContent = servers.filter(server => !isFormerServer(server)).length; $("chats").textContent = servers.reduce((n, server) => n + server.today_chats, 0); $("commands").textContent = servers.reduce((n, server) => n + server.today_commands, 0);
@@ -409,7 +474,7 @@ async function refresh() {
   if (!pageServerId) { renderServers(); loadOverviewInsights(); }
   if (pageServerId) {
     for (const id of ["memory-guild", "nickname-guild", "operations-guild"]) $(id).value = pageServerId;
-    await showServer(pageServerId);
+    showServer(pageServerId);
   }
 }
 
@@ -596,12 +661,12 @@ if (document.body.dataset.localDashboard === "true") {
       } catch (error) {
         if (!attempt) { notice("The first request did not finish. Retrying…"); continue; }
         $("connection").textContent = "Could not load servers";
-        $("servers").replaceChildren(element("p", "Server loading failed. Use Refresh to try again.", "details"));
+        if (!servers.length) $("servers").replaceChildren(element("p", "Server loading failed. Use Refresh to try again.", "details"));
         notice(error.name === "TimeoutError" ? "The dashboard took too long to respond. Check its terminal for errors, then select Refresh." : error.message);
       }
     }
   }
-  loadLocalOverview();
+  queueMicrotask(() => { restoreOverviewSnapshot(); loadLocalOverview(); });
 } else {
   useOwnerLink();
 }
@@ -675,18 +740,20 @@ setInterval(async () => {
 }, 15000);
 
 async function navigateServer(guildId) {
+  overviewScrollY = window.scrollY;
   pageServerId = guildId; selectedServerPanel = "main";
   history.pushState(null, "", `/?server=${encodeURIComponent(guildId)}`);
   closeRequests(); await showServer(guildId); window.scrollTo({top:0});
 }
 $("server-back").addEventListener("click", () => {
   pageServerId = null; history.pushState(null, "", "/"); closeRequests(); switchView("overview");
+  window.scrollTo({top: overviewScrollY});
 });
 window.addEventListener("popstate", () => {
   closeRequests();
   pageServerId = new URLSearchParams(location.search).get("server");
   selectedServerPanel = new URLSearchParams(location.search).get("panel") || "main";
-  if (pageServerId) showServer(pageServerId); else switchView("overview");
+  if (pageServerId) showServer(pageServerId); else { switchView("overview"); window.scrollTo({top: overviewScrollY}); }
 });
 for (const id of ["server-sort", "server-filter"]) $(id).addEventListener("change", renderServers);
 
@@ -822,3 +889,8 @@ function discordMessage(name, content, isBot = false) {
   return row;
 }
 $("diagnostics-refresh").addEventListener("click", () => { if (pageServerId) loadServerInsights(pageServerId); });
+
+// Explicit refreshes always bypass the in-memory cache; normal navigation reuses it.
+for (const button of document.querySelectorAll('button[id$="refresh"], #refresh')) {
+  button.addEventListener("click", invalidateApiCache, {capture: true});
+}

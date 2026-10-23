@@ -206,6 +206,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.fact_check")
         await self.load_extension("bot.cogs.memory")
         await self.load_extension("bot.cogs.roleplay")
+        await self.load_extension("bot.cogs.elation")
         await self.load_extension("bot.cogs.chat")
         # Optional monitor cog (watches configured channels)
         await self.load_extension("bot.cogs.monitor")

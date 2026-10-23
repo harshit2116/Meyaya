@@ -28,9 +28,9 @@ def is_conversation_closing(text: str, *, previous_text: str | None = None, has_
 
 
 def reply_policy(messages_in_five_minutes: int) -> tuple[float, int]:
-    """Return candidate probability and minimum seconds between replies."""
+    """Keep busy servers eligible while capping delivered replies to one per 3–5 minutes."""
     if messages_in_five_minutes <= 5:
-        return 0.35, 300
+        return 0.50, 180
     if messages_in_five_minutes <= 20:
-        return 0.10, 900
-    return 0.01, 2700
+        return 0.35, 240
+    return 0.20, 300

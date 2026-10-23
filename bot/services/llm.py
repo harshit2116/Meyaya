@@ -38,6 +38,7 @@ MEMORY_CATEGORIES = frozenset(
         "relationship",
         "birthday",
         "goal",
+        "followup",
         "boundary",
         "personal",
     }
@@ -335,6 +336,11 @@ class LLMProvider(ABC):
             except ValueError:
                 return None
             if not 0.0 <= confidence <= 1.0:
+                return None
+        if category == "followup" and value:
+            from bot.services.conversation_followup import normalize_followup
+            value = normalize_followup(value)
+            if value is None:
                 return None
         return MemoryDirective(
             action=action,

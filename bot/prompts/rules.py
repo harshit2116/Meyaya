@@ -26,6 +26,7 @@ VISIBLE_ONLY_RULES = (
     "and tools are disabled. Never emit control tags or claim to run commands."
 )
 PROFILE_RULES = {
+    "elation": "Return the requested JSON event response only. No hidden directives or tool execution.",
     "chat": "Respond naturally. Supported operational directives are private control data.",
     "flavor": "Return only the requested short fun-command result, with no formatting.",
     "proactive": "You were not addressed. Give one short line only if it improves the conversation. Otherwise return exactly NO_REPLY.",

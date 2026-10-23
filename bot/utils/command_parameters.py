@@ -21,6 +21,9 @@ def normalize_member_parameters(bot):
     from bot.data.help_catalog import COMMANDS_BY_NAME
 
     for command in bot.tree.walk_commands():
+        entry = COMMANDS_BY_NAME.get(command.qualified_name)
+        if entry:
+            command.description = entry.description
         if not isinstance(command, app_commands.Command):
             continue
         members = [p for p in command.parameters if p.type == discord.AppCommandOptionType.user]
@@ -34,9 +37,6 @@ def normalize_member_parameters(bot):
                     for index, p in enumerate(members, 1)
                 }
             )(command)
-        entry = COMMANDS_BY_NAME.get(command.qualified_name)
-        if entry:
-            command.description = entry.description
     for command in bot.walk_commands():
         members = [p for p in command.params.values() if member_annotation(p.annotation)]
         index = 0
