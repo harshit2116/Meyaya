@@ -154,7 +154,7 @@ class ElationCog(commands.Cog):
                     await ctx.send(view=scene_view(
                         "Meyaya has a question...",
                         "A stage, an audience, and entirely too much common sense. Shall we fix that? 🎭\n\n"
-                        f"**The Unwinnable Debate · Round 1**\n{state['round']['proposition']}\n\n"
+                        f"**The Unwinnable Debate · Round 1**\n## {state['round']['proposition']}\n\n"
                         "Convince me otherwise. I promise to be perfectly unreasonable."),
                         allowed_mentions=discord.AllowedMentions.none())
                 state["phase"] = "active"
@@ -421,7 +421,7 @@ class ElationCog(commands.Cog):
             logger.info("Elation stage nickname unavailable guild=%s", state["guild_id"])
         body = ("The audience earned a concession. " if won else "The round closes without a concession. ")
         body += (f"A new mask takes the stage: **{state['mask']['emoji']} {state['mask']['name']}**\n"
-                 f"Round {state['round']['number']} · {state['round']['proposition']}\n"
+                 f"**The Unwinnable Debate · Round {state['round']['number']}**\n## {state['round']['proposition']}\n\n"
                  "Convince me otherwise in your own language.\n"
                  "-# Fictional debate. The next round has a new hidden condition.")
         await self.send_scene(channel, state, "THE MASK CHANGES", body, "mask")

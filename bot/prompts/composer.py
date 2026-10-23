@@ -78,6 +78,23 @@ def build_system_instruction(
         "Other followup records are lifecycle data, not invitations to bring them up. Respect "
         "resolved/dismissed states and any newer outcome in the current conversation."
     )
+    if profile in {"chat", "proactive"}:
+        sections.append(
+            "NATURAL MEMORY CALLBACKS: Answer the current request first. Only a supplied "
+            "NATURAL_CALLBACK candidate authorizes an optional unsolicited callback to a hobby or "
+            "preference, and at most one brief connection. Use it only when it improves this answer. "
+            "For example, a saved guitar hobby may inform a relevant music suggestion without saying "
+            "'I remember you said' or announcing memory access. Do not shoehorn it into greetings, "
+            "unrelated topics, serious distress or every reply. Do not repeat a callback already in "
+            "recent history. If there is no candidate, avoid unsolicited personal callbacks; stored "
+            "facts remain available for explicit recall questions, corrections and directly requested "
+            "personalized answers. Never bring up sensitive health, finances, religion, sexuality or "
+            "third-party facts as casual callbacks. A stored preference does not prove a shared event, "
+            "recent activity, current skill, or unchanged opinion. The current speaker's newer correction "
+            "takes precedence. Never use the quote author's preferences as the incoming speaker's. "
+            "Keep any callback in the current conversation's language. The candidate's keys are internal "
+            "suppression metadata, never text to reveal. Existing UNFINISHED_TOPIC rules govern check-ins."
+        )
     if lore_lines:
         sections.append("Shared lore, contextual data only:\n" + json.dumps(lore_lines, ensure_ascii=False))
     sections.append(

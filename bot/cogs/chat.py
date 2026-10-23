@@ -41,6 +41,7 @@ from bot.repositories.server_lore import ServerLoreRepository
 from bot.services.llm import MemoryAction, NaturalCommand
 from bot.services.memory import MemoryService
 from bot.services.conversation_followup import FOLLOWUP_PREFIX, FOLLOWUP_COOLDOWN, eligible_followup
+from bot.services.memory_callback import MemoryCallbackGate
 from bot.services.profiles import ProfileService
 from bot.services.meyaya_system import MeyayaSystemService
 from bot.utils.embeds import build_interaction_embed
@@ -144,6 +145,7 @@ class ChatCog(commands.Cog):
         self._last_proactive_channel: dict[int, float] = {}
         self._proactive_inflight: set[int] = set()
         self._context_reads = OptionalContext()
+        self._memory_callbacks = MemoryCallbackGate(getattr(bot, "redis", None))
         self._busy_notices = {}
         self._active_chats = 0
         self._chat_conversations: dict[tuple[int, int, int], ChatConversation] = {}
@@ -525,6 +527,10 @@ class ChatCog(commands.Cog):
             load_history(),
             self._context_reads.read('channel', lambda: self._recent_proactive_messages(message, allow_fetch=False)),
         )
+        if reply_context is None and getattr(message, "reference", None) is None and not any(
+            entry.reply_context is not None or getattr(entry.message, "reference", None) is not None for entry in (batch or [])
+        ):
+            memory_lines = await self._offer_memory_callback(memory_lines, user_text, guild_id, message.author.id)
         usable_emojis = self._usable_custom_emojis(message)
         if reply_context is None and getattr(message, "reference", None) is not None:
             context_lines.append("The current member replied to a message, but its contents could not be retrieved. "
@@ -625,6 +631,7 @@ class ChatCog(commands.Cog):
                 await message.reply(chunk)
             self._remember_followup(message, rendered_reply)
             await self._mark_followup_surfaced(memory_lines)
+            await self._callback_gate().delivered(memory_lines)
             # Review only the visible text actually delivered, never control tags.
             await self._log_chat_entries(message, batch, response=rendered_reply)
             await self._run_self_action(message, reply.actions)
@@ -686,6 +693,16 @@ class ChatCog(commands.Cog):
                     await session.commit()
             except SQLAlchemyError:
                 logger.exception("Failed to persist Meyaya memory; chat reply was sent")
+
+    def _callback_gate(self):
+        gate = getattr(self, "_memory_callbacks", None)
+        if gate is None:
+            gate = self._memory_callbacks = MemoryCallbackGate(getattr(self.bot, "redis", None))
+        return gate
+
+    async def _offer_memory_callback(self, lines, text, guild_id, user_id):
+        candidate = await self._callback_gate().choose(lines, text, guild_id, user_id)
+        return [*lines, candidate] if candidate else lines
 
     async def _load_memories(
         self,
@@ -897,6 +914,8 @@ class ChatCog(commands.Cog):
                 self._context_reads.read('history', recent_history),
                 self._context_reads.read('channel', lambda: self._recent_proactive_messages(message)),
             )
+            if reply_context is None and getattr(message, "reference", None) is None:
+                memory_lines = await self._offer_memory_callback(memory_lines, content, guild_id, message.author.id)
             usable_emojis = self._usable_custom_emojis(message)
             emoji_instruction = self._custom_emoji_instruction(usable_emojis)
             if emoji_instruction is not None:
@@ -976,6 +995,7 @@ class ChatCog(commands.Cog):
             )
             self._remember_followup(message, rendered_reply[:MAX_DISCORD_MESSAGE_LENGTH])
             await self._mark_followup_surfaced(memory_lines)
+            await self._callback_gate().delivered(memory_lines)
             await self._record_meyaya_conversation(
                 guild_id, message.author.id, getattr(message.author, "display_name", str(message.author.id)),
                 content, "neutral",

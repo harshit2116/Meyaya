@@ -443,6 +443,10 @@ class FantasyCog(commands.Cog):
             await asyncio.sleep(veyra_hud.hold_seconds if clash else 3)
             while not state.finished:
                 if clash:
+                    if await veyra_hud.awaken(engine):
+                        await asyncio.sleep(veyra_hud.hold_seconds)
+                    if view.closed:
+                        raise commands.CommandError("This duel has ended.")
                     # Presentation callbacks and combat may otherwise read different moves.
                     async with veyra_hud.lock:
                         engine.advance_move()
