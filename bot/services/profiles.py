@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import and_, literal, or_, select
+from sqlalchemy import and_, case, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.models.marriage import Marriage
@@ -108,17 +108,25 @@ class ProfileService:
     async def _relationship_summary(self, user_id: int) -> tuple[str | None, int | None]:
         """Aggregate favorite action and closest member from one result set."""
 
-        statement = select(
-            RelationshipInteraction.user_a_id,
-            RelationshipInteraction.user_b_id,
-            RelationshipInteraction.interaction_type,
-            RelationshipInteraction.interaction_count,
+        interactions = select(
+            RelationshipInteraction.interaction_type.label("kind"),
+            case((RelationshipInteraction.user_a_id == user_id, RelationshipInteraction.user_b_id),
+                 else_=RelationshipInteraction.user_a_id).label("partner"),
+            RelationshipInteraction.interaction_count.label("count"),
         ).where(
             (RelationshipInteraction.user_a_id == user_id)
             | (RelationshipInteraction.user_b_id == user_id)
-        )
-        rows = (await self.session.execute(statement)).all()
-        return self._aggregate_relationship_rows(user_id, rows)
+        ).cte("member_interactions")
+        total = func.sum(interactions.c.count)
+        favorite = (select(interactions.c.kind).group_by(interactions.c.kind)
+                    .order_by(total.desc(), interactions.c.kind.collate("C"))
+                    .limit(1).scalar_subquery())
+        closest = (select(interactions.c.partner).group_by(interactions.c.partner)
+                   .order_by(total.desc(), interactions.c.partner)
+                   .limit(1).scalar_subquery())
+        # Return exactly two values, not every historical interaction row.
+        row = (await self.session.execute(select(favorite, closest))).one()
+        return row[0], row[1]
 
     @staticmethod
     def _aggregate_relationship_rows(

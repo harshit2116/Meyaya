@@ -11,7 +11,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from bot.prompts.composer import build_system_instruction
-from bot.prompts.elation import MASKS, performance_context, new_round, judge_round
+from bot.prompts.elation import MASKS, performance_context, new_round, judge_round, PROPOSITIONS
 from bot.services.elation import ElationStore, TITLES, parse_decree, public_chat_channel, CHANNEL_NAME
 from bot.utils.typing import background_typing
 from bot.views.elation import ASSETS, MEDIA_SECONDS, scene_view
@@ -97,7 +97,7 @@ class ElationCog(commands.Cog):
     @elation.command(name="begin", description="Temporarily hand this public channel to Queen Meyaya.")
     @commands.has_guild_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)
-    @app_commands.describe(minutes="Duration, 2–10 minutes; defaults to 5")
+    @app_commands.describe(minutes="Duration, 2-10 minutes; defaults to 5")
     async def begin(self, ctx, minutes: int = 5):
         await ctx.defer()
         if getattr(self, "storage_error", False):
@@ -129,6 +129,7 @@ class ElationCog(commands.Cog):
                          phase="starting", nicknames={}, opted_out=[], persuasion={},
                          restart_after=time.time() + minutes * 60 + 900)
             new_round(state, random)
+            state["round"]["proposition"] = PROPOSITIONS[0]
             self.store.save(state)  # Write the rollback record BEFORE editing Discord.
             self.states[gid] = state
             try:
@@ -143,18 +144,19 @@ class ElationCog(commands.Cog):
                     }
                     self.store.save(state)
                     await me.edit(nick=state["mask"]["nickname"], reason=REASON)
-                    await self.send_scene(ctx, state, "MEYAYA ELATION — THE MASK IS ON",
+                    await self.send_scene(ctx, state, "MEYAYA ELATION: THE MASK IS ON",
                         f"**{state['mask']['emoji']} {state['mask']['name']}**\n"
                         f"Tonight your host is **{state['mask']['nickname']}**. "
                         f"This channel is my kingdom for {minutes} minutes. Convince me to return it! "
-                        "Bargain, challenge my royal logic, or make me the punchline—in your own language. "
-                        "Three fresh persuasive appeals bring the curtain down; at most two count per person.\n\n"
-                        "**This is a temporary prank.** Talking here may earn you a silly server-wide nickname; "
-                        "original names—including mine—return when the event ends. `/elation optout` restores yours early. "
-                        "Admins can end it with `/elation stop`. No roles or permissions are changed.\n\n"
-                        f"**The Unwinnable Debate · Round 1**\n{state['round']['proposition']}\n"
-                        "-# Absurd comedy: hidden rules change each round, and some rounds cannot be won. The timer always ends the prank.",
+                        "Bargain, challenge my royal logic, or make me the punchline in your own language. "
+                        "Three fresh persuasive appeals bring the curtain down; at most two count per person.",
                         "intro")
+                    await ctx.send(view=scene_view(
+                        "Meyaya has a question...",
+                        "A stage, an audience, and entirely too much common sense. Shall we fix that? 🎭\n\n"
+                        f"**The Unwinnable Debate · Round 1**\n{state['round']['proposition']}\n\n"
+                        "Convince me otherwise. I promise to be perfectly unreasonable."),
+                        allowed_mentions=discord.AllowedMentions.none())
                 state["phase"] = "active"
                 self.store.save(state)
             except Exception:
@@ -263,7 +265,7 @@ class ElationCog(commands.Cog):
                 channel = self.bot.get_channel(state["channel_id"])
                 if channel:
                     try:
-                        await channel.send("**Elation has ended.** The mask is off; temporary names—including mine—are restored where unchanged.\n"
+                        await channel.send("**Elation has ended.** The mask is off.\n"
                                            "Congratulations! You've proven I was wrong. Unfortunately, being wrong was part of my plan.\n"
                                            "**ACHIEVEMENT UNLOCKED: YOU FOUGHT THE LAW AND THE LAW WAS A CLOWN.** 🌸",
                                            allowed_mentions=discord.AllowedMentions.none())
@@ -361,7 +363,7 @@ class ElationCog(commands.Cog):
         if animated:
             kwargs["file"] = discord.File(path, filename=f"elation-{kind}.gif")
         message = await destination.send(**kwargs)
-        if animated:
+        if animated and kind != "intro":
             mid = str(message.id)
             state.setdefault("scenes", {})[mid] = dict(title=title, body=body,
                 expires=time.time() + MEDIA_SECONDS[kind] + 1)
@@ -420,7 +422,7 @@ class ElationCog(commands.Cog):
         body = ("The audience earned a concession. " if won else "The round closes without a concession. ")
         body += (f"A new mask takes the stage: **{state['mask']['emoji']} {state['mask']['name']}**\n"
                  f"Round {state['round']['number']} · {state['round']['proposition']}\n"
-                 "Convince me otherwise—in your own language.\n"
+                 "Convince me otherwise in your own language.\n"
                  "-# Fictional debate. The next round has a new hidden condition.")
         await self.send_scene(channel, state, "THE MASK CHANGES", body, "mask")
 

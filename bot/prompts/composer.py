@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 PRIVATE_DIRECTORY = Path(__file__).resolve().parents[1] / "private"
 PERSONALITY_PATH = PRIVATE_DIRECTORY / "personality.v1.json"
 RULE_DIRECTORY = PRIVATE_DIRECTORY / "prompt_rules" / f"v{RULES_VERSION}"
-PromptProfile = Literal["chat", "flavor", "proactive", "voice", "elation"]
+PromptProfile = Literal["chat", "flavor", "proactive", "voice", "elation", "group"]
 DEFAULT_PERSONALITY = {
     "schema_version": 1,
     "revision": "1.0.0",
@@ -115,7 +115,7 @@ def build_system_instruction(
         if profile == "voice":
             sections.append(load_rule("voice"))
         sections.append(VISIBLE_ONLY_RULES)
-    if profile in {"chat", "proactive", "voice", "elation"}:
+    if profile in {"chat", "proactive", "voice", "elation", "group"}:
         sections.append(
             "LANGUAGE AND NATURAL VARIETY (override conflicting language/style defaults): "
             "Follow an explicit language or translation request from the current speaker first. "

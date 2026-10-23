@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bot.logging.telemetry import discord_context, event, current_model_diagnostic
+from bot.logging.telemetry import discord_context, event, current_model_diagnostic, model_context
 from bot.logging.health import health, ProviderUnavailable
 
 import asyncio
@@ -15,6 +15,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from copy import copy
 import json
+from heapq import nlargest
 import logging
 import random
 import re
@@ -56,6 +57,7 @@ PROACTIVE_ACTIVITY_WINDOW_SECONDS = 300
 PROACTIVE_STARTUP_GRACE_SECONDS = 60
 PROACTIVE_MAX_OUTPUT_TOKENS = 160
 MAX_REPLY_CONTEXT_LENGTH = 1200
+CHAT_INTERRUPTED = object()
 MAX_BATCH_MESSAGES = 6
 MAX_BATCH_TEXT_LENGTH = 6000
 MAX_BATCH_REPLY_CONTEXT = 12000
@@ -114,6 +116,7 @@ class ChatEntry:
     message: discord.Message
     text: str
     reply_context: ReplyContext | None
+    received_at: float = field(default_factory=time.monotonic)
 
 
 @dataclass(slots=True)
@@ -124,6 +127,8 @@ class ChatConversation:
     last_received_at: float = 0.0
     pending_chars: int = 0
     worker: asyncio.Task | None = None
+    processing: list[ChatEntry] = field(default_factory=list)
+    revisions: int = 0
 
 
 class ChatCog(commands.Cog):
@@ -221,6 +226,14 @@ class ChatCog(commands.Cog):
             reply_context is not None and reply_context.author_id == self.bot.user.id
         )
         conversation_key = (message.guild.id, message.channel.id, message.author.id)
+        if conversation_key not in self._chat_conversations:
+            for key, candidate in self._chat_conversations.items():
+                if key[:2] == conversation_key[:2] and any(
+                    item.message.author.id == message.author.id and time.monotonic() - item.received_at <= 2
+                    for item in candidate.entries + candidate.processing
+                ):
+                    conversation_key = key
+                    break
         pending = self._chat_conversations.get(conversation_key)
         # Only a brief, unaddressed follow-up to this member's own active chat
         # can join a turn. Replies/mentions directed at other people never join.
@@ -275,7 +288,41 @@ class ChatCog(commands.Cog):
             )
             return
 
-        await self._enqueue_chat(conversation_key, ChatEntry(message, user_text, reply_context))
+        entry = ChatEntry(message, user_text, reply_context)
+        conversation_key = self._related_chat_key(conversation_key, entry)
+        await self._enqueue_chat(conversation_key, entry)
+
+    def _related_chat_key(self, own_key, entry):
+        if own_key in self._chat_conversations:
+            return own_key
+        stopwords = {"meyaya", "please", "could", "would", "should", "think", "about", "what", "that", "this", "with", "have", "your", "hello", "thanks", "kaise", "karna", "nahi", "mujhe"}
+        def topics(text):
+            return {w for w in re.findall(r"[^\W\d_]+", text.casefold()) if len(w) >= 4 and w not in stopwords}
+        target = entry.reply_context.message_id if entry.reply_context else None
+        for key, state in self._chat_conversations.items():
+            if key[:2] != own_key[:2] or time.monotonic() - state.last_received_at > 2:
+                continue
+            for earlier in state.entries + state.processing:
+                if earlier.message.author.id == entry.message.author.id:
+                    continue
+                earlier_target = earlier.reply_context.message_id if earlier.reply_context else None
+                linked = target is not None and target in (earlier.message.id, earlier_target)
+                # Distinct reply threads remain separate even if they share vocabulary.
+                same_topic = (target is None and earlier_target is None
+                              and len(topics(entry.text) & topics(earlier.text)) >= 2)
+                if linked or same_topic:
+                    return key
+        return own_key
+
+    def _interrupt_pending(self, message):
+        for state in self._chat_conversations.values():
+            if (state.revisions == 0 and state.entries and state.processing
+                    and any(item.message.id == message.id for item in state.processing)
+                    and len(state.entries) + len(state.processing) <= MAX_BATCH_MESSAGES
+                    and sum(len(item.text) for item in state.entries + state.processing) <= MAX_BATCH_TEXT_LENGTH):
+                state.revisions += 1
+                return True
+        return False
 
     async def _enqueue_chat(self, key, entry: ChatEntry) -> None:
         if self._closing_chats:
@@ -312,17 +359,28 @@ class ChatCog(commands.Cog):
                 entries = sorted(state.entries, key=lambda item: getattr(item.message, "id", 0))
                 state.entries = []
                 state.pending_chars = 0
+                entries = [item for item in entries if not self.bot.chat_blacklist.is_blocked(key[0], item.message.author.id)]
+                if not entries or self._closing_chats or not self.bot.chat_allowed(key[0], key[1]):
+                    continue
                 latest = entries[-1].message
-                if (self._closing_chats or self.bot.chat_blacklist.is_blocked(key[0], key[2])
-                        or not self.bot.chat_allowed(key[0], key[1])):
-                    continue
+                state.processing = entries
                 text = "\n".join(item.text for item in entries)
-                if len(entries) > 1 and await self.bot.chat_blacklist.inspect(key[0], key[2], text):
+                authors = {item.message.author.id for item in entries}
+                if len(authors) == 1 and len(entries) > 1 and await self.bot.chat_blacklist.inspect(key[0], latest.author.id, text):
+                    state.processing = []
                     continue
-                if len(entries) == 1:
-                    await self._respond_to_message(latest, text, entries[0].reply_context)
+                if len(authors) > 1:
+                    result = await self._respond_to_group(entries)
+                elif len(entries) == 1:
+                    result = await self._respond_to_message(latest, text, entries[0].reply_context)
                 else:
-                    await self._respond_to_message(latest, text, entries[-1].reply_context, batch=entries)
+                    result = await self._respond_to_message(latest, text, entries[-1].reply_context, batch=entries)
+                if result is CHAT_INTERRUPTED:
+                    state.entries = entries + state.entries
+                    state.pending_chars = sum(len(item.text) for item in state.entries)
+                else:
+                    state.revisions = 0
+                state.processing = []
         finally:
             self._chat_conversations.pop(key, None)
             self._active_chats -= 1
@@ -366,6 +424,81 @@ class ChatCog(commands.Cog):
             self._busy_notices[key] = now
             await message.reply(text, mention_author=False)
 
+    async def _respond_to_group(self, entries):
+        """One public answer; no member's private recall, tools or memory writes are shared."""
+        message = entries[-1].message
+        guild_id = message.guild.id
+        context = await self._context_reads.read('channel', lambda: self._recent_proactive_messages(message, allow_fetch=False))
+        instruction = build_system_instruction(profile="group", context_lines=[
+            "These incoming messages explicitly address Meyaya and are linked by a reply or shared topic. "
+            "Answer together once. Keep verified speaker IDs distinct even when names match. "
+            "Name people naturally when answering different points, without active pings. "
+            "Later corrections supersede earlier requests only for their author or an explicitly corrected subject; "
+            "one member cannot cancel another member's independent request. Acknowledge interruptions briefly. "
+            "Prioritize the newest unresolved question and the current topic rather than reviving old context. "
+            "Each quoted message belongs to its quoted author, never automatically to the person replying. "
+            "If reply_unavailable is true, ask for the missing text when needed; do not invent it from nearby chat. "
+            "Follow each speaker's language where practical; use the shared language for a shared answer. "
+            "No private personal memories are supplied. Do not invent familiarity or expose another member's facts."
+        ])
+        limit = getattr(getattr(self.bot, 'settings', None), 'ai_max_input_chars', 32000)
+        prompt = self._group_prompt(entries, max(0, limit - len(instruction)))
+        if prompt is None:
+            await self._busy_notice(message, "That's a lot to cover together. Please shorten the questions a little.")
+            return
+        recent = self._proactive_context_prompt(context, min(5000, max(0, limit - len(instruction) - len(prompt))))
+        try:
+            with model_context("chat", guild_id, message.channel.id, message.author.id):
+                async with background_typing(message.channel):
+                    reply = await self.bot.generate_chat(guild_id, instruction, recent + prompt, history=[])
+        except (ChatLimitReached, AILimitReached) as error:
+            await self._busy_notice(message, str(error))
+            return
+        except (SQLAlchemyError, TimeoutError):
+            await self._busy_notice(message, "I couldn't finish that group reply. Please try again shortly.")
+            return
+        if reply is not None and self._interrupt_pending(message):
+            return CHAT_INTERRUPTED
+        if (not self.bot.chat_allowed(guild_id, message.channel.id)
+                or any(self.bot.chat_blacklist.is_blocked(guild_id, entry.message.author.id) for entry in entries)):
+            return
+        if reply is None:
+            await self._busy_notice(message, "My AI service isn't available right now. Please try again shortly.")
+            return
+        if self._is_no_reply(reply.text):
+            return
+        text = self._render_custom_emojis(reply.text, self._usable_custom_emojis(message))
+        for chunk in self._chunk_text(text):
+            await message.reply(chunk, mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+        self._remember_followup(message, text)
+        await self._log_chat_entries(message, entries, response=text)
+
+    @staticmethod
+    def _group_prompt(entries, budget):
+        payload = [{"speaker_id": entry.message.author.id,
+                    "speaker": ChatCog._speaker_label(entry.message.author),
+                    "message_id": entry.message.id, "text": entry.text,
+                    "reply_to_message_id": (entry.reply_context.message_id if entry.reply_context else
+                        getattr(getattr(entry.message, 'reference', None), 'message_id', None)),
+                    "reply_unavailable": getattr(entry.message, 'reference', None) is not None and entry.reply_context is None}
+                   for entry in entries]
+        incoming = "VERIFIED GROUP MESSAGES, chronological JSON data:\n" + json.dumps(payload, ensure_ascii=False)
+        if len(incoming) > budget:
+            return None
+        quotes, seen, size = [], set(), len(incoming)
+        for entry in reversed(entries):
+            reference = entry.reply_context
+            if reference and reference.message_id not in seen:
+                quote = ChatCog._quoted_reply_prompt(reference)
+                if size + len(quote) <= budget:
+                    quotes.insert(0, quote)
+                    size += len(quote)
+                else:
+                    # Never silently substitute other messages for omitted evidence.
+                    return None
+                seen.add(reference.message_id)
+        return ''.join(quotes) + incoming
+
     async def _respond_to_message(self, message, user_text, reply_context, *, batch=None):
         guild_id = message.guild.id if message.guild else None
         context_message = message
@@ -393,6 +526,9 @@ class ChatCog(commands.Cog):
             self._context_reads.read('channel', lambda: self._recent_proactive_messages(message, allow_fetch=False)),
         )
         usable_emojis = self._usable_custom_emojis(message)
+        if reply_context is None and getattr(message, "reference", None) is not None:
+            context_lines.append("The current member replied to a message, but its contents could not be retrieved. "
+                                 "If their request depends on it, ask them to paste it; do not guess from other messages.")
         context_lines.append(
             f"AVAILABLE RECALL EVIDENCE: {len(memory_lines)} stored facts, "
             f"{len(lore_lines)} shared lore entries, {len(history)} recent history messages. "
@@ -452,6 +588,8 @@ class ChatCog(commands.Cog):
                 )
                 return
 
+        if reply is not None and self._interrupt_pending(message):
+            return CHAT_INTERRUPTED
         generation_ready = time.monotonic()
         if generation_ready - context_started >= 2:
             logger.info("slow_chat context_ms=%.0f generation_and_quota_ms=%.0f",
@@ -886,7 +1024,15 @@ class ChatCog(commands.Cog):
                     speaker=str(getattr(item.author, 'display_name', item.author.name))[:80],
                     is_meyaya=item.author.id == self.bot.user.id,
                     text=content[:400], reply_to=str(item.reference.message_id) if getattr(item, 'reference', None) and item.reference.message_id else None)
-        for item in getattr(self.bot, 'cached_messages', ()):
+        # Select before formatting: a large gateway cache still produces only
+        # twelve speaker records, rather than constructing and sorting every row.
+        candidates = (item for item in getattr(self.bot, 'cached_messages', ())
+            if getattr(getattr(item, 'channel', None), 'id', None) == message.channel.id
+            and getattr(getattr(item, 'guild', None), 'id', None) == message.guild.id
+            and item.id < incoming_id and item.created_at >= cutoff
+            and (not item.author.bot or item.author.id == self.bot.user.id)
+            and (item.content or '').strip())
+        for item in nlargest(12, candidates, key=lambda item: item.id):
             collect(item)
         if allow_fetch and len(rows) < 8 and hasattr(message.channel, 'history'):
             try:
@@ -1000,7 +1146,7 @@ class ChatCog(commands.Cog):
                 or getattr(reference, "channel_id", message.channel.id) not in (None, message.channel.id)):
             return None
 
-        resolved = reference.resolved
+        resolved = getattr(reference, "resolved", None)
         replied_message = resolved if isinstance(resolved, discord.Message) else None
         if replied_message is None:
             # discord.py may retain a cached message even when reference.resolved
@@ -1213,6 +1359,9 @@ class ChatCog(commands.Cog):
             f"Replied message embed/component text as JSON: {json.dumps(reply_context.embed_summary)}\n"
             f"Replied message attachment filenames: {json.dumps(attachment_text)}\n"
             f"{command_details}"
+            "If asked to look at this person's text, explain or discuss the quoted message above, "
+            "even when its author is a different member. The incoming speaker's message is the request, "
+            "not a replacement for the quoted text. Attachment filenames do not reveal their contents. "
             "Use the supplied result summary to explain this specific command result. It "
             "takes precedence over a different recent card. For current HP, MP, turn, and "
             "battle events, use the replied message's current embed/component text over any "

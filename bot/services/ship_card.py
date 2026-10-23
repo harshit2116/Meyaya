@@ -1,6 +1,7 @@
 """Compact, locally rendered romance cards."""
 
 from io import BytesIO
+from functools import lru_cache
 import math
 import unicodedata
 
@@ -31,15 +32,14 @@ def centered(draw, text, x, y, width, size, color):
     draw.text((x, y), text, font=font(size), fill=color, anchor="mm")
 
 
-def render_ship_card(
-    first, second, name_one, name_two, percentage=50, verdict="A cute little maybe", *, theme="ship"
-):
+@lru_cache(maxsize=2)
+def _card_base(besties):
+    """Only static pixels; two RGB masters use under 3 MiB. Copy before drawing."""
     image = Image.new("RGB", (960, 520), "#170f22")
     draw = ImageDraw.Draw(image)
     for y in range(520):
         t = y / 519
         draw.line((0, y, 960, y), fill=(int(26 + 20 * t), int(15 + 8 * t), int(36 + 13 * t)))
-    besties = theme == "besties"
     pink, pale, muted = ("#b6a4fa" if besties else "#f694b9"), "#fff0f5", "#c2a9bd"
     draw.rounded_rectangle(
         (16, 16, 944, 504), radius=26, fill="#1b1426", outline="#79516c", width=2
@@ -61,27 +61,12 @@ def render_ship_card(
         muted,
     )
 
-    for data, name, cx in ((first, name_one, 204), (second, name_two, 756)):
-        draw.ellipse((cx - 116, 119, cx + 116, 351), outline="#553347", width=1)
-        draw.ellipse((cx - 109, 126, cx + 109, 344), fill=pink)
-        try:
-            with Image.open(BytesIO(data)) as source:
-                if source.width * source.height > 4_000_000:
-                    raise ValueError("Avatar is too large")
-                avatar = ImageOps.fit(
-                    source.convert("RGBA"), (208, 208), method=Image.Resampling.LANCZOS
-                )
-        except (OSError, ValueError):
-            avatar = Image.new("RGBA", (208, 208), "#291e31")
-            centered(ImageDraw.Draw(avatar), name[:1] or "?", 104, 104, 180, 72, pale)
-        mask = Image.new("L", (208, 208))
-        ImageDraw.Draw(mask).ellipse((0, 0, 207, 207), fill=255)
-        portrait = Image.new("RGBA", avatar.size, "#291e31")
-        portrait.alpha_composite(avatar)
-        image.paste(portrait.convert("RGB"), (cx - 104, 131), mask)
-        draw.rounded_rectangle((cx - 147, 359, cx + 147, 406), radius=16, fill="#302036")
-        centered(draw, name, cx, 382, 270, 25, pale)
+    return image
 
+
+@lru_cache(maxsize=1)
+def _heart_mask():
+    """Read-only 16 KiB mask, reused across ship and bestie cards."""
     # Supersample only this small icon: rounded joins and antialiased edges
     # without multiplying the memory footprint of the entire card.
     scale = 4
@@ -109,6 +94,39 @@ def render_ship_card(
     heart_draw.polygon(points, fill=255)
     heart_draw.line(points + [points[0]], fill=255, width=4 * scale, joint="curve")
     mask = mask.resize((128, 128), Image.Resampling.LANCZOS)
+    return mask
+
+
+def render_ship_card(
+    first, second, name_one, name_two, percentage=50, verdict="A cute little maybe", *, theme="ship"
+):
+    besties = theme == "besties"
+    image = _card_base(besties).copy()
+    draw = ImageDraw.Draw(image)
+    pink, pale, muted = ("#b6a4fa" if besties else "#f694b9"), "#fff0f5", "#c2a9bd"
+
+    for data, name, cx in ((first, name_one, 204), (second, name_two, 756)):
+        draw.ellipse((cx - 116, 119, cx + 116, 351), outline="#553347", width=1)
+        draw.ellipse((cx - 109, 126, cx + 109, 344), fill=pink)
+        try:
+            with Image.open(BytesIO(data)) as source:
+                if source.width * source.height > 4_000_000:
+                    raise ValueError("Avatar is too large")
+                avatar = ImageOps.fit(
+                    source.convert("RGBA"), (208, 208), method=Image.Resampling.LANCZOS
+                )
+        except (OSError, ValueError):
+            avatar = Image.new("RGBA", (208, 208), "#291e31")
+            centered(ImageDraw.Draw(avatar), name[:1] or "?", 104, 104, 180, 72, pale)
+        mask = Image.new("L", (208, 208))
+        ImageDraw.Draw(mask).ellipse((0, 0, 207, 207), fill=255)
+        portrait = Image.new("RGBA", avatar.size, "#291e31")
+        portrait.alpha_composite(avatar)
+        image.paste(portrait.convert("RGB"), (cx - 104, 131), mask)
+        draw.rounded_rectangle((cx - 147, 359, cx + 147, 406), radius=16, fill="#302036")
+        centered(draw, name, cx, 382, 270, 25, pale)
+
+    mask = _heart_mask()
     image.paste("#aa91ef" if besties else "#ed719d", (416, 121, 544, 249), mask)
     draw.line((330, 184, 403, 184), fill="#79516c", width=2)
     draw.line((557, 184, 630, 184), fill="#79516c", width=2)

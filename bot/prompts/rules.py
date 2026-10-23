@@ -26,6 +26,7 @@ VISIBLE_ONLY_RULES = (
     "and tools are disabled. Never emit control tags or claim to run commands."
 )
 PROFILE_RULES = {
+    "group": "Answer the explicitly addressed group conversation with one coherent visible response. Keep authors separate. No tools or memory writes.",
     "elation": "Return the requested JSON event response only. No hidden directives or tool execution.",
     "chat": "Respond naturally. Supported operational directives are private control data.",
     "flavor": "Return only the requested short fun-command result, with no formatting.",
