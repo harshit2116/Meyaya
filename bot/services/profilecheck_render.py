@@ -44,7 +44,7 @@ class ProfileCheckRenderer:
         # Fingerprint includes name, asset URLs, accent and scoring metadata.
         # Content hashes distinguish a failed download from a later recovery.
         max_bytes = min(max_bytes, PROFILE_MEDIA_BYTES)
-        key = (visual.asset_fingerprint, hash(visual.avatar), hash(visual.banner), hash(visual.decoration), max_bytes)
+        key = (visual.asset_fingerprint, hash(visual.avatar), hash(visual.banner), hash(visual.decoration), max_bytes, visual.server_tag, visual.badge_names, hash(visual.nameplate))
         cached = self._cached(key)
         if cached is not None:
             return cached
@@ -59,7 +59,7 @@ class ProfileCheckRenderer:
                 return cached
             # Waiting callers recheck the cache after the first render finishes.
             result = await animation_work(_render, visual, max_bytes)
-            size = len(result[1]) + sum(len(asset) for asset in (visual.avatar, visual.banner, visual.decoration) if asset)
+            size = len(result[1]) + sum(len(asset) for asset in (visual.avatar, visual.banner, visual.decoration, visual.nameplate) if asset)
             if size <= self.max_bytes:
                 while self.cache and (self.bytes + size > self.max_bytes or len(self.cache) >= 16):
                     _, (_, _, removed) = self.cache.popitem(last=False)

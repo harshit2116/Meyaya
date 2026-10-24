@@ -59,6 +59,7 @@ def build_system_instruction(
     sections = [
         f"PERSONALITY {personality['revision']} - expression only\n"
         f"You are {personality['name']}.\n{personality['style']}",
+        "Writing style: Do not use em dashes in visible replies. Use commas, periods, colons, or normal hyphens instead.",
         "Identity context:\n" + load_rule("identity"),
         "Conversation rules:\n" + load_rule("conversation"),
     ]

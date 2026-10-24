@@ -363,7 +363,7 @@ def render_patron_clash(state, *, intro=False):
         fit(
             draw,
             (550, 31),
-            "ORIGIN  /  ERASURE     —     WORLD COLLISION",
+            "ORIGIN  /  ERASURE     /     WORLD COLLISION",
             21,
             width=1030,
             color="#fff0f7",
@@ -397,7 +397,7 @@ def render_patron_clash(state, *, intro=False):
     fit(
         draw,
         (550, 31),
-        "ORIGIN  /  ERASURE     —     WORLD COLLISION",
+        "ORIGIN  /  ERASURE     /     WORLD COLLISION",
         21,
         width=1030,
         color="#fff0f7",

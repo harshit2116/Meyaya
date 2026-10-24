@@ -197,7 +197,7 @@ def dungeon_presentation(profile, run, *, available_emojis=None):
         asset = world.asset("boss" if run.encounter == 3 else f"enemy-{run.encounter + 1}")
         turn = battle.get("turn", 0) + 1
         screen = DungeonScreen(
-            f"FLOOR {ROMAN[run.floor]} — {world.name.upper()}",
+            f"FLOOR {ROMAN[run.floor]} · {world.name.upper()}",
             f"*{world.title}*\n"
             f"-# {'⚔ GUARDIAN' if run.encounter == 3 else '⚔ BATTLE'} · {run.encounter + 1}/4"
             f"　 ·　 TURN {turn} · **YOUR TURN**",
@@ -353,7 +353,7 @@ class DungeonView(discord.ui.LayoutView):
                 fields=[(f"✦ {profile.fantasy_title} · Soul Level {profile.level}",
                          f"{profile.class_name} · {profile.affinity_name}\n"
                          f"⚔ {profile.weapon_name} · Weapon Level {profile.weapon_level}\n"
-                         f"Highest Floor {ROMAN[profile.highest_floor] or '—'}")],
+                         f"Highest Floor {ROMAN[profile.highest_floor] or 'None'}")],
                 footer="Saved run available · Resume when ready" if self.landing else "Your awakened identity stays with you",
             )
             asset = world.asset()

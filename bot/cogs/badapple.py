@@ -59,7 +59,7 @@ class BadAppleCog(commands.Cog):
                 # A channel Message uses bot authentication and plain content. Context
                 # responses become V2 cards; interaction webhooks expire after 15 min.
                 message = await ctx.channel.send(
-                    "Bad Apple!! — preparing the first frame…",
+                    "Bad Apple!!: preparing the first frame…",
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
                 result = await self.player.play(message, animation, fps)

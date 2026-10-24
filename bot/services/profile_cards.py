@@ -7,13 +7,16 @@ from io import BytesIO
 from collections import OrderedDict
 from bisect import bisect_right
 from math import lcm
+from functools import lru_cache
+from bot.services.profile_badges import badge_icon
 import logging
+import math
 from time import monotonic
 
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from bot.services.card_renderer import font, label
-from bot.services.profile_scoring import category_available, build_improvement_summary, get_rule_based_recommendation
+from bot.services.profile_scoring import category_available, build_improvement_summary, get_rule_based_recommendation, select_improvement_priority
 from bot.services.profile_aesthetic import (
     ProfileVisual,
     profilecheck_points,
@@ -318,67 +321,163 @@ def profilecheck_card(visual: ProfileVisual) -> bytes:
     return _save(_profilecheck_image(visual))
 
 
-def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True) -> Image.Image:
-    image = _background((1000, 900), visual.palette[3], visual.palette[0])
-    draw = ImageDraw.Draw(image, "RGBA")
-    _panel(draw, (28, 28, 972, 872))
-    accent = _readable_accent(visual.palette[2], '#110e1a')
-    draw.text((58, 50), "MEYAYA PROFILE CHECK", font=font(18), fill=accent)
-    label(draw, (58, 86, 650, 56), visual.name, 40, "white")
-    draw.text((770, 58), f"{visual.overall_score}", font=font(72), fill="white")
-    draw.text((866, 103), "/ 100", font=font(21), fill=accent)
-    banner = _open(visual.banner)
-    if banner is not None:
-        banner = ImageOps.fit(banner, (880, 164))
-        mask = Image.new('L', banner.size)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, 879, 163), radius=16, fill=255)
-        image.paste(banner, (60, 155), mask)
-    elif visual.accent_color is not None and not visual.banner_available:
-        _panel(draw, (60, 155, 940, 319), fill=(*_rgb(visual.accent_color), 255))
+PROFILECHECK_SIZE = (1500, 1000)
+PROFILECHECK_BANNER = (48, 147, 1404, 300)
+PROFILECHECK_AVATAR = (64, 400, 280, 280)
+PROFILECHECK_ANIMATION_WIDTH = 1000
+
+
+def _profile_spark(draw, x, y, size, color):
+    points = []
+    for i in range(8):
+        angle = i * math.pi / 4
+        radius = size if i % 2 == 0 else size * .25
+        points.append((x+math.sin(angle)*radius, y+math.cos(angle)*radius))
+    draw.polygon(points, fill=color)
+
+
+def _profile_flower(draw, x, y, size, color):
+    for i in range(5):
+        angle = i * math.tau / 5
+        tip = (x+math.sin(angle)*size, y+math.cos(angle)*size)
+        left = (x+math.sin(angle-.38)*size*.38, y+math.cos(angle-.38)*size*.38)
+        right = (x+math.sin(angle+.38)*size*.38, y+math.cos(angle+.38)*size*.38)
+        draw.polygon([(x,y),left,tip,right],fill=color)
+    draw.ellipse((x-3,y-3,x+3,y+3),fill="#e9aec7")
+
+
+@lru_cache(maxsize=1)
+def _profilecheck_frame():
+    # Brand decoration is shared, copied before any member's assets are painted.
+    image = Image.new("RGBA", PROFILECHECK_SIZE, "#251c28")
+    draw = ImageDraw.Draw(image)
+    for x,y,r in ((0,210,70),(1485,550,40),(38,760,60),(1420,970,65)):
+        _profile_flower(draw,x,y,r,"#352332")
+    draw.rounded_rectangle((26,26,1474,974),radius=22,fill="#120f19",outline="#c39bb1",width=2)
+    _profile_flower(draw,79,83,26,"#ed95b6")
+    # Small ornamental flourishes stay outside the banner and reading areas.
+    draw.line((580,73,704,73),fill="#8f647f",width=1)
+    _profile_spark(draw,575,73,4,"#eea4c2")
+    _profile_spark(draw,708,73,3,"#bd82a3")
+    for x,y,r in ((1452,52,7),(1420,936,26),(1456,887,20)):
+        _profile_flower(draw,x,y,r,"#46303f")
+    return image
+
+
+@lru_cache(maxsize=1)
+def _profilecheck_banner_mask():
+    _, _, width, height = PROFILECHECK_BANNER
+    mask = Image.new("L", (width, height))
+    ImageDraw.Draw(mask).rounded_rectangle((0,0,width-1,height-1),radius=22,fill=255)
+    return mask
+
+
+def _profilecheck_banner(image, banner):
+    x,y,width,height = PROFILECHECK_BANNER
+    image.paste(ImageOps.fit(banner,(width,height)),(x,y),_profilecheck_banner_mask())
+
+
+def _profile_score_icon(draw, kind, x, y, color):
+    if kind == 0:
+        draw.ellipse((x-13,y-8,x+13,y+8),outline=color,width=3)
+        draw.ellipse((x-4,y-4,x+4,y+4),fill=color)
+    elif kind == 1:
+        draw.rounded_rectangle((x-13,y-10,x+4,y+3),radius=5,outline=color,width=3)
+        draw.rounded_rectangle((x-3,y-2,x+14,y+11),radius=5,outline=color,width=3)
+    elif kind == 2:
+        draw.ellipse((x-12,y-11,x+12,y+11),fill=color)
+        for dx,dy in ((-5,-4),(2,-6),(6,0),(-6,3)):
+            draw.ellipse((x+dx-2,y+dy-2,x+dx+2,y+dy+2),fill="#251b2a")
     else:
-        _panel(draw, (60, 155, 940, 319), fill=(38, 30, 48, 255))
-    # Render the review below the banner with room for the full decoration.
+        _profile_spark(draw,x,y,13,color)
+
+
+def _profilecheck_score_overlay(visual):
+    overlay = Image.new("RGBA",PROFILECHECK_SIZE)
+    draw = ImageDraw.Draw(overlay)
+    draw.line((716,470,716,706),fill="#6d4d65",width=1)
+    draw.text((798,473),"STYLE BREAKDOWN",font=font(19),fill="#cdaac5")
+    draw.text((1435,473),"SCORE",font=font(16),anchor="ra",fill="#cdaac5")
+    colors = ("#ed84a5","#ca86e8","#b77caa","#f1b6cf")
+    for index,(field,name,_,_) in enumerate(profilecheck_points(visual)):
+        y = 519 + index * 52
+        available = category_available(visual,field)
+        value = max(0,min(100,getattr(visual,field)))
+        _profile_score_icon(draw,index,770,y+14,colors[index])
+        draw.text((803,y),name,font=font(22),fill="#f4e9f2")
+        draw.rounded_rectangle((966,y+7,1320,y+25),radius=9,fill="#302737")
+        if available and value:
+            draw.rounded_rectangle((966,y+7,966+max(18,354*value/100),y+25),radius=9,fill=colors[index])
+        draw.text((1435,y),f"{value} / 100" if available else "N/A",font=font(22),anchor="ra",fill="#efacc9")
+        if index < 3:
+            draw.line((798,y+40,1435,y+40),fill="#483347",width=1)
+    return overlay
+
+
+def _profilecheck_avatar(image, visual, art, decoration):
+    x,y,size,_ = PROFILECHECK_AVATAR
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((x-11,y-11,x+size+11,y+size+11),fill="#120f1b",outline="#e18cae",width=2)
+    _avatar_art(image,visual,PROFILECHECK_AVATAR,art,decoration)
+    # Ornamentation frames the avatar without covering the face or decoration.
+    draw = ImageDraw.Draw(image)
+    for dx,dy,r in ((-7,45,12),(size+5,34,11),(size+10,size-40,12),(-5,size-25,10)):
+        _profile_spark(draw,x+dx,y+dy,r,"#efa3c2")
+
+
+def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True,
+                       include_scores: bool = True) -> Image.Image:
+    image = _profilecheck_frame().copy()
+    draw = ImageDraw.Draw(image)
+    draw.text((130,51),"MEYAYA / PROFILE CHECK",font=font(32),fill="#f9e5f0")
+    draw.text((132,99),"A QUICK LOOK AT YOUR DISCORD PROFILE STYLE",font=font(17),fill="#c7a6c0")
+    grade,verdict,tip = profilecheck_feedback(visual)
+    draw.rounded_rectangle((1018,44,1452,136),radius=18,fill="#17121e",outline="#e8a1bf",width=2)
+    draw.rounded_rectangle((1038,60,1227,98),radius=11,fill="#472e3e",outline="#d37e9e",width=1)
+    label(draw,(1053,69,164,25),grade.replace(" - "," · "),17,"#ffe6f2",minimum=13)
+    draw.text((1039,109),"STYLE SCORE",font=font(15),fill="#ed9fbd")
+    draw.text((1347,45),str(visual.overall_score),font=font(75),anchor="ra",fill="#f6b0ca")
+    draw.text((1433,95),"/ 100",font=font(25),anchor="ra",fill="#bc94ae")
+    _profile_spark(draw,1433,59,10,"#e994b7")
+    banner = _open(visual.banner)
+    if banner is None:
+        color = visual.accent_color if not visual.banner_available else None
+        banner = Image.new("RGBA",PROFILECHECK_BANNER[2:],color or visual.palette[3])
+    _profilecheck_banner(image,banner)
     if include_avatar:
-        _avatar(image, visual, (62, 355, 270, 270))
-    draw = ImageDraw.Draw(image, "RGBA")
-    _panel(draw, (368, 354, 940, 635), fill=(10, 8, 18, 155))
-    for index, (field, name, weight, earned) in enumerate(profilecheck_points(visual)):
-        bar_color = _readable_accent(visual.palette[index % 3], '#2a2533', minimum=3)
-        if category_available(visual, field):
-            _score_bar(draw, 402, 387 + index * 57, 495, name, getattr(visual, field), bar_color,
-                       points_text=f"{getattr(visual, field)} / 100")
-        else:
-            draw.text((402, 387 + index * 57), name.upper(), font=font(15), fill="#cfc7d7")
-    elements = [
-        name
-        for enabled, name in (
-            (visual.has_banner, "Banner"),
-            (visual.has_decoration, "Avatar decoration"),
-            (visual.has_nameplate, "Nameplate"),
-            (visual.has_server_tag, "Server tag"),
-            (visual.has_server_avatar, "Server avatar"),
-            (visual.animated_avatar, "Animated avatar"),
-            (visual.animated_banner, "Animated banner"),
-            (not visual.banner_available and not visual.banner and visual.accent_color is not None, "Solid banner color"),
-        )
-        if enabled
-    ]
-    if visual.badge_count:
-        elements.append(f"{visual.badge_count} public badge(s)")
-    draw.text((62, 657), "PROFILE ELEMENTS", font=font(15), fill=accent)
-    label(
-        draw, (62, 683, 875, 54), "  •  ".join(elements) or "Clean and minimal setup", 20, "white"
-    )
-    grade, verdict, tip = profilecheck_feedback(visual)
-    _panel(draw, (58, 742, 942, 852), fill=(48, 35, 55, 255))
-    draw.text((80, 754), grade, font=font(14), fill="#efb8d5")
-    label(draw, (80, 779, 840, 27), verdict, 18, "white")
-    label(draw, (80, 807, 840, 44), tip, 16, "#d7cadf")
+        _profilecheck_avatar(image,visual,_open(visual.avatar),_open(visual.decoration))
+    plate = _open(visual.nameplate)
+    if plate is not None:
+        image.alpha_composite(ImageOps.fit(plate,(324,66)),(365,482))
+        image.alpha_composite(Image.new("RGBA",(324,66),(12,9,19,100)),(365,482))
+    draw = ImageDraw.Draw(image)
+    label(draw,(378,490,318,62),visual.name,43,"#fff0f8",minimum=26)
+    if visual.server_tag:
+        width = min(180,round(draw.textlength(visual.server_tag,font=font(23)))+38)
+        draw.rounded_rectangle((378,562,378+width,603),radius=12,fill="#382b43",outline="#9d6f9e",width=1)
+        label(draw,(397,569,width-28,28),visual.server_tag,23,"#e2b4e9",minimum=18)
+    for index,name in enumerate(visual.badge_names[:11]):
+        icon = badge_icon(name)
+        if icon is not None:
+            image.alpha_composite(icon,(378+(index%6)*48,620+(index//6)*46))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((48,730,1452,922),radius=20,fill="#221923",outline="#e3a0c0",width=2)
+    _profile_spark(draw,91,763,14,"#f39fbe")
+    draw.text((123,747),"YOUR BIGGEST OPPORTUNITY",font=font(25),fill="#f395b6")
+    _,priority,_ = select_improvement_priority(visual)
+    draw.rounded_rectangle((1180,746,1430,790),radius=14,fill="#38263d",outline="#a8759e",width=1)
+    label(draw,(1196,756,220,28),priority.upper(),18,"#e8b6e7",minimum=14)
+    draw.line((89,804,89,897),fill="#d08eac",width=2)
+    label(draw,(123,800,1273,37),verdict,27,"#fff0f8",minimum=23)
+    label(draw,(123,844,1273,62),tip.removeprefix("Best upgrade: "),24,"#d9bfd4",minimum=20)
+    draw.text((64,941),"Visual estimate · Public profile elements only",font=font(18),fill="#a38a9f")
+    if include_scores:
+        image.alpha_composite(_profilecheck_score_overlay(visual))
     return image
 
 
 PROFILE_ANIMATION_MS = 8_000
-PROFILE_ANIMATION_FRAMES = 120
+PROFILE_ANIMATION_FRAMES = 90
 PROFILE_ANIMATION_DECODE_BYTES = 64 * 1024 * 1024
 PROFILE_MEDIA_BYTES = 8 * 1024 * 1024
 
@@ -418,7 +517,7 @@ def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) 
                 decoded, ends = [], []
                 sources[key] = (decoded, ends)
                 # Store at delivery resolution, not full CDN resolution.
-                size = {"avatar": (203, 203), "banner": (660, 123), "decoration": (231, 231)}[key]
+                size = {"avatar": (187, 187), "banner": (936, 200), "decoration": (213, 213)}[key]
                 for index in range(300):
                     if monotonic() > deadline:
                         raise ValueError("animation exceeded render time budget")
@@ -443,8 +542,6 @@ def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) 
         template = _profilecheck_image(visual, include_avatar=False)
         static_art = {key: _open(getattr(visual, key)) for key in ("avatar", "decoration")
                       if key not in sources}
-        banner_mask = Image.new("L", (880, 164))
-        ImageDraw.Draw(banner_mask).rounded_rectangle((0, 0, 879, 163), radius=16, fill=255)
         times = _animation_timeline(sources)
         durations = [end - start for start, end in zip(times, times[1:])]
         for elapsed in times[:-1]:
@@ -456,11 +553,11 @@ def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) 
             }
             rendered = template.copy()
             if "banner" in changes:
-                rendered.paste(ImageOps.fit(changes["banner"], (880, 164)), (60, 155), banner_mask)
-            _avatar_art(rendered, visual, (62, 355, 270, 270),
+                _profilecheck_banner(rendered, changes["banner"])
+            _profilecheck_avatar(rendered, visual,
                         changes.get("avatar", static_art.get("avatar")),
                         changes.get("decoration", static_art.get("decoration")))
-            frames.append(rendered.resize((750, 675)).convert("P", palette=Image.Palette.ADAPTIVE, colors=128))
+            frames.append(rendered.resize((PROFILECHECK_ANIMATION_WIDTH, round(rendered.height * PROFILECHECK_ANIMATION_WIDTH / rendered.width))).convert("P", palette=Image.Palette.ADAPTIVE, colors=128))
             rendered.close()
         output = BytesIO()
         frames[0].save(output, "GIF", save_all=True, append_images=frames[1:], duration=durations, loop=0, disposal=2)

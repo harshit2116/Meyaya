@@ -45,6 +45,9 @@ def profile_review_result(visual):
         "grade": grade, "criticism": criticism, "advice": advice,
         "palette": visual.palette, "banner_color": visual.accent_color,
         "has_banner_image": visual.has_banner, "has_avatar_decoration": visual.has_decoration,
+        "server_tag": visual.server_tag,
+        "api_visible_badges": visual.badge_names, "has_nameplate": visual.has_nameplate,
+        "visibility_note": "Activity badges, bio and profile effects are not available from the API.",
         "method": "Subjective local visual heuristics; missing comparison categories stay empty.",
     }
 

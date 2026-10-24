@@ -18,6 +18,7 @@ from weakref import WeakValueDictionary
 import aiohttp
 import discord
 from PIL import Image, ImageChops, ImageEnhance, ImageStat
+from bot.services.profile_badges import PROFILE_BADGES
 from bot.services.profile_scoring import finalize_profile_score, profilecheck_points
 
 MAX_ASSET_BYTES = 6 * 1024 * 1024
@@ -52,6 +53,10 @@ class ProfileVisual:
     detail_kind: str | None = None
     weakest_comparison: str | None = None
     suggested_color: str | None = None
+    server_tag: str = ""
+    badge_names: tuple[str, ...] = ()
+    nameplate: bytes | None = None
+    nameplate_palette: str = ""
 
 
 class ProfileAestheticService:
@@ -162,15 +167,20 @@ class ProfileAestheticService:
             str(asset) if asset is not None else ""
             for asset in (avatar_asset, banner_asset, decoration_asset)
         )
-        collectibles = getattr(fetched, "collectibles", None) or getattr(
-            member, "collectibles", None
-        )
+        collectibles = getattr(fetched, "collectibles", None) or getattr(member, "collectibles", None) or []
+        nameplate_item = next((item for item in collectibles
+            if getattr(getattr(item, "type", None), "value", getattr(item, "type", None)) == "nameplate"), None)
+        nameplate = nameplate_item is not None
+        nameplate_url = str(nameplate_item.static) if nameplate_item is not None and getattr(nameplate_item, "static", None) else ""
+        nameplate_palette = str(getattr(getattr(nameplate_item, "palette", None), "value", "") or "")
         public_flags = getattr(fetched, "public_flags", None) or member.public_flags
-        badge_count = len(public_flags.all()) if public_flags else 0
-        nameplate = any(getattr(getattr(item, "type", None), "value", getattr(item, "type", None)) == "nameplate"
-                        for item in (collectibles or []))
-        primary_guild = getattr(fetched, "primary_guild", None)
-        server_tag = bool(primary_guild and getattr(primary_guild, "tag", None))
+        # Account flags include technical flags which are not profile badges.
+        badge_names = tuple(label for key, label in PROFILE_BADGES.items() if getattr(public_flags, key, False))
+        badge_count = len(badge_names)
+        primary_guild = getattr(fetched, "primary_guild", None) or getattr(member, "primary_guild", None)
+        tag = getattr(primary_guild, "tag", "") or ""
+        server_tag = bool(tag and getattr(primary_guild, "identity_enabled", True) is not False)
+        tag = tag if server_tag else ""
         accent = getattr(fetched, "accent_color", None)
         cache_key = "|".join(
             (
@@ -179,7 +189,7 @@ class ProfileAestheticService:
                 *urls,
                 str(nameplate),
                 str(server_tag),
-                str(badge_count),
+                str(badge_names), nameplate_url, nameplate_palette, tag,
                 str(getattr(accent, "value", "")),
                 str(bool(member.guild_avatar)),
             )
@@ -189,9 +199,9 @@ class ProfileAestheticService:
             return cached[1]
 
         started = time.monotonic()
-        avatar, banner, decoration = await asyncio.gather(*(
+        avatar, banner, decoration, nameplate_data = await asyncio.gather(*(
             prefetched_assets[url] if prefetched_assets and url in prefetched_assets else self._download(url)
-            for url in urls
+            for url in (*urls, nameplate_url)
         ))
         downloaded = time.monotonic()
         visual = await image_work(
@@ -207,17 +217,19 @@ class ProfileAestheticService:
             fingerprint=blake2s(cache_key.encode("utf-8"), digest_size=8).hexdigest(),
         )
         visual = replace(visual, animated_banner=animated_banner,
-                         banner_available=banner_asset is not None)
+                         banner_available=banner_asset is not None,
+                         server_tag=tag, badge_names=badge_names, nameplate=nameplate_data,
+                         nameplate_palette=nameplate_palette)
         logger.info("profile_assets download_ms=%.0f analysis_and_queue_ms=%.0f",
                     (downloaded - started) * 1000, (time.monotonic() - downloaded) * 1000)
         # Do not preserve a transient failed asset download for half an hour.
-        if all(not url or data is not None for url, data in zip(urls, (avatar, banner, decoration))):
+        if all(not url or data is not None for url, data in zip((*urls, nameplate_url), (avatar, banner, decoration, nameplate_data))):
             self._store(cache_key, visual)
         return visual
 
     @staticmethod
     def _asset_size(visual: ProfileVisual) -> int:
-        return sum(len(data) for data in (visual.avatar, visual.banner, visual.decoration) if data)
+        return sum(len(data) for data in (visual.avatar, visual.banner, visual.decoration, visual.nameplate) if data)
 
     def _store(self, key: str, visual: ProfileVisual) -> None:
         now = time.monotonic()
