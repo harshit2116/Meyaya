@@ -153,6 +153,11 @@ def build_missing_comparison_message(visual):
 
 
 def build_improvement_summary(visual):
+    critique = getattr(visual, "critique", None)
+    if critique is not None:
+        if not critique.measured:
+            return "Not enough image data for specific advice."
+        return critique.findings[0].title if critique.findings else "No strong issue was measured."
     _, name, score = select_improvement_priority(visual)
     if score == 100:
         return "Every available category is 100/100."
@@ -162,6 +167,12 @@ def build_improvement_summary(visual):
 
 
 def get_rule_based_recommendation(visual):
+    critique = getattr(visual, "critique", None)
+    if critique is not None:
+        if critique.findings:
+            issue = critique.findings[0]
+            return "Best upgrade: " + issue.reason + " " + issue.action
+        return "Best upgrade: " + critique.fallback
     field, _, score = select_improvement_priority(visual)
     items = get_available_profile_items(visual)
     if score == 100:

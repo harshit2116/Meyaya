@@ -464,7 +464,13 @@ def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True,
     draw.rounded_rectangle((48,730,1452,922),radius=20,fill="#221923",outline="#e3a0c0",width=2)
     _profile_spark(draw,91,763,14,"#f39fbe")
     draw.text((123,747),"YOUR BIGGEST OPPORTUNITY",font=font(25),fill="#f395b6")
-    _,priority,_ = select_improvement_priority(visual)
+    critique = getattr(visual, "critique", None)
+    if critique is not None:
+        labels = {"readability": "Readability", "cohesion": "Cohesion",
+                  "color_harmony": "Color harmony", "detail_balance": "Detail balance"}
+        priority = labels[critique.findings[0].metric] if critique.findings else "Visual check"
+    else:
+        _,priority,_ = select_improvement_priority(visual)
     draw.rounded_rectangle((1180,746,1430,790),radius=14,fill="#38263d",outline="#a8759e",width=1)
     label(draw,(1196,756,220,28),priority.upper(),18,"#e8b6e7",minimum=14)
     draw.line((89,804,89,897),fill="#d08eac",width=2)
@@ -696,59 +702,11 @@ def aura_details(visual: ProfileVisual) -> tuple[str, str, str, str]:
 
 
 def aura_card(visual: ProfileVisual) -> bytes:
-    image = _background((900, 650), visual.palette[0], visual.palette[4])
-    draw = ImageDraw.Draw(image, "RGBA")
-    title, _symbol, energy, traits = aura_details(visual)
-    _panel(
-        draw,
-        (26, 26, 874, 624),
-        fill=(11, 8, 19, 238),
-        outline=(*_rgb(visual.palette[2]), 180),
-    )
-    seed = int(visual.asset_fingerprint, 16)
-    for index in range(42):
-        x = 45 + ((seed >> (index % 24)) + index * 83) % 810
-        y = 42 + ((seed >> ((index + 7) % 28)) + index * 47) % 550
-        radius = 1 + index % 2
-        draw.ellipse(
-            (x, y, x + radius, y + radius),
-            fill=(*_rgb(visual.palette[2]), 115),
-        )
-    draw.ellipse((51, 137, 399, 485), fill=(*_rgb(visual.palette[0]), 35))
-    draw.ellipse((67, 153, 383, 469), outline=visual.palette[2], width=3)
-    draw.arc((46, 132, 404, 490), 205, 338, fill=visual.palette[1], width=7)
-    draw.arc((46, 132, 404, 490), 18, 151, fill=visual.palette[4], width=7)
-    _avatar(image, visual, (91, 177, 268, 268))
-    draw = ImageDraw.Draw(image, "RGBA")
-    draw.text((51, 46), "MEYAYA AURA ARCHIVE", font=font(16), fill="#f2cde1")
-    label(draw, (51, 78, 550, 42), visual.name, 29, "white")
-    draw.ellipse(
-        (731, 50, 831, 150),
-        fill=(*_rgb(visual.palette[0]), 80),
-        outline=visual.palette[2],
-        width=2,
-    )
-    monogram = "".join(part[:1] for part in title.split())
-    draw.text((781, 98), monogram, font=font(30), fill="white", anchor="mm")
-    draw.text((430, 172), "AURA ARCHETYPE", font=font(14), fill="#d6b1c9")
-    label(draw, (430, 203, 390, 53), title, 38, "white")
-    draw.text((430, 280), "ESSENCE", font=font(14), fill="#cfc4d7")
-    label(draw, (430, 307, 375, 61), energy, 24, "#eac9da")
-    draw.text((430, 390), "SIGNATURE", font=font(14), fill="#cfc4d7")
-    label(draw, (430, 418, 380, 38), traits, 20, "white")
-    _panel(draw, (430, 482, 816, 547), fill=(42, 31, 51, 255))
-    label(
-        draw,
-        (451, 497, 340, 35),
-        f"{profile_affinity(visual)} affinity  •  {profile_class(visual)}",
-        18,
-        "white",
-    )
-    for index, color in enumerate(visual.palette):
-        x = 73 + index * 68
-        draw.rounded_rectangle((x, 531, x + 51, 578), radius=12, fill=color)
-    draw.text((73, 591), "PROFILE-BORN COLOR SIGNATURE", font=font(12), fill="#cfc4d7")
-    return _save(image)
+    from bot.services.aura_archive import render_archive
+
+    title, _, energy, traits = aura_details(visual)
+    return _save(render_archive(visual, title=title, energy=energy, traits=traits,
+        affinity=profile_affinity(visual), class_name=profile_class(visual)))
 
 
 def palette_card(visual: ProfileVisual) -> bytes:
@@ -858,56 +816,11 @@ def duostyle_feedback(
 
 
 def duostyle_card(left: ProfileVisual, right: ProfileVisual) -> bytes:
-    image = _background((1100, 650), left.palette[0], right.palette[0])
-    draw = ImageDraw.Draw(image, "RGBA")
-    _panel(draw, (26, 26, 1074, 624), fill=(8, 7, 15, 205))
-    draw.text((48, 44), "MEYAYA DUO STYLE", font=font(17), fill="#f5d5e7")
-    draw.line((48, 79, 1052, 79), fill=(255, 255, 255, 35), width=1)
+    from bot.services.duostyle_archive import render_duo
+
     compatibility = style_compatibility(left, right)
-    _avatar(image, left, (96, 125, 260, 260))
-    _avatar(image, right, (744, 125, 260, 260))
-    draw = ImageDraw.Draw(image, "RGBA")
-
-    # A fixed center panel prevents the score and verdict from floating between
-    # differently-sized avatars or display names.
-    _panel(
-        draw,
-        (421, 124, 679, 387),
-        fill=(22, 17, 31, 238),
-        outline=(*_rgb(left.palette[2]), 105),
-    )
-    draw.text((550, 154), "STYLE SYNC", font=font(14), fill="#d8cbdc", anchor="ma")
-    draw.text(
-        (550, 205),
-        f"{compatibility}%",
-        font=font(68),
-        fill="white",
-        anchor="ma",
-    )
-    verdict = duostyle_feedback(left, right, compatibility)
-    _centered_wrapped_text(draw, verdict, 550, 304, 218, 17, "#f5d5e7")
-    _centered_wrapped_text(draw, duostyle_reason(left, right), 550, 407, 236, 14, "#d8cbdc")
-
-    for visual, center_x in ((left, 226), (right, 874)):
-        _panel(draw, (center_x - 176, 416, center_x + 176, 480), fill=(23, 18, 31, 230))
-        _centered_text(draw, visual.name, center_x, 434, 310, 27, "white", minimum_size=17)
-        draw.text(
-            (center_x, 493),
-            "PROFILE PALETTE",
-            font=font(12),
-            fill="#cfc3d5",
-            anchor="ma",
-        )
-        x = center_x - 126
-        for index, color in enumerate(visual.palette[:4]):
-            draw.rounded_rectangle(
-                (x + index * 66, 519, x + 54 + index * 66, 563),
-                radius=11,
-                fill=color,
-                outline=(255, 255, 255, 28),
-            )
-    draw.line((421, 277, 679, 277), fill=(255, 255, 255, 28), width=1)
-    return _save(image)
+    return _save(render_duo(left, right, score=compatibility,
+        verdict=duostyle_feedback(left, right, compatibility), reason=duostyle_reason(left, right)))
 
 
 def duostyle_reason(left: ProfileVisual, right: ProfileVisual) -> str:
@@ -928,34 +841,7 @@ def callingcard_card(
     relationship: str,
     titles: tuple[str, ...],
 ) -> bytes:
-    image = _background((900, 700), visual.palette[3], visual.palette[0])
-    draw = ImageDraw.Draw(image, "RGBA")
-    _panel(draw, (40, 32, 860, 668), fill=(10, 8, 18, 175), outline=(*_rgb(visual.palette[2]), 130))
-    draw.text((68, 56), "MEYAYA CALLING CARD", font=font(17), fill=visual.palette[2])
-    _avatar(image, visual, (90, 150, 300, 300))
-    draw = ImageDraw.Draw(image, "RGBA")
-    label(draw, (430, 145, 370, 60), visual.name, 39, "white")
-    label(
-        draw,
-        (430, 218, 370, 44),
-        f'"{nickname}"' if nickname else "Nickname still loading...",
-        25,
-        visual.palette[2],
-    )
-    draw.text((430, 290), "MEYAYA'S BOND", font=font(14), fill="#cfc3d7")
-    label(draw, (430, 318, 370, 54), relationship.title(), 24, "white")
-    draw.text((430, 401), "EARNED TITLES", font=font(14), fill="#cfc3d7")
-    label(draw, (430, 429, 370, 94), "\n".join(titles), 21, "white")
-    draw.text((92, 505), "SIGNATURE COLORS", font=font(14), fill="#cfc3d7")
-    for index, color in enumerate(visual.palette):
-        draw.rounded_rectangle(
-            (92 + index * 128, 544, 200 + index * 128, 604), radius=14, fill=color
-        )
-    label(
-        draw,
-        (92, 623, 690, 25),
-        "A living card shaped by their Discord style and bond with Meyaya.",
-        17,
-        "#d9cfdf",
-    )
-    return _save(image)
+    from bot.services.callingcard_archive import render_callingcard
+
+    return _save(render_callingcard(visual, nickname=nickname,
+        relationship=relationship, titles=titles))

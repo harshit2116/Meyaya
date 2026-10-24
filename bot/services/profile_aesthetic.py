@@ -19,6 +19,7 @@ import aiohttp
 import discord
 from PIL import Image, ImageChops, ImageEnhance, ImageStat
 from bot.services.profile_badges import PROFILE_BADGES
+from bot.services.profile_critique import Critique, analyze_advice
 from bot.services.profile_scoring import finalize_profile_score, profilecheck_points
 
 MAX_ASSET_BYTES = 6 * 1024 * 1024
@@ -57,6 +58,7 @@ class ProfileVisual:
     badge_names: tuple[str, ...] = ()
     nameplate: bytes | None = None
     nameplate_palette: str = ""
+    critique: Critique | None = None
 
 
 class ProfileAestheticService:
@@ -444,7 +446,8 @@ class ProfileAestheticService:
 
 
 def profilecheck_analysis(visual: ProfileVisual) -> ProfileVisual:
-    return finalize_profile_score(calculate_category_scores(visual))
+    reviewed = finalize_profile_score(calculate_category_scores(visual))
+    return replace(reviewed, critique=analyze_advice(reviewed))
 
 
 def calculate_category_scores(visual: ProfileVisual) -> ProfileVisual:
