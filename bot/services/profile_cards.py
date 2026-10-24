@@ -425,6 +425,29 @@ def _profilecheck_avatar(image, visual, art, decoration):
         _profile_spark(draw,x+dx,y+dy,r,"#efa3c2")
 
 
+def _profilecheck_identity(draw, visual):
+    # Fit the nickname and server tag on the same line, inside the existing
+    # identity column. Long names yield space to the tag without entering scores.
+    tag = visual.server_tag
+    tag_width = min(108, round(draw.textlength(tag, font=font(18)))+24) if tag else 0
+    available = 318-tag_width-(14 if tag else 0)
+    size = 43
+    name = visual.name
+    while size > 26 and draw.textlength(name, font=font(size)) > available:
+        size -= 1
+    while len(name) > 1 and draw.textlength(name, font=font(size)) > available:
+        name = name[:-2] + "…"
+    draw.text((378, 490), name, font=font(size), fill="#fff0f8")
+    if tag:
+        x = round(378+draw.textlength(name, font=font(size))+14)
+        draw.rounded_rectangle((x, 495, x+tag_width, 528), radius=10,
+                               fill="#382b43", outline="#9d6f9e", width=1)
+        label(draw, (x+12, 502, tag_width-24, 22), tag, 18, "#e2b4e9", minimum=14)
+    if visual.username:
+        label(draw, (378, 553, 318, 30), "@"+visual.username.lstrip("@"),
+              21, "#a994aa", minimum=16)
+
+
 def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True,
                        include_scores: bool = True) -> Image.Image:
     image = _profilecheck_frame().copy()
@@ -451,11 +474,7 @@ def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True,
         image.alpha_composite(ImageOps.fit(plate,(324,66)),(365,482))
         image.alpha_composite(Image.new("RGBA",(324,66),(12,9,19,100)),(365,482))
     draw = ImageDraw.Draw(image)
-    label(draw,(378,490,318,62),visual.name,43,"#fff0f8",minimum=26)
-    if visual.server_tag:
-        width = min(180,round(draw.textlength(visual.server_tag,font=font(23)))+38)
-        draw.rounded_rectangle((378,562,378+width,603),radius=12,fill="#382b43",outline="#9d6f9e",width=1)
-        label(draw,(397,569,width-28,28),visual.server_tag,23,"#e2b4e9",minimum=18)
+    _profilecheck_identity(draw, visual)
     for index,name in enumerate(visual.badge_names[:11]):
         icon = badge_icon(name)
         if icon is not None:
@@ -471,8 +490,11 @@ def _profilecheck_image(visual: ProfileVisual, *, include_avatar: bool = True,
         priority = labels[critique.findings[0].metric] if critique.findings else "Visual check"
     else:
         _,priority,_ = select_improvement_priority(visual)
-    draw.rounded_rectangle((1180,746,1430,790),radius=14,fill="#38263d",outline="#a8759e",width=1)
-    label(draw,(1196,756,220,28),priority.upper(),18,"#e8b6e7",minimum=14)
+    pill_text = priority.upper()
+    pill_width = round(draw.textlength(pill_text, font=font(18)))+32
+    pill_left = 1430-pill_width
+    draw.rounded_rectangle((pill_left,746,1430,790),radius=14,fill="#38263d",outline="#a8759e",width=1)
+    label(draw,(pill_left+16,756,pill_width-32,28),pill_text,18,"#e8b6e7",minimum=14)
     draw.line((89,804,89,897),fill="#d08eac",width=2)
     label(draw,(123,800,1273,37),verdict,27,"#fff0f8",minimum=23)
     label(draw,(123,844,1273,62),tip.removeprefix("Best upgrade: "),24,"#d9bfd4",minimum=20)
@@ -488,6 +510,18 @@ PROFILE_ANIMATION_DECODE_BYTES = 64 * 1024 * 1024
 PROFILE_MEDIA_BYTES = 8 * 1024 * 1024
 
 
+def _animation_frame_delay(source):
+    # Browsers interpret GIF delays <=10 ms as 100 ms. Clamping them to
+    # 20 ms instead makes a re-encoded GIF play five times faster in Discord.
+    # https://issues.chromium.org/issues/41352431
+    delay = float(source.info.get("duration", 100) or 100)
+    if not math.isfinite(delay) or delay < 0:
+        delay = 100
+    if source.format == "GIF" and delay <= 10:
+        return 100
+    return max(20, delay)
+
+
 def _animation_timeline(sources):
     """Loop assets by elapsed time, preserving exact frame boundaries when bounded."""
     duration = min(PROFILE_ANIMATION_MS, lcm(*(ends[-1] for _, ends in sources.values())))
@@ -501,7 +535,16 @@ def _animation_timeline(sources):
         step = max(20, ((duration + PROFILE_ANIMATION_FRAMES * 10 - 1)
                         // (PROFILE_ANIMATION_FRAMES * 10)) * 10)
         times = [*range(0, duration, step), duration]
-    return times
+    # Different assets can introduce boundaries only 10 ms apart. Such GIF
+    # frames are slowed to 100 ms by browsers; merge samples, keeping elapsed
+    # playback time intact instead of handing those tiny delays to the client.
+    playable = [0]
+    for boundary in times[1:-1]:
+        if boundary-playable[-1] >= 20:
+            playable.append(boundary)
+    if len(playable) > 1 and duration-playable[-1] < 20:
+        playable.pop()
+    return [*playable, duration]
 
 
 def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) -> tuple[bytes, str]:
@@ -521,6 +564,7 @@ def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) 
                 if source.width * source.height > 4_000_000:
                     raise ValueError("animated asset exceeds pixel budget")
                 decoded, ends = [], []
+                elapsed_ms = 0.0
                 sources[key] = (decoded, ends)
                 # Store at delivery resolution, not full CDN resolution.
                 size = {"avatar": (187, 187), "banner": (936, 200), "decoration": (213, 213)}[key]
@@ -537,8 +581,10 @@ def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) 
                     decoded_bytes += frame.width * frame.height * 4
                     if decoded_bytes > PROFILE_ANIMATION_DECODE_BYTES:
                         raise ValueError("animation exceeded decoded memory budget")
-                    delay = max(20, round(float(source.info.get("duration", 100) or 100) / 10) * 10)
-                    ends.append(min(PROFILE_ANIMATION_MS, (ends[-1] if ends else 0) + delay))
+                    elapsed_ms += _animation_frame_delay(source)
+                    # GIF uses centiseconds. Round cumulative timestamps, not
+                    # every frame: 33 ms frames must not all become 30 ms.
+                    ends.append(min(PROFILE_ANIMATION_MS, round(elapsed_ms / 10) * 10))
                     if ends[-1] >= PROFILE_ANIMATION_MS:
                         break
         if not sources:

@@ -11,7 +11,9 @@ from bot.services.card_renderer import font
 from bot.services.aura_archive import _asset, _serif, _spark
 
 SIZE = (1600, 900)
-PORTRAIT_SIZE = 484
+PORTRAIT_SIZE = 430
+PORTRAIT_Y = 100
+LEFT_X, RIGHT_X = 215, 955
 
 
 def _rgb(color):
@@ -65,28 +67,21 @@ def palette_tags(palette):
 
 
 @lru_cache(maxsize=1)
-def _ornament_source():
-    """Decode neutral production artwork once, retaining its genuine transparency."""
-    path = Path(__file__).resolve().parents[1] / "assets/profile/duostyle/floral-overlay.png"
+def _neutral_art():
+    path = Path(__file__).resolve().parents[1] / "assets/profile/duostyle/convergence-overlay.png"
     with Image.open(path) as source:
-        art = source.convert("RGBA").resize(SIZE, Image.Resampling.LANCZOS)
-    # Align the generated frame window with the live portrait. Only the left
-    # half is needed: the other member gets an independently tinted mirror.
+        return source.convert("RGBA").resize(SIZE, Image.Resampling.LANCZOS)
+
+
+@lru_cache(maxsize=1)
+def _ornament_source():
+    """One neutral half-frame, independently tinted for each member."""
     layer = Image.new("RGBA", (800, 900))
-    layer.alpha_composite(art.crop((0, 0, 800, 900)), (-62, -17))
-    alpha = layer.getchannel("A")
-    # Keep typography clear and suppress the central arch above the score.
-    vertical_fade = Image.new("L", (1, 900))
-    values = []
-    for y in range(900):
-        opacity = min(1.0, max(0, (y - 77) / 38), max(0, (687 - y) / 45))
-        opacity *= 0.62 + 0.38 * min(1, max(0, (y - 360) / 160))
-        values.append(round(255 * opacity))
-    vertical_fade.putdata(values)
-    horizontal_fade = Image.new("L", (800, 1))
-    horizontal_fade.putdata([round(255 * min(1, max(0, (650 - x) / 55))) for x in range(800)])
-    fade = ImageChops.multiply(vertical_fade.resize(layer.size), horizontal_fade.resize(layer.size))
-    alpha = ImageChops.multiply(alpha, fade)
+    layer.alpha_composite(_neutral_art().crop((0, 0, 800, 900)), (-19, -8))
+    # The middle jewel is composed once, independently of the two side frames.
+    fade = Image.new("L", (800, 1))
+    fade.putdata([round(255 * min(1, max(0, (792 - x) / 82))) for x in range(800)])
+    alpha = ImageChops.multiply(layer.getchannel("A"), fade.resize(layer.size))
     return ImageOps.grayscale(layer), alpha
 
 
@@ -99,7 +94,10 @@ def _side_ornaments(accent, secondary):
     layer = ImageOps.colorize(luminance, shadow, highlight, mid=accent, midpoint=164).convert(
         "RGBA"
     )
-    layer.putalpha(alpha)
+    # Keep glass and metal luminous without washing out the member portraits.
+    opacity = Image.new("L", (800, 1))
+    opacity.putdata([160 if x < 190 else 208 for x in range(800)])
+    layer.putalpha(ImageChops.multiply(alpha, opacity.resize(layer.size)))
     return layer
 
 
@@ -112,10 +110,7 @@ def _portrait_mask():
 
 @lru_cache(maxsize=2)
 def _shard_geometry(mirrored):
-    shapes = (
-        ((43, 187), (125, 167), (134, 349), (43, 426)),
-        ((44, 451), (122, 394), (135, 591), (55, 650)),
-    )
+    shapes = (((22, 42), (162, 108), (181, 590), (10, 662)),)
     result = []
     for points in shapes:
         points = tuple((1600 - x, y) for x, y in points) if mirrored else points
@@ -132,7 +127,10 @@ def _shard_geometry(mirrored):
 def _reflections(image, art, accent, mirrored):
     reflected = ImageOps.mirror(art)
     for x, y, mask, points in _shard_geometry(mirrored):
-        fragment = ImageOps.fit(reflected, mask.size, method=Image.Resampling.LANCZOS)
+        fragment = ImageOps.fit(
+            reflected, (mask.width * 2, mask.height), method=Image.Resampling.LANCZOS
+        )
+        fragment = fragment.resize(mask.size, Image.Resampling.LANCZOS)
         image.paste(fragment, (x, y), mask)
         ImageDraw.Draw(image).line([*points, points[0]], fill=accent, width=1)
 
@@ -140,18 +138,26 @@ def _reflections(image, art, accent, mirrored):
 def _portrait(image, visual, x, accent, mirrored):
     art = _asset(visual.avatar)
     if art is None:
-        art = Image.new("RGBA", (484, 484), visual.palette[3])
+        art = Image.new("RGBA", (PORTRAIT_SIZE, PORTRAIT_SIZE), visual.palette[3])
         ImageDraw.Draw(art).text(
-            (242, 242), visual.name[:1] or "?", font=_serif(110), anchor="mm", fill="#fff4f7"
+            (PORTRAIT_SIZE / 2, PORTRAIT_SIZE / 2),
+            visual.name[:1] or "?",
+            font=_serif(110),
+            anchor="mm",
+            fill="#fff4f7",
         )
-    art = ImageOps.fit(art, (484, 484), method=Image.Resampling.LANCZOS)
+    art = ImageOps.fit(art, (PORTRAIT_SIZE, PORTRAIT_SIZE), method=Image.Resampling.LANCZOS)
     _reflections(image, art, accent, mirrored)
-    image.paste(art, (x, 126), _portrait_mask())
+    image.paste(art, (x, PORTRAIT_Y), _portrait_mask())
     decoration = _asset(visual.decoration)
     if decoration is not None:
-        decoration = ImageOps.contain(decoration, (522, 522), Image.Resampling.LANCZOS)
+        decoration = ImageOps.contain(decoration, (468, 468), Image.Resampling.LANCZOS)
         image.alpha_composite(
-            decoration, (x + (484 - decoration.width) // 2, 126 + (484 - decoration.height) // 2)
+            decoration,
+            (
+                x + (PORTRAIT_SIZE - decoration.width) // 2,
+                PORTRAIT_Y + (PORTRAIT_SIZE - decoration.height) // 2,
+            ),
         )
 
 
@@ -184,36 +190,40 @@ def _centred(draw, text, cx, y, width, size, color, *, serif=False, lines=1):
 
 def _identity(image, visual, x, accent):
     draw = ImageDraw.Draw(image)
-    center = x + 242
+    center = x + PORTRAIT_SIZE // 2
     draw.rounded_rectangle(
-        (center - 174, 531, center + 174, 611), radius=30, fill="#16121b", outline=accent, width=1
+        (center - 151, 450, center + 151, 511), radius=24, fill="#181019", outline=accent, width=2
     )
-    _spark(draw, center - 175, 571, 12, accent)
-    _spark(draw, center + 175, 571, 12, accent)
-    _centred(
-        draw, visual.name, center, 543 if visual.server_tag else 553, 306, 34, "#fff1f7", serif=True
-    )
+    _spark(draw, center - 151, 480, 10, accent)
+    _spark(draw, center + 151, 480, 10, accent)
+    _centred(draw, visual.name, center, 457, 276, 35, "#fff1f7", serif=True)
     if visual.server_tag:
-        _centred(draw, visual.server_tag, center, 586, 300, 13, accent)
+        width = min(116, round(draw.textlength(visual.server_tag, font=font(13))) + 30)
+        draw.rounded_rectangle(
+            (center - width / 2, 503, center + width / 2, 523),
+            radius=6,
+            fill="#50354e",
+            outline=accent,
+        )
+        _centred(draw, visual.server_tag, center, 506, width - 18, 13, "#f6d9ef")
     draw.rounded_rectangle(
-        (x - 12, 625, x + 496, 789),
-        radius=25,
-        fill="#1b1520",
-        outline=_hex(_mix(_rgb(accent), (23, 18, 29), 0.55)),
-        width=1,
+        (x - 5, 531, x + PORTRAIT_SIZE + 5, 676), radius=24, fill="#16121c", outline=accent, width=1
+    )
+    draw.rounded_rectangle(
+        (x + 2, 537, x + PORTRAIT_SIZE - 2, 670),
+        radius=20,
+        outline=_hex(_mix(_rgb(accent), (23, 18, 29), 0.6)),
     )
     draw.text(
-        (center, 643), "P R O F I L E  P A L E T T E", font=font(13), anchor="ma", fill="#d9c8d9"
+        (center, 548), "P R O F I L E  P A L E T T E", font=font(13), anchor="ma", fill="#e4cadd"
     )
     for i, color in enumerate(visual.palette[:4]):
-        cx = center - 126 + i * 84
-        draw.ellipse((cx - 24, 672, cx + 24, 720), fill=color, outline=accent, width=1)
+        cx = center - 145 + i * 97
+        draw.ellipse((cx - 26, 576, cx + 26, 628), fill=color, outline=accent)
     for i, tag in enumerate(palette_tags(visual.palette)):
-        bx = x + 5 + i * 121
-        draw.rounded_rectangle(
-            (bx, 742, bx + 111, 772), radius=15, fill="#261c2c", outline=accent, width=1
-        )
-        _centred(draw, "# " + tag, bx + 55, 748, 100, 14, "#efdfed")
+        bx = x + 11 + i * 103
+        draw.rounded_rectangle((bx, 640, bx + 98, 665), radius=9, fill="#251c2a", outline=accent)
+        _centred(draw, "# " + tag, bx + 49, 645, 89, 13, "#f0dfee")
 
 
 @lru_cache(maxsize=1)
@@ -228,29 +238,53 @@ def _score_font():
 
 
 @lru_cache(maxsize=8)
-def _heart_layer(left_accent, right_accent):
-    heart = Image.new("RGBA", (500, 300))
-    draw = ImageDraw.Draw(heart)
-    for offset, angle, color in ((-38, -0.38, left_accent), (38, 0.38, right_accent)):
-        points = []
-        for i in range(301):
-            t = i * math.tau / 300
-            px = 16 * math.sin(t) ** 3 * 4.1
-            py = (
-                -(13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t))
-                * 4.1
-            )
-            points.append(
-                (
-                    250 + offset + px * math.cos(angle) - py * math.sin(angle),
-                    127 + px * math.sin(angle) + py * math.cos(angle),
-                )
-            )
-        draw.line(points, fill=color, width=5)
-    glow = heart.filter(ImageFilter.GaussianBlur(13))
-    glow = ImageChops.add(glow, glow)
-    glow.alpha_composite(heart)
-    return glow.resize((250, 150), Image.Resampling.LANCZOS)
+def _sync_emblem(left_accent, right_accent):
+    neutral = _neutral_art().crop((700, 0, 900, 261))
+    accent = _hex(_mix(_rgb(left_accent), _rgb(right_accent), 0.5))
+    emblem = ImageOps.colorize(
+        ImageOps.grayscale(neutral), "#271d30", "#fff0f7", mid=accent, midpoint=145
+    ).convert("RGBA")
+    emblem.putalpha(neutral.getchannel("A"))
+    return emblem
+
+
+@lru_cache(maxsize=4)
+def _convergence_band(left_palette, right_palette):
+    stops = [
+        _rgb(left_palette[0]),
+        _rgb(left_palette[2]),
+        _mix(_rgb(left_palette[1]), _rgb(right_palette[1]), 0.5),
+        _rgb(right_palette[2]),
+        _rgb(right_palette[3]),
+    ]
+    band = Image.new("RGB", (1340, 1))
+    colors = []
+    for x in range(1340):
+        t = x / 1339 * 4
+        index = min(3, int(t))
+        colors.append(_mix(stops[index], stops[index + 1], t - index))
+    band.putdata(colors)
+    return band.resize((1340, 44)).convert("RGBA")
+
+
+def _convergence(image, left, right, left_accent, right_accent):
+    draw = ImageDraw.Draw(image)
+    common = _hex(_mix(_rgb(left_accent), _rgb(right_accent), 0.5))
+    draw.rounded_rectangle((74, 692, 1526, 813), radius=42, fill="#130f19", outline=common, width=2)
+    band = _convergence_band(tuple(left.palette), tuple(right.palette))
+    mask = Image.new("L", band.size)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, 1339, 43), radius=22, fill=255)
+    image.paste(band, (130, 739), mask)
+    # Fine crossing light threads retain both profile palettes in the blend.
+    threads = Image.new("RGBA", SIZE)
+    td = ImageDraw.Draw(threads)
+    for phase, color in ((0, left_accent), (math.pi, right_accent), (1.2, "#fff0f7")):
+        points = [
+            (130 + x, 761 + math.sin(x / 1340 * math.tau * 1.7 + phase) * 19)
+            for x in range(0, 1341, 5)
+        ]
+        td.line(points, fill=(*_rgb(color), 155), width=1)
+    image.alpha_composite(threads)
 
 
 def render_duo(left, right, *, score, verdict, reason):
@@ -258,63 +292,69 @@ def render_duo(left, right, *, score, verdict, reason):
     right_accent, right_secondary = theme(right.palette)
     common = _hex(_mix(_rgb(left_accent), _rgb(right_accent), 0.5))
     image = Image.new("RGBA", SIZE, "#100e17")
-    # Small glow buffers avoid full-canvas blur work for every profile pair.
     glow = Image.new("RGBA", (400, 225))
     gd = ImageDraw.Draw(glow)
-    gd.ellipse((-70, 15, 175, 245), fill=(*_rgb(left_accent), 42))
-    gd.ellipse((225, 15, 470, 245), fill=(*_rgb(right_accent), 42))
+    gd.ellipse((-70, 15, 175, 245), fill=(*_rgb(left_accent), 30))
+    gd.ellipse((225, 15, 470, 245), fill=(*_rgb(right_accent), 30))
     image.alpha_composite(
         glow.filter(ImageFilter.GaussianBlur(24)).resize(SIZE, Image.Resampling.BILINEAR)
     )
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((20, 18, 1580, 880), radius=28, outline="#54404f", width=1)
-    draw.line((53, 826, 1547, 826), fill="#6b4d62", width=1)
-    draw.text((81, 35), "DUO", font=_serif(39), fill=left_accent)
-    draw.text((195, 35), "STYLE", font=_serif(39), fill="#f9eff7")
-    draw.text((83, 86), "Different palettes, same story.", font=font(15), fill="#bdacbf")
-    draw.line((393, 62, 1450, 62), fill="#604257", width=1)
-    _spark(draw, 800, 62, 13, common)
-    draw.text((1510, 44), "M E Y A Y A", font=font(14), anchor="ra", fill="#d5bed4")
-    draw.text((1510, 67), "STYLE ANALYSIS", font=font(11), anchor="ra", fill="#b49bb4")
-    _portrait(image, left, 94, left_accent, False)
-    _portrait(image, right, 1022, right_accent, True)
+    _portrait(image, left, LEFT_X, left_accent, False)
+    _portrait(image, right, RIGHT_X, right_accent, True)
+    _convergence(image, left, right, left_accent, right_accent)
     image.alpha_composite(_side_ornaments(left_accent, left_secondary))
     image.alpha_composite(ImageOps.mirror(_side_ornaments(right_accent, right_secondary)), (800, 0))
-    _identity(image, left, 94, left_accent)
-    _identity(image, right, 1022, right_accent)
+    _identity(image, left, LEFT_X, left_accent)
+    _identity(image, right, RIGHT_X, right_accent)
+    image.alpha_composite(_sync_emblem(left_accent, right_accent), (700, 0))
     draw = ImageDraw.Draw(image)
-    image.alpha_composite(_heart_layer(left_accent, right_accent), (675, 139))
-    draw = ImageDraw.Draw(image)
-    draw.text((800, 286), "S T Y L E  S Y N C", font=font(18), anchor="ma", fill="#dec6dc")
-    draw.text((800, 320), f"{score}%", font=_score_font(), anchor="ma", fill="#fff0f7")
-    draw.rounded_rectangle((650, 465, 950, 478), radius=6, fill="#4c4055")
+    _spark(draw, 256, 46, 15, left_accent)
+    draw.text((296, 22), "DUO", font=_serif(38), fill=left_accent)
+    draw.text((399, 22), "STYLE", font=_serif(38), fill="#fff0f7")
+    draw.text(
+        (298, 67),
+        "D I F F E R E N T  P A L E T T E S ,  S A M E  S T O R Y .",
+        font=font(10),
+        fill="#d4b7cd",
+    )
+    draw.text((1361, 31), "M E Y A Y A", font=font(13), anchor="ra", fill="#e2bfd8")
+    _spark(draw, 1374, 39, 4, common)
+    draw.text((1361, 53), "STYLE ANALYSIS", font=font(10), anchor="ra", fill="#bda7c1")
+    draw.text((800, 277), "S T Y L E  S Y N C", font=_serif(17), anchor="ma", fill="#f1d7e9")
+    draw.text((800, 299), f"{score}%", font=_score_font(), anchor="ma", fill="#fff0f7")
+    draw.rounded_rectangle((665, 428, 935, 442), radius=7, fill="#503c58")
     if score > 0:
         draw.rounded_rectangle(
-            (650, 465, 650 + max(13, 300 * score / 100), 478), radius=6, fill=common
+            (665, 428, 665 + max(14, 270 * score / 100), 442), radius=7, fill=common
         )
-    _spark(draw, 650 + 300 * score / 100, 471, 8, "#fff0f6")
-    draw.rounded_rectangle(
-        (646, 516, 954, 602), radius=20, fill="#1b1520", outline="#74566d", width=1
-    )
-    _centred(draw, verdict, 800, 535, 270, 21, "#f1e2ef", lines=2)
-    draw.line((684, 633, 916, 633), fill="#7b566e", width=1)
-    _spark(draw, 800, 633, 10, common)
-    _centred(draw, reason, 800, 661, 279, 19, "#d6c5d7", lines=3)
-    for i in range(5):
-        cx = 752 + i * 24
-        draw.ellipse(
-            (cx - 4, 771, cx + 4, 779),
-            outline=common,
-            fill=common if i == 2 else "#201822",
-            width=1,
-        )
-    draw.text((51, 852), "M E Y A Y A  /  D U O  A N A L Y S I S", font=font(12), fill="#ad92aa")
+    _spark(draw, 665 + 270 * score / 100, 435, 9, "#fff1f7")
+    draw.rounded_rectangle((674, 466, 926, 532), radius=18, fill="#17121d", outline="#69516d")
+    _centred(draw, verdict, 800, 482, 230, 19, "#f3e4ef", lines=2)
+    draw.line((697, 560, 903, 560), fill="#956780")
+    _spark(draw, 800, 560, 9, common)
+    _centred(draw, reason, 800, 590, 282, 19, "#dfcfdf", lines=3)
+    # Paint labels last so neither palette-specific ornament can obscure them.
+    draw.rounded_rectangle((608, 698, 992, 731), radius=10, fill="#15101b")
     draw.text(
-        (1547, 852),
+        (800, 708), "C O L O R  C O N V E R G E N C E", font=font(13), anchor="ma", fill="#edbdd8"
+    )
+    _centred(draw, left.name.upper(), 240, 708, 240, 12, left_accent)
+    _centred(draw, right.name.upper(), 1360, 708, 240, 12, right_accent)
+    _spark(draw, 800, 760, 15, "#fff1f7")
+    draw.line((270, 867, 1328, 867), fill="#6d4b66")
+    draw.rounded_rectangle((652, 849, 948, 884), radius=8, fill="#100e17")
+    draw.text(
+        (800, 863),
+        "M E Y A Y A  /  D U O  A N A L Y S I S",
+        font=font(10),
+        anchor="ma",
+        fill="#c3a3ba",
+    )
+    draw.text(
+        (1547, 863),
         "T W O  S T Y L E S ,  O N E  V I B E .",
-        font=font(12),
+        font=font(10),
         anchor="ra",
         fill="#ad92aa",
     )
-    _spark(draw, 800, 851, 8, common)
     return image

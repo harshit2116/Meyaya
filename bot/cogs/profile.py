@@ -7,40 +7,55 @@ from bot.repositories.meyaya_state import MeyayaStateRepository
 from bot.services.meyaya_system import MeyayaSystemService
 
 import asyncio
-from bot.utils.image_work import image_work
 from io import BytesIO
 
 import discord
-from bot.utils.components_v2 import MeyayaView
 from discord import app_commands
 from discord.ext import commands
 
 from bot.app import MeyayaBot
-from bot.services.profile_cards import profilecheck_card
+from bot.services.profile_header import ProfileHeaderRenderer
+from bot.services.profilecheck_render import ProfileCheckRenderer
+from bot.utils.profile_v2 import sections
 from bot.services.profiles import ProfileService
 from bot.utils.embeds import build_profile_embed
 
 
-class ProfileReviewView(MeyayaView):
-    """Open the target member's full visual profile review on demand."""
+class ProfileReviewView(discord.ui.LayoutView):
+    """Hybrid profile: one cached illustration, fresh native data, lazy review."""
 
-    def __init__(self, bot: MeyayaBot, target: discord.Member) -> None:
+    def __init__(self, bot, target, summary, visual, review_renderer):
         super().__init__(timeout=180)
         self.bot = bot
         self.target = target
+        self.review_renderer = review_renderer
+        # Retain only compact display data, not downloaded member image bytes.
+        self.details = build_profile_embed(target, summary, visual)
+        for section in sections(target, summary, visual):
+            self.add_item(section)
+        review = discord.ui.Button(
+            label="Visual review", emoji="✨", style=discord.ButtonStyle.primary
+        )
+        review.callback = self.visual_review
+        details = discord.ui.Button(
+            label="More details", emoji="📋", style=discord.ButtonStyle.secondary
+        )
+        details.callback = self.more_details
+        self.add_item(discord.ui.ActionRow(review, details))
 
-    @discord.ui.button(label="Visual review", emoji="✨", style=discord.ButtonStyle.secondary)
-    async def visual_review(
-        self,
-        interaction: discord.Interaction,
-        _button: discord.ui.Button,
-    ) -> None:
+    async def visual_review(self, interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)
         visual = await self.bot.build_profile_aesthetic_service().inspect(self.target)
-        rendered = await image_work(profilecheck_card, visual)
+        _, rendered, extension = await self.review_renderer.render(visual)
         await interaction.followup.send(
-            file=discord.File(BytesIO(rendered), filename="meyaya-profile-check.png"),
+            file=discord.File(BytesIO(rendered), filename=f"meyaya-profile-check.{extension}"),
             ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    async def more_details(self, interaction):
+        await interaction.response.send_message(
+            embed=self.details, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
 
 
@@ -49,6 +64,8 @@ class ProfileCog(commands.Cog):
 
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
+        self._header_renderer = ProfileHeaderRenderer()
+        self._review_renderer = ProfileCheckRenderer()
 
     @commands.hybrid_command(
         name="nickname", description="View, refresh, keep, or turn off your Meyaya nickname."
@@ -146,9 +163,10 @@ class ProfileCog(commands.Cog):
             visual_task.cancel()
             await asyncio.gather(visual_task, return_exceptions=True)
             raise
+        header = await self._header_renderer.render(visual, summary.titles)
         await ctx.send(
-            embed=build_profile_embed(target, summary, visual),
-            view=ProfileReviewView(self.bot, target),
+            file=discord.File(BytesIO(header), filename="meyaya-profile.png"),
+            view=ProfileReviewView(self.bot, target, summary, visual, self._review_renderer),
             allowed_mentions=discord.AllowedMentions.none(),
         )
 

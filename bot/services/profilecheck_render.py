@@ -44,7 +44,7 @@ class ProfileCheckRenderer:
         # Fingerprint includes name, asset URLs, accent and scoring metadata.
         # Content hashes distinguish a failed download from a later recovery.
         max_bytes = min(max_bytes, PROFILE_MEDIA_BYTES)
-        key = (visual.asset_fingerprint, hash(visual.avatar), hash(visual.banner), hash(visual.decoration), max_bytes, visual.server_tag, visual.badge_names, hash(visual.nameplate))
+        key = (visual.asset_fingerprint, hash(visual.avatar), hash(visual.banner), hash(visual.decoration), max_bytes, visual.server_tag, visual.badge_names, hash(visual.nameplate), visual.username)
         cached = self._cached(key)
         if cached is not None:
             return cached

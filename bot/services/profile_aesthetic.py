@@ -59,6 +59,7 @@ class ProfileVisual:
     nameplate: bytes | None = None
     nameplate_palette: str = ""
     critique: Critique | None = None
+    username: str = ""
 
 
 class ProfileAestheticService:
@@ -188,6 +189,7 @@ class ProfileAestheticService:
             (
                 str(member.id),
                 member.display_name,
+                getattr(member, "name", ""),
                 *urls,
                 str(nameplate),
                 str(server_tag),
@@ -354,6 +356,7 @@ class ProfileAestheticService:
         return ProfileVisual(
             user_id=member.id,
             name=member.display_name,
+            username=getattr(member, "name", ""),
             avatar=avatar,
             banner=banner,
             decoration=decoration,
