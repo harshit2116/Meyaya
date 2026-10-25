@@ -12,9 +12,9 @@ from bot.services.fantasy_guardian import COMMON_SPECIES
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets" / "celestial"
 SIZES = {
-    "tarot": (1080, 900),
-    "fortune": (1000, 900),
-    "fate": (1000, 780),
+    "tarot": (1536, 1024),
+    "fortune": (1400, 1120),
+    "fate": (1421, 1107),
     "summon": (1000, 740),
     "guardian": (1000, 620),
 }
@@ -294,6 +294,15 @@ def guardian(image, d, r):
 
 
 def render_card(result, name, avatar=b""):
+    if result.kind == "fate":
+        from bot.services.fate_card import render_fate
+        return render_fate(result, name, avatar)
+    if result.kind == "tarot":
+        from bot.services.tarot_card import render_tarot
+        return render_tarot(result, name, avatar)
+    if result.kind == "fortune":
+        from bot.services.fortune_card import render_fortune
+        return render_fortune(result, name, avatar)
     colors = {
         "tarot": ("#221a30", "#dbbd7a"),
         "fortune": ("#14121f", "#e8c893"),

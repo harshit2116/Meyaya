@@ -37,7 +37,7 @@ class CelestialCog(commands.Cog):
             method="Deterministic daily fantasy draw for entertainment; not a factual prediction.",
         )
         await ctx.send(
-            None if kind in {"fortune", "fate", "guardian"} else "\n".join(lines),
+            None if kind in {"fortune", "tarot", "fate", "guardian"} else "\n".join(lines),
             file=discord.File(BytesIO(png), filename=f"{kind}.png"),
             allowed_mentions=discord.AllowedMentions.none(),
         )
@@ -51,7 +51,8 @@ class CelestialCog(commands.Cog):
         async with self.render_slots:
             png = self.cache.get(key)
             if png is None:
-                asset = member.display_avatar.with_size(128).with_format("png")
+                size = 512 if getattr(result, "kind", None) == "fortune" else 128
+                asset = member.display_avatar.with_size(size).with_format("png")
                 avatar_key = str(asset)
                 cached = self.avatar_cache.get(avatar_key)
                 if cached and monotonic() - cached[0] < 600:

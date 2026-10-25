@@ -43,7 +43,8 @@ def profile_review_result(visual):
         },
         "internal_weights": {name: weight for _, name, weight, _ in profilecheck_points(visual)},
         "grade": grade, "criticism": criticism, "advice": advice,
-        "palette": visual.palette, "banner_color": visual.accent_color,
+        "palette": visual.palette, "palette_labels": visual.palette_labels,
+        "banner_color": visual.banner_swatch,
         "has_banner_image": visual.has_banner, "has_avatar_decoration": visual.has_decoration,
         "server_tag": visual.server_tag,
         "api_visible_badges": visual.badge_names, "has_nameplate": visual.has_nameplate,
@@ -140,6 +141,7 @@ class ProfileStudioCog(commands.Cog):
             "target_id": target.id, "name": visual.name, "archetype": title,
             "essence": energy, "signature": traits, "affinity": profile_affinity(visual),
             "class": profile_class(visual), "palette": visual.palette,
+            "palette_labels": visual.palette_labels,
             "method": "Playful fantasy language derived from the visible profile palette.",
         })
 
@@ -176,6 +178,7 @@ class ProfileStudioCog(commands.Cog):
             "verdict": duostyle_feedback(left, right, compatibility),
             "reason": duostyle_reason(left, right),
             "first_palette": left.palette, "second_palette": right.palette,
+            "first_palette_labels": left.palette_labels, "second_palette_labels": right.palette_labels,
             "method": "Local comparison of profile palettes and styling; not a relationship assessment.",
         })
 
@@ -207,7 +210,7 @@ class ProfileStudioCog(commands.Cog):
         await self._send_card(ctx, rendered, "meyaya-calling-card.png", result={
             "target_id": target.id, "name": visual.name, "nickname": summary.meyaya.nickname,
             "bond": summary.meyaya.relationship, "titles": summary.titles,
-            "palette": visual.palette,
+            "palette": visual.palette, "palette_labels": visual.palette_labels,
         })
 
     @staticmethod

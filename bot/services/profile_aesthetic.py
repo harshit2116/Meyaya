@@ -61,6 +61,16 @@ class ProfileVisual:
     critique: Critique | None = None
     username: str = ""
 
+    @property
+    def banner_swatch(self) -> str | None:
+        """The solid banner fallback is metadata, not an avatar palette colour."""
+        return self.accent_color if not (self.banner or self.banner_available) else None
+
+    @property
+    def palette_labels(self) -> tuple[str, ...]:
+        return tuple("Banner" if self.banner_swatch and i == len(self.palette)-1 else "Profile"
+                     for i in range(len(self.palette)))
+
 
 class ProfileAestheticService:
     """Fetch only public Discord assets and cache analysis by their immutable URLs."""
@@ -219,6 +229,7 @@ class ProfileAestheticService:
             badge_count=badge_count,
             accent_value=getattr(accent, "value", None),
             fingerprint=blake2s(cache_key.encode("utf-8"), digest_size=8).hexdigest(),
+            banner_available=banner_asset is not None,
         )
         visual = replace(visual, animated_banner=animated_banner,
                          banner_available=banner_asset is not None,
@@ -315,18 +326,22 @@ class ProfileAestheticService:
         badge_count: int,
         accent_value: int | None,
         fingerprint: str,
+        banner_available: bool = False,
     ) -> ProfileVisual:
         avatar_image = cls._open(avatar)
         banner_image = cls._open(banner)
         decoration_image = cls._open(decoration)
         sources = [image for image in (avatar_image, banner_image) if image is not None]
-        if accent_value is not None:
-            sources.append(Image.new("RGB", (32, 32), cls._hex(accent_value)))
+        # Only real image pixels establish the primary palette. Discord's solid
+        # banner fallback is shown last, explicitly labelled, and never quantized
+        # into the avatar colours or used as the primary theme colour.
         palette = cls._palette(sources)
+        harmony = cls._harmony(palette)
+        if accent_value is not None and banner_image is None and not banner_available:
+            palette = (*palette[:4], cls._hex(accent_value))
         sample = avatar_image or (sources[0] if sources else Image.new("RGB", (32, 32), "#75617f"))
         colorfulness = cls._colorfulness(sample)
         contrast = min(100, int(sum(ImageStat.Stat(sample.resize((96, 96))).stddev) / 3 * 1.6))
-        harmony = cls._harmony(palette)
         custom_avatar = member.avatar is not None or member.guild_avatar is not None
         # Keep the review deliberately strict: simply uploading an avatar is the
         # baseline, while composition, contrast, and colour direction earn the score.
@@ -367,6 +382,7 @@ class ProfileAestheticService:
             originality_score=originality,
             overall_score=overall,
             has_banner=bool(banner),
+            banner_available=banner_available,
             has_decoration=bool(decoration),
             has_nameplate=has_nameplate,
             has_server_tag=has_server_tag,

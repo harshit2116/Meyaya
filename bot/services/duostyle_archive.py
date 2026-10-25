@@ -217,13 +217,17 @@ def _identity(image, visual, x, accent):
     draw.text(
         (center, 548), "P R O F I L E  P A L E T T E", font=font(13), anchor="ma", fill="#e4cadd"
     )
-    for i, color in enumerate(visual.palette[:4]):
+    swatches = (*visual.palette[:3], visual.palette[-1]) if visual.banner_swatch else visual.palette[:4]
+    for i, color in enumerate(swatches):
         cx = center - 145 + i * 97
         draw.ellipse((cx - 26, 576, cx + 26, 628), fill=color, outline=accent)
-    for i, tag in enumerate(palette_tags(visual.palette)):
+    tags = palette_tags(visual.palette)
+    if visual.banner_swatch:
+        tags = (*tags[:3], "Banner")
+    for i, tag in enumerate(tags):
         bx = x + 11 + i * 103
         draw.rounded_rectangle((bx, 640, bx + 98, 665), radius=9, fill="#251c2a", outline=accent)
-        _centred(draw, "# " + tag, bx + 49, 645, 89, 13, "#f0dfee")
+        _centred(draw, tag if tag == "Banner" else "# " + tag, bx + 49, 645, 89, 13, "#f0dfee")
 
 
 @lru_cache(maxsize=1)

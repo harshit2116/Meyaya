@@ -188,19 +188,28 @@ def _badges(image, titles, accent, secondary):
         icon_size = min(36, round(height - 14))
         icon = _icon(kind, accent).resize((icon_size, icon_size), Image.Resampling.LANCZOS)
         image.alpha_composite(icon, (x + 16, round(y + (height - icon_size) / 2)))
-        _text(
-            ImageDraw.Draw(image),
-            (x + 62, y + 13, round(width - 74), round(height - 18)),
-            title,
-            25,
-            "#faedf2",
-            minimum=14,
-        )
+        # Centre actual glyph bounds rather than a font's ascent box. Keep
+        # each title on one line, with equal padding beside its icon.
+        available = width - icon_size - 46
+        text_x = x + icon_size + 30
+        size = min(25, max(14, round(height * 0.38)))
+        while size > 14 and draw.textlength(title, font=_serif(size)) > available:
+            size -= 1
+        face = _serif(size)
+        if draw.textlength(title, font=face) > available:
+            while title and draw.textlength(title + "…", font=face) > available:
+                title = title[:-1]
+            title += "…"
+        bounds = draw.textbbox((0, 0), title, font=face)
+        text_y = y + (height - (bounds[3] - bounds[1])) / 2 - bounds[1]
+        draw.text((text_x, text_y), title, font=face, fill="#faedf2")
 
 
 def render_callingcard(visual, *, nickname, relationship, titles):
     accent, secondary = theme(visual.palette)
     image = _background(tuple(visual.palette)).copy()
+    if visual.banner_swatch:
+        ImageDraw.Draw(image).text((851, 780), "Banner", font=font(15), anchor="ma", fill="#ded0dc")
     _portrait(image, visual, accent, secondary)
     draw = ImageDraw.Draw(image)
     _text(draw, (710, 172, 808, 144), visual.name, 124, "#fff0f0", minimum=32)
@@ -216,8 +225,12 @@ def render_callingcard(visual, *, nickname, relationship, titles):
     )
     image.alpha_composite(_icon("heart", accent), (710, 431))
     draw = ImageDraw.Draw(image)
-    draw.text((760, 442), "M E Y A Y A ’ S   B O N D", font=_serif(21), fill=accent)
-    draw.line((1010, 451, 1510, 451), fill=_hex(_mix(_rgb(accent), (25, 17, 28), 0.5)), width=1)
+    heading = "M E Y A Y A ’ S   B O N D"
+    heading_font = _serif(21)
+    draw.text((760, 442), heading, font=heading_font, fill=accent)
+    line_x = 760 + math.ceil(draw.textlength(heading, font=heading_font)) + 24
+    if line_x < 1510:
+        draw.line((line_x, 455, 1510, 455), fill=_hex(_mix(_rgb(accent), (25, 17, 28), 0.5)), width=1)
     bond = " ".join(str(relationship).split()) or "Still getting to know them"
     bond = bond[0].upper() + bond[1:]
     if bond[-1] not in ".!?":

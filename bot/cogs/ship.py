@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import io
 import logging
 import time
+from secrets import SystemRandom
 from weakref import WeakValueDictionary
 
 import discord
@@ -40,6 +41,22 @@ class ByteCacheEntry:
     expires_at: float
 
 
+class RandomShipCommand(commands.HybridCommand):
+    """Accept the exact prefix-only `ship random` shortcut without changing /ship."""
+
+    async def _parse_arguments(self, ctx):
+        index = ctx.view.index
+        argument = ctx.view.read_rest().strip()
+        ctx.view.index = index
+        if argument.casefold() != "random":
+            return await super()._parse_arguments(ctx)
+        async with background_typing(ctx.channel):
+            first, second = await self.cog._random_ship_pair(ctx)
+        ctx.view.read_rest()
+        ctx.args = [self.cog, ctx, first, second]
+        ctx.kwargs = {}
+
+
 class ShipCog(commands.Cog):
     """Ship two members with a new score on every invocation."""
 
@@ -49,8 +66,42 @@ class ShipCog(commands.Cog):
         self._avatar_cache: dict[object, ByteCacheEntry] = {}
         self._card_cache: dict[object, ByteCacheEntry] = {}
         self._avatar_locks = WeakValueDictionary()
+        self._random_picker = None
 
-    @commands.hybrid_command(
+    async def _random_ship_pair(self, ctx):
+        if ctx.guild is None:
+            raise commands.NoPrivateMessage()
+        picker = self.bot.get_cog("DailyCog")
+        if picker is None:
+            from bot.cogs.daily import DailyCog
+            if self._random_picker is None:
+                self._random_picker = DailyCog(self.bot)
+            picker = self._random_picker
+        try:
+            candidates = list(dict.fromkeys(await picker._candidate_ids(ctx.guild)))
+            rng = SystemRandom()
+            selected = []
+            # Cached IDs can include members who left. Recheck the selected
+            # members, retrying a bounded number without rescanning the server.
+            async with asyncio.timeout(15):
+                for _ in range(min(6, len(candidates))):
+                    uid = rng.choice(candidates)
+                    candidates.remove(uid)
+                    member = ctx.guild.get_member(uid)
+                    if member is None:
+                        try:
+                            member = await ctx.guild.fetch_member(uid)
+                        except discord.NotFound:
+                            continue
+                    if not member.bot:
+                        selected.append(member)
+                    if len(selected) == 2:
+                        return tuple(selected)
+        except (discord.HTTPException, discord.ClientException, TimeoutError) as error:
+            raise commands.BadArgument("I couldn't load the server members. Please try again shortly.") from error
+        raise commands.BadArgument("I need two different human members in this server to ship randomly.")
+
+    @commands.command(cls=RandomShipCommand,
         name="ship",
         description="Measure the romantic chemistry between two members.",
     )

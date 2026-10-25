@@ -1,0 +1,9 @@
+Tarot presentation assets, updated 25 October 2026
+
+spread-frame.png: Reusable text-free frame created with the built-in OpenAI imagegen tool by editing the user's layout reference. All live names, dates, positions, card artwork, titles and interpretations are composited by tarot_card.py. No per-command image generation.
+
+06.jpg (The Lovers) and 15.jpg (The Devil): New artwork created with the built-in OpenAI imagegen tool, replacing the previous versions at the existing deck paths. All illustrated figures are fully clothed. The replacement art follows traditional woodcut tarot styling; the card identities, draw rules, upright and reversed meanings remain unchanged.
+
+The other 20 existing deck images are unchanged. New JPG assets are 768 x 1152. The static frame is 1536 x 1024. Runtime decoding and presentation are bounded and cached.
+
+Exact prompts and the reference role are recorded in the development artifact artifacts/tarot-art-prompts.json. These assets were made with the built-in tool, not an API/CLI fallback.

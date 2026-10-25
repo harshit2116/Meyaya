@@ -247,10 +247,9 @@ class FunCog(commands.Cog):
             votes=votes, replies=replies, comment_votes=comment_votes, op_votes=op_votes,
             method="Fictional Reddit-style thread; both replies are invented, and counts are decorative.",
         )
-        caption = ("-# Fictional AI-generated thread." if source == "AI" else
-                   "-# Fictional sample thread. AI replies unavailable.")
-        await ctx.send(content=caption, file=discord.File(BytesIO(png), filename="reddit.png"),
-                       allowed_mentions=discord.AllowedMentions.none())
+        extra = {} if source == "AI" else {"content": "-# AI replies unavailable. Showing a sample thread."}
+        await ctx.send(file=discord.File(BytesIO(png), filename="reddit.png"),
+                       allowed_mentions=discord.AllowedMentions.none(), **extra)
 
     @discord_context("reddit")
     async def _reddit_replies(self, ctx, post, hint=""):

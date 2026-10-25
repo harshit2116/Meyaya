@@ -1,0 +1,13 @@
+Fate illustration assets, 25 October 2026
+
+All four backgrounds were created with the built-in OpenAI imagegen tool. wanderer.jpg was derived from the user-provided Fate design reference with all text and the profile picture removed. king.jpg, witness.jpg and trickster.jpg were edited from that clean template to preserve the same panel geometry while changing the emblem, hero scene, panel scenery and chapter vignette for each archetype.
+
+Archetypes:
+The Wanderer: a flower-framed mountain road and distant tower, diamond emblem.
+The Crownless King: a royal courtyard and empty throne, crown emblem.
+The Last Witness: a moonlit observatory-library and telescope, eye-and-star emblem.
+The Trickster: a theatrical garden, mask, ribbons and blank cards, mask emblem.
+
+Each file is a 1421 x 1107 JPG. The renderer overlays live text and the actual user's circular avatar, adds soft reading surfaces, and caches at most two decoded backgrounds. No image generation or extra AI request happens when the command is run. Daily draw rules and existing interpretations remain unchanged.
+
+Exact built-in generation/edit prompts: development artifact artifacts/fate-art-prompts.json. No CLI/API fallback was used.

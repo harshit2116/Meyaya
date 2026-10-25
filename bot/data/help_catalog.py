@@ -364,7 +364,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand("clown", "clown", "Reveal today's official server clown.", "Daily Picks"),
     HelpCommand(
         "ship",
-        "ship <member> <member>",
+        "ship <member> <member> | ship random",
         "Measure the romantic chemistry between two members.",
         "Fun and Scores",
     ),

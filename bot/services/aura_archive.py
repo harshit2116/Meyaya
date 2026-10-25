@@ -202,6 +202,8 @@ def render_archive(visual,*,title,energy,traits,affinity,class_name):
     for index,color in enumerate(visual.palette[:5]):
         x=478+index*156
         draw.rounded_rectangle((x,794,x+136,876),radius=13,fill=color,outline='#dbacb8',width=1)
+    if visual.banner_swatch:
+        draw.text((1170,882),'Banner',font=font(15),anchor='ma',fill='#cdb0c4')
     draw.line((170,905,442,905),fill='#a66c83',width=1)
     _spark(draw,170,905,3,'#e4b0bf');_spark(draw,442,905,4,'#bd87a4')
     draw.text((960,905),'EST. FROM AVATAR · BANNER · PROFILE ELEMENTS',font=font(11),anchor='ma',fill='#b397ac')

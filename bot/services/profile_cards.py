@@ -767,6 +767,8 @@ def palette_card(visual: ProfileVisual) -> bytes:
         draw.rounded_rectangle((x, 168, x + 82, 340), radius=18, fill=color)
         width = draw.textlength(color.upper(), font=font(13))
         draw.text((x + (82 - width) / 2, 357), color.upper(), font=font(13), fill="white")
+        if index == len(visual.palette) - 1 and visual.banner_swatch:
+            draw.text((x + 41, 381), "Banner", font=font(15), fill="#ded4e5", anchor="ma")
     label(
         draw,
         (322, 414, 510, 34),
