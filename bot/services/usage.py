@@ -1,6 +1,7 @@
 """Atomic daily allowances shared by chat, roleplay and automatic replies."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from dataclasses import dataclass
 import re
 from sqlalchemy import select, update, func, case, cast, Integer, true
 from sqlalchemy.dialects.postgresql import insert, array
@@ -11,6 +12,12 @@ from bot.models.guild_identity import GuildIdentity
 
 class ChatLimitReached(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class UsageReservation:
+    day: date
+    generation: int
 
 
 def is_silence(text: str) -> bool:
@@ -37,7 +44,7 @@ class UsageService:
                 index_elements=[GuildUsage.guild_id, GuildUsage.day],
                 set_={"chats": GuildUsage.chats + 1},
                 where=True if unlimited else GuildUsage.chats < limit,
-            ).returning(GuildUsage.chats)
+            ).returning(GuildUsage.reset_generation)
             count = await session.scalar(statement)
             if count is None:
                 raise ChatLimitReached(
@@ -46,18 +53,35 @@ class UsageService:
             await session.execute(update(GuildIdentity).where(GuildIdentity.guild_id == guild_id)
                                   .values(last_activity_at=datetime.now(UTC)))
             await session.commit()
-        return day
+        return UsageReservation(day, count)
 
     async def refund(self, guild_id, day):
+        reservation = day if isinstance(day, UsageReservation) else None
+        actual_day = reservation.day if reservation else day
         async with self.sessions() as session:
+            conditions = [GuildUsage.guild_id == guild_id, GuildUsage.day == actual_day]
+            if reservation is not None:
+                conditions.append(GuildUsage.reset_generation == reservation.generation)
             await session.execute(
                 update(GuildUsage)
-                .where(GuildUsage.guild_id == guild_id, GuildUsage.day == day)
+                .where(*conditions)
                 .values(chats=func.greatest(0, GuildUsage.chats - 1))
             )
             await session.execute(update(GuildIdentity).where(GuildIdentity.guild_id == guild_id)
                                   .values(last_activity_at=datetime.now(UTC)))
             await session.commit()
+
+    @staticmethod
+    async def reset_today(session, guild_id):
+        """Reset only this UTC day's chat quota, retaining all other records."""
+        day = datetime.now(UTC).date()
+        previous = await session.scalar(select(GuildUsage.chats).where(
+            GuildUsage.guild_id == guild_id, GuildUsage.day == day).with_for_update())
+        statement = insert(GuildUsage).values(guild_id=guild_id, day=day, chats=0, reset_generation=1)
+        await session.execute(statement.on_conflict_do_update(
+            index_elements=[GuildUsage.guild_id, GuildUsage.day],
+            set_={'chats': 0, 'reset_generation': GuildUsage.reset_generation + 1}))
+        return {'day': day.isoformat(), 'previous_chats': previous or 0, 'chats': 0}
 
     async def command_completed(self, guild_id, command_name=None):
         name = str(command_name)[:100] if command_name else None

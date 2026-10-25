@@ -27,6 +27,7 @@ from bot.logging.health import health as health_telemetry, find_retained_error
 import re
 from datetime import UTC, datetime, timedelta
 from bot.models.guild_identity import GuildEvent
+from bot.services.guild_features import FEATURES, feature_states
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ async def server_report(bot, usage_report=None):
                 "can_timeout": bool(permissions and permissions.moderate_members),
                 "prefix": bot.prefix_for_guild(guild.id),
                 "autoresponder": bot.autoresponder_enabled(guild.id),
+                "features": feature_states(getattr(bot, '_guild_disabled_features', {}).get(guild.id, ())),
                 "exempt": guild.id == bot.settings.quota_exempt_guild_id,
                 "limit": limits.get(guild.id, 40),
                 "monitored_channels": monitor.monitored_channel_count(guild) if monitor else 0,
@@ -110,7 +112,9 @@ class Dashboard:
                         supplied = request.headers.get("Authorization", "")
                         api_access = bool(api_token and supplied.startswith('Bearer ') and hmac.compare_digest(supplied[7:].encode(), api_token.encode()))
                         edit_access = bool(edit_token and supplied.startswith('Bearer ') and hmac.compare_digest(supplied[7:].encode(), edit_token.encode()))
-                        if edit_access and request.method not in {'GET', 'HEAD'} and not (request.method == 'PATCH' and re.fullmatch(r'/api/servers/[0-9]+', request.path)):
+                        settings_edit = request.method == 'PATCH' and re.fullmatch(r'/api/servers/[0-9]+', request.path)
+                        quota_reset = request.method == 'POST' and re.fullmatch(r'/api/servers/[0-9]+/reset-usage', request.path)
+                        if edit_access and request.method not in {'GET', 'HEAD'} and not (settings_edit or quota_reset):
                             raise web.HTTPForbidden(text='Edit token is scoped to server settings')
                         request['dashboard_actor'] = 'dashboard edit token' if edit_access else 'owner session'
                         if api_access and request.method not in {'GET', 'HEAD'}:
@@ -173,6 +177,7 @@ class Dashboard:
         self.app.router.add_get("/api/errors", self.errors)
         self.app.router.add_get("/api/safety", self.safety)
         self.app.router.add_patch("/api/servers/{guild_id}", self.update)
+        self.app.router.add_post("/api/servers/{guild_id}/reset-usage", self.reset_usage)
 
     def login_link(self):
         settings = self.bot.settings
@@ -729,6 +734,27 @@ class Dashboard:
             }
         )
 
+    async def reset_usage(self, request):
+        from bot.services.usage import UsageService
+        from sqlalchemy import text
+        try:
+            guild_id = int(request.match_info['guild_id'])
+            body = await request.json()
+        except (TypeError, ValueError):
+            raise web.HTTPBadRequest(text='Invalid request')
+        if body != {'confirm': True} or type(body.get('confirm')) is not bool:
+            raise web.HTTPBadRequest(text='Confirm resetting today\'s chat usage')
+        if self.bot.get_guild(guild_id) is None:
+            raise web.HTTPNotFound(text='Meyaya is not in this server')
+        async with self.bot.db_session() as session:
+            await session.execute(text('SELECT pg_advisory_xact_lock(:gid)'), {'gid': guild_id})
+            result = await UsageService.reset_today(session, guild_id)
+            session.add(GuildEvent(guild_id=guild_id, event_type='usage_reset',
+                actor=request.get('dashboard_actor', 'local owner'), details=result))
+            await session.commit()
+        self._data_cache.clear()
+        return web.json_response(dict(saved=True, **result))
+
     async def update(self, request):
         from bot.cogs.admin import normalize_prefix
 
@@ -739,8 +765,11 @@ class Dashboard:
             raise web.HTTPBadRequest(text="Invalid request")
         if self.bot.get_guild(guild_id) is None:
             raise web.HTTPNotFound(text="Server not found")
-        if not isinstance(data, dict) or set(data) != {"prefix", "autoresponder", "limit"}:
+        if not isinstance(data, dict) or not {"prefix", "autoresponder", "limit"} <= set(data) or set(data) - {"prefix", "autoresponder", "limit", "features"}:
             raise web.HTTPBadRequest(text="Expected prefix, autoresponder and limit")
+        features = data.get('features', {})
+        if not isinstance(features, dict) or set(features) - FEATURES.keys() or any(type(value) is not bool for value in features.values()):
+            raise web.HTTPBadRequest(text="Features must contain known feature names and true/false values")
         prefix = normalize_prefix(data["prefix"]) if isinstance(data["prefix"], str) else None
         if (
             prefix is None
@@ -765,6 +794,16 @@ class Dashboard:
                 "autoresponder_enabled": data["autoresponder"],
                 "daily_chat_limit": data["limit"],
             }
+            disabled = set(getattr(previous, 'disabled_features', None) or ())
+            if 'features' in data:
+                before['features'] = feature_states(disabled)
+                for name, enabled in features.items():
+                    if enabled:
+                        disabled.discard(name)
+                    else:
+                        disabled.add(name)
+                values['disabled_features'] = sorted(disabled)
+                data['features'] = feature_states(disabled)
             await session.execute(
                 insert(GuildSettings)
                 .values(guild_id=guild_id, **values)
@@ -777,6 +816,8 @@ class Dashboard:
         self._data_cache.clear()
         self.bot.cache_guild_prefix(guild_id, prefix)
         self.bot.cache_autoresponder(guild_id, data["autoresponder"])
+        if 'features' in data:
+            self.bot.cache_guild_features(guild_id, disabled)
         logger.info("Owner dashboard updated settings for guild=%s", guild_id)
         return web.json_response({"saved": True})
 

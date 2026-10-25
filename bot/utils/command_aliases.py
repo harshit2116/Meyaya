@@ -29,6 +29,7 @@ SHORT_COMMANDS = {
 }
 
 ALIAS_COMMANDS = {alias: name for name, alias in SHORT_COMMANDS.items()}
+ALIAS_COMMANDS['bestie'] = 'bestiescore'
 
 
 def install_command_aliases(bot):
@@ -56,4 +57,4 @@ def command_aliases(name, bot=None):
         registered = bot.get_command(name)
         return tuple(getattr(registered, "aliases", ()))
     alias = SHORT_COMMANDS.get(name)
-    return (alias,) if alias else ()
+    return ("bestie", alias) if name == "bestiescore" and alias else (alias,) if alias else ()

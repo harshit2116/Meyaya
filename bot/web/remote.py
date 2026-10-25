@@ -28,19 +28,24 @@ class RemoteDashboard(LocalDashboard):
             if not request.path.startswith('/api/'):
                 return await handler(request)
             editing = request.method == 'PATCH' and re.fullmatch(r'/api/servers/[0-9]+', request.path)
+            resetting = request.method == 'POST' and re.fullmatch(r'/api/servers/[0-9]+/reset-usage', request.path)
             edit_token = getattr(settings, 'dashboard_remote_edit_token', '')
-            if request.method not in {'GET', 'HEAD'} and not (editing and edit_token):
+            if request.method not in {'GET', 'HEAD'} and not ((editing or resetting) and edit_token):
                 raise web.HTTPForbidden(text='Editing is not enabled for this console')
             try:
                 options = {'allow_redirects': False}
                 method = self._client.get
-                if editing:
-                    method = self._client.patch
+                if editing or resetting:
+                    method = self._client.post if resetting else self._client.patch
                     options.update(json=await request.json(), headers={'Authorization': f'Bearer {edit_token}'})
                 async with method(origin + request.rel_url.path_qs, **options) as response:
                     if response.status == 401:
                         raise web.HTTPBadGateway(text='AWS rejected the dashboard API token. Check the token on both machines.')
                     if response.status != 200:
+                        if (editing or resetting) and response.status in {400, 403, 404}:
+                            detail = (await response.text())[:300]
+                            error = {400: web.HTTPBadRequest, 403: web.HTTPForbidden, 404: web.HTTPNotFound}[response.status]
+                            raise error(text=detail)
                         raise web.HTTPBadGateway(text=f'AWS dashboard returned HTTP {response.status}.')
                     data = await response.json()
                     if request.path == '/api/servers':

@@ -83,6 +83,7 @@ def build_help_embed(
             "warninglabel": "warninglabel @Alex",
             "fortune": "fortune",
             "ship": "ship @Alex @Sam",
+            "bestiescore": "bestie random",
             "rate": "rate pineapple pizza",
             "argumenttimeline": "argumenttimeline https://discord.com/channels/123/456/789",
             "checkclaim": "checkclaim https://discord.com/channels/123/456/789",
@@ -382,9 +383,11 @@ class HelpView(discord.ui.LayoutView):
         for field in embed.fields:
             if field.name=="Category":continue
             parts.append(discord.ui.TextDisplay(f"### {field.name}\n{field.value}"))
-        if self.command_name=="ship":
+        if self.command_name in {"ship", "bestiescore"}:
+            shortcut = "ship" if self.command_name == "ship" else "bestie"
             parts.append(discord.ui.TextDisplay(
-                f"### A surprise pairing\n`{self.command_prefix} ship random` chooses two different human members in this server."))
+                f"### A surprise pairing\n`{self.command_prefix} {shortcut} random` chooses two different human members. "
+                "Anyone can use the Random pair button below a result to try another pair. Buttons stay active for 15 minutes after the last click."))
         parts.append(discord.ui.TextDisplay(f"-# {self.category} · Choose another command, or return to the category."))
         self._container(*parts)
 

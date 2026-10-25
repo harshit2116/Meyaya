@@ -32,6 +32,10 @@ class GuildSettingsRepository(Repository):
         )
         return dict(result.all())
 
+    async def list_disabled_features(self):
+        result = await self.session.execute(select(GuildSettings.guild_id, GuildSettings.disabled_features))
+        return {guild_id: frozenset(disabled or ()) for guild_id, disabled in result.all()}
+
     async def set_chat_channel(self, guild_id: int, channel_id: int | None, actor_id: int):
         values = {"chat_channel_id": channel_id, "updated_by_user_id": actor_id}
         await self.session.execute(

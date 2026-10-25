@@ -23,6 +23,7 @@ from bot.utils.image_work import image_work, animation_work, BoundedImageGate
 from bot.utils.command_context import remember_command_result
 from bot.utils.display_mentions import display_mentions
 from bot.utils.member_names import MemberNames
+from bot.cogs.ship import RandomShipCommand
 
 logger = logging.getLogger(__name__)
 
@@ -62,8 +63,12 @@ class FunCog(commands.Cog):
         self.scramble_players = set()
         self.scramble_views = set()
         self._standalone_avatar_loader = None
+        self.pair_views = set()
+        self._random_pair_picker = None
 
     async def cog_unload(self):
+        for view in tuple(self.pair_views):
+            view.stop()
         for view in tuple(self.scramble_views):
             view.finish()
 
@@ -361,8 +366,9 @@ class FunCog(commands.Cog):
         await ctx.send(embed=embed, file=discord.File(BytesIO(gif), filename="duck.gif"),
                        allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.hybrid_command(
+    @commands.command(cls=RandomShipCommand,
         name="bestiescore",
+        aliases=["bestie"],
         description="Check today's friendship score for two members.",
     )
     @app_commands.describe(
@@ -381,6 +387,28 @@ class FunCog(commands.Cog):
             await ctx.send("I could not identify the first member.")
             return
 
+        await ctx.defer()
+        embed, file = await self._build_bestie_response(user_one, user_two, ctx=ctx)
+        from bot.views.random_pair import RandomPairView
+        view = RandomPairView(self, getattr(ctx.guild, 'id', None), 'bestiescore')
+        payload = dict(view=view, allowed_mentions=discord.AllowedMentions.none())
+        if embed is not None:
+            payload['embed'] = embed
+        if file is not None:
+            payload['file'] = file
+        view.message = await ctx.send(**payload)
+
+    async def _random_ship_pair(self, ctx):
+        ship = self.bot.get_cog('ShipCog')
+        if ship is None:
+            from bot.cogs.ship import ShipCog
+            if self._random_pair_picker is None:
+                self._random_pair_picker = ShipCog(self.bot)
+            ship = self._random_pair_picker
+        return await ship._random_ship_pair(ctx)
+
+    async def _build_bestie_response(self, user_one, user_two, *, ctx):
+
         if user_one.id == user_two.id:
             score = 100
         else:
@@ -394,8 +422,14 @@ class FunCog(commands.Cog):
                 date.today().isoformat(),
             ).randint(0, 100)
 
-        await ctx.defer()
         verdict = self._bestie_verdict(score)
+        from bot.services.bestie_scrapbook import bestie_breakdown
+        remember_command_result(
+            ctx, first_id=user_one.id, first_name=user_one.display_name,
+            second_id=user_two.id, second_name=user_two.display_name,
+            score=score, verdict=verdict, breakdown=bestie_breakdown(score),
+            method="Stable daily fun score based on the member pair. Breakdown bars are derived from that roll, not real friendship measurements.",
+        )
         ship_cog = self.bot.get_cog("ShipCog")
         if ship_cog is not None:
             try:
@@ -405,18 +439,7 @@ class FunCog(commands.Cog):
             except Exception:
                 logger.exception("Failed to render bestiescore card")
             else:
-                from bot.services.bestie_scrapbook import bestie_breakdown
-                remember_command_result(
-                    ctx, first_id=user_one.id, first_name=user_one.display_name,
-                    second_id=user_two.id, second_name=user_two.display_name,
-                    score=score, verdict=verdict, breakdown=bestie_breakdown(score),
-                    method="Stable daily fun score based on the member pair. Breakdown bars are derived from that roll, not real friendship measurements.",
-                )
-                await ctx.send(
-                    file=discord.File(BytesIO(card), filename="bestiescore.png"),
-                    allowed_mentions=discord.AllowedMentions.none(),
-                )
-                return
+                return None, discord.File(BytesIO(card), filename="bestiescore.png")
         embed = meyaya_embed(
             f"{user_one.display_name} + {user_two.display_name}",
             description=(
@@ -427,7 +450,7 @@ class FunCog(commands.Cog):
             icon="🫶",
         )
         embed.set_thumbnail(url=str(user_two.display_avatar.url))
-        await ctx.send(embed=embed)
+        return embed, None
 
     @commands.hybrid_command(
         name="8ball",

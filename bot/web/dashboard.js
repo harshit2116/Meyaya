@@ -169,7 +169,7 @@ function lock() {
   closeRequests(); token = ""; servers = [];
   $("servers").replaceChildren(); $("memory-items").replaceChildren(); $("nickname-items").replaceChildren();
   $("operations-summary").replaceChildren(); $("operations-features").replaceChildren(); $("operations-models").replaceChildren(); $("operations-recent").replaceChildren();
-  $("operations-commands").replaceChildren(); $("server-detail-content").replaceChildren(); $("server-controls").replaceChildren(); $("server-heading").replaceChildren();
+  $("operations-commands").replaceChildren(); $("server-detail-content").replaceChildren(); $("server-controls").replaceChildren(); $("server-usage").replaceChildren(); $("server-heading").replaceChildren();
   $("server-command-usage").replaceChildren();
   $("workspace").hidden = true; $("navigation").hidden = true; $("login").hidden = false;
   $("connection").textContent = "Locked";
@@ -298,11 +298,10 @@ setInterval(() => {
   if (token && !document.hidden && !$("view-health").hidden) loadHealth();
 }, 30000);
 
-function renderServerControls(target, server) {
+function renderServerUsage(target, server) {
     target.replaceChildren();
-    const card = element("form", undefined, "card");
-    card.append(element("h3", "Meyaya settings"), element("div", server.id, "id"), element("span", server.exempt ? "✦ Main server - Unlimited" : `${server.today_chats} / ${server.limit} Meyaya replies today`, "badge"));
-    const progress = element("progress"); progress.max = Math.max(1, server.limit); progress.value = server.exempt ? 0 : server.today_chats; progress.setAttribute("aria-label", "Daily allowance used"); card.append(progress);
+    const card = element("article", undefined, "card");
+    card.append(element("h3", "Server activity"));
     const metrics = element("div", undefined, "metrics");
     if (server.local) {
       metrics.append(metric("Members (approx.)", server.members ?? "Unavailable"), metric("Commands today", server.today_commands), metric("Meyaya replies / 7 days", server.week_chats), metric("Commands / 7 days", server.week_commands));
@@ -316,10 +315,50 @@ function renderServerControls(target, server) {
     const hours = value => `${((value || 0)/3600).toFixed(2)} h`;
     voiceTime.append(metric("Voice today", hours(server.today_voice_seconds)), metric("Voice / 7 days", hours(server.week_voice_seconds)), metric("Voice all time", hours(server.total_voice_seconds)));
     card.append(element("h4", "Voice chat usage"), voiceTime, element("p", "Meyaya session time, including active sessions. UTC days; tracking starts with this update.", "details"));
+    target.append(card);
+}
+
+function renderServerControls(target, server) {
+    if (target.dataset.guildId === server.id && target.querySelector("form")?.dataset.dirty === "true" && !server.readOnly) return;
+    target.dataset.guildId = server.id;
+    target.replaceChildren();
+    const card = element("form", undefined, "card");
+    card.append(element("h3", `Settings for ${server.name}`), element("div", server.id, "id"), element("span", server.exempt ? "✦ Main server - Unlimited" : `${server.today_chats} / ${server.limit} Meyaya replies today`, "badge"));
+    const progress = element("progress"); progress.max = Math.max(1, server.limit); progress.value = server.exempt ? 0 : server.today_chats; progress.setAttribute("aria-label", "Daily allowance used"); card.append(progress);
     const prefixLabel = element("label", "Command prefix"), prefix = element("input"); prefix.value = server.prefix; prefix.maxLength = 10; prefix.required = true; prefixLabel.append(prefix);
     const limitLabel = element("label", "Daily Meyaya reply allowance (0 disables chat)"), limit = element("input"); limit.type = "number"; limit.min = "0"; limit.max = "10000"; limit.required = true; limit.value = server.limit; limit.disabled = server.exempt; limitLabel.append(limit);
     const toggle = element("label", undefined, "toggle"), auto = element("input"); auto.type = "checkbox"; auto.checked = server.autoresponder; toggle.append(auto, element("span", "Automatic replies enabled"));
-    const save = element("button", server.readOnly ? "Read-only AWS console" : "Save changes", "save"); save.disabled = !!server.readOnly; if (server.readOnly) { prefix.disabled = true; limit.disabled = true; auto.disabled = true; } card.append(prefixLabel, limitLabel, toggle, save);
+    const save = element("button", server.readOnly ? "Read-only AWS console" : "Save changes", "save"); save.disabled = !!server.readOnly; if (server.readOnly) { prefix.disabled = true; limit.disabled = true; auto.disabled = true; } card.append(prefixLabel, limitLabel, element("p", "This allowance applies only to this server and is shared by AI chat, roleplay, and automatic replies. Increasing it does not reset usage. Resets at 00:00 UTC.", "details"), toggle);
+    const featureInputs = new Map();
+    if (server.features && typeof server.features === "object") {
+      const featureSet = element("fieldset", undefined, "server-feature-grid");
+      featureSet.append(element("legend", "Enable or disable features"));
+      for (const [name, enabled] of Object.entries(server.features)) {
+        const label = element("label", undefined, "toggle feature-toggle"), input = element("input");
+        input.type = "checkbox"; input.checked = enabled; input.disabled = !!server.readOnly;
+        label.append(input, element("span", name)); featureSet.append(label); featureInputs.set(name, input);
+      }
+      card.append(featureSet, element("p", "Help and server administration stay available. Switches control new commands and conversations; saved profiles, memories, and history are kept. Existing games and voice sessions can finish.", "details"));
+    } else card.append(element("p", "Feature switches require the updated AWS bot. Prefix, allowance, and automatic replies remain editable.", "details"));
+    if (server.exempt) card.append(element("p", "This is the quota-exempt server. Its chat allowance stays unlimited.", "details"));
+    card.append(save);
+    card.addEventListener("input", () => { card.dataset.dirty = "true"; });
+    card.addEventListener("change", () => { card.dataset.dirty = "true"; });
+    const resetSection = element("section", undefined, "usage-reset-section");
+    const reset = element("button", "Reset today's chat usage", "quiet"); reset.type = "button";
+    reset.disabled = !!server.readOnly || !server.features;
+    resetSection.append(element("h4", "Give this server a fresh allowance"),
+      element("p", "Resets today's used chat slots to zero. Command counts, chat history, and the daily limit stay unchanged. Disabled features and a zero allowance stay disabled.", "details"), reset);
+    reset.addEventListener("click", async () => {
+      reset.disabled = true;
+      try {
+        await api(`/api/servers/${server.id}/reset-usage`, {method:"POST", body:JSON.stringify({confirm:true})});
+        notice(`Reset today's chat usage for ${server.name}. The saved daily allowance is available again.`);
+        await refresh();
+      } catch (error) { notice(error.message); }
+      finally { reset.disabled = !!server.readOnly; }
+    });
+    card.append(resetSection);
     const review = element("button", "View AI chat log", "quiet save"); review.type = "button";
     review.addEventListener("click", () => switchServerPanel("chat")); card.append(review);
     const shortcuts = element("div", undefined, "card-actions");
@@ -328,7 +367,7 @@ function renderServerControls(target, server) {
     const nicknames = element("button", "Nicknames", "quiet"); nicknames.type = "button";
     nicknames.addEventListener("click", () => { $("nickname-guild").value = server.id; switchView("nicknames", false); loadNicknames(false); });
     shortcuts.append(memories, nicknames); card.append(shortcuts);
-    card.addEventListener("submit", async event => { event.preventDefault(); save.disabled = true; try { await api(`/api/servers/${server.id}`, {method: "PATCH", body: JSON.stringify({prefix: prefix.value, autoresponder: auto.checked, limit: Number(limit.value)})}); notice(`Saved settings for ${server.name}.`); await refresh(); } catch (error) { notice(error.message); } finally { save.disabled = false; } });
+    card.addEventListener("submit", async event => { event.preventDefault(); save.disabled = true; try { await api(`/api/servers/${server.id}`, {method: "PATCH", body: JSON.stringify({prefix: prefix.value, autoresponder: auto.checked, limit: Number(limit.value), ...(featureInputs.size ? {features: Object.fromEntries([...featureInputs].map(([name, input]) => [name, input.checked]))} : {})})}); card.dataset.dirty = "false"; notice(`Saved settings for ${server.name}.`); await refresh(); } catch (error) { notice(error.message); } finally { save.disabled = !!server.readOnly; } });
     target.append(card);
 }
 
@@ -421,6 +460,7 @@ async function showServer(guildId) {
   if (!server) { $("server-state").textContent = "Server not found or no longer available to Meyaya."; return; }
   $("page-title").textContent = server.name;
   $("server-heading").replaceChildren(serverIcon(server), element("div", `Owner · ${server.owner_name || "Loading…"}`));
+  renderServerUsage($("server-usage"), server);
   renderServerControls($("server-controls"), server);
   $("sidebar-server-name").textContent = server.name;
   switchServerPanel(selectedServerPanel, false);
@@ -467,7 +507,7 @@ async function refresh() {
 }
 function applyServerData(data) {
   servers = data.servers;
-  if (data.mode === "remote") servers.forEach(server => { server.readOnly = !data.can_edit || isFormerServer(server); });
+  servers.forEach(server => { server.readOnly = isFormerServer(server) || (data.mode === "remote" && !data.can_edit); });
   $("connection").textContent = data.mode === "remote" ? `● Live AWS bot · ${data.can_edit ? "editing enabled" : "read-only"}` : data.mode === "local" ? "● Local dashboard · cloud database" : data.ready ? "● Connected" : "Connecting to Discord";
   $("total").textContent = servers.filter(server => !isFormerServer(server)).length; $("chats").textContent = servers.reduce((n, server) => n + server.today_chats, 0); $("commands").textContent = servers.reduce((n, server) => n + server.today_commands, 0);
   populateGuildFilters();
@@ -779,6 +819,7 @@ async function loadOverviewInsights() {
       const open = element("button", "View diagnostics", "quiet"); open.addEventListener("click", async () => {
         await navigateServer(issue.guild_id);
         if (issue.diagnostic === "errors") switchServerPanel("diagnostics");
+        if (issue.diagnostic === "settings") switchServerPanel("edit");
         const section = issue.diagnostic === "settings" ? "server-controls" : issue.diagnostic === "permissions" ? "server-detail-content" : "server-insights";
         $(section).scrollIntoView({behavior:"smooth"});
       });
@@ -807,13 +848,18 @@ async function loadServerInsights(guildId) {
     const historyPanel = element("details"); historyPanel.open = true; historyPanel.append(element("summary", "Membership history & settings audit"));
     const events = element("ol", undefined, "history-list");
     for (const event of data.history) {
-      const labels = {joined:"Meyaya joined", left:"Meyaya left", first_observed:"First observed", settings_changed:"Settings updated"};
+      const labels = {joined:"Meyaya joined", left:"Meyaya left", first_observed:"First observed", settings_changed:"Settings updated", usage_reset:"Chat usage reset"};
       const item = element("li"); item.append(element("strong", `${labels[event.type] || event.type} · ${date(event.timestamp)}`));
       if (event.type === "settings_changed") {
-        const changes = Object.entries(event.details.after || {}).filter(([key,value]) => event.details.before?.[key] !== value)
-          .map(([key,value]) => `${key}: ${event.details.before?.[key]} → ${value}`);
+        const changes = Object.entries(event.details.after || {}).flatMap(([key, value]) => {
+          const before = event.details.before?.[key];
+          if (key === "features") return Object.entries(value).filter(([name, enabled]) => before?.[name] !== enabled)
+            .map(([name, enabled]) => `${name}: ${enabled ? "enabled" : "disabled"}`);
+          return before === value ? [] : [`${key}: ${before} → ${value}`];
+        });
         item.append(element("p", `${event.actor || "Owner"} · ${changes.join(" · ") || "Settings saved without changes"}`, "details"));
-      } else item.append(element("p", `${event.details.name || "Server"}${event.details.owner_name ? ` · Owner: ${event.details.owner_name}` : ""}`, "details"));
+      } else if (event.type !== "usage_reset") item.append(element("p", `${event.details.name || "Server"}${event.details.owner_name ? ` · Owner: ${event.details.owner_name}` : ""}`, "details"));
+      if (event.type === "usage_reset") item.append(element("p", `${event.actor || "Owner"} · ${event.details.previous_chats || 0} used chat slots reset to 0 for ${event.details.day}. Command history kept.`, "details"));
       events.append(item);
     }
     if (!data.history.length) historyPanel.append(element("p", "No history recorded yet. New membership events and settings changes will appear here.", "details"));
@@ -835,7 +881,7 @@ async function loadServerInsights(guildId) {
 }
 
 function switchServerPanel(panel, updateUrl = true) {
-  if (!["main", "chat", "commands", "diagnostics"].includes(panel)) panel = "main";
+  if (!["main", "edit", "chat", "commands", "diagnostics"].includes(panel)) panel = "main";
   selectedServerPanel = panel;
   $("dashboard-header").hidden = panel !== "main";
   $("server-main-chrome").hidden = panel !== "main";
@@ -843,7 +889,7 @@ function switchServerPanel(panel, updateUrl = true) {
   for (const node of document.querySelectorAll(".server-nav")) node.classList.toggle("active", node.dataset.panel === panel);
   const server = servers.find(s => s.id === pageServerId);
   if (!server) return;
-  const subtitles = {main:"Basic server information and settings.",chat:"Conversations with Meyaya, including automatic replies.",commands:"Successful commands and usage counts.",diagnostics:"Membership history, settings audit, and diagnostics."};
+  const subtitles = {main:"Basic server information.",edit:"Features, command prefix, and daily allowance.",chat:"Conversations with Meyaya, including automatic replies.",commands:"Successful commands and usage counts.",diagnostics:"Membership history, settings audit, and diagnostics."};
   $("page-title").textContent = server.name; $("page-subtitle").textContent = subtitles[panel];
   if (updateUrl) history.pushState(null, "", `/?server=${server.id}&panel=${panel}`);
   if (panel === "main") loadServerBasics(server.id);

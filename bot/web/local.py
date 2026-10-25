@@ -25,6 +25,7 @@ from bot.services.chat_blacklist import ChatBlacklistService
 from bot.web.dashboard import Dashboard
 from bot.web.server_info import rest_server_info, rest_member_preview
 from bot.web.tunnel import TunnelError
+from bot.services.guild_features import feature_states
 
 
 class LocalBackend:
@@ -191,6 +192,9 @@ class LocalBackend:
     def cache_autoresponder(self, *args):
         pass
 
+    def cache_guild_features(self, *args):
+        pass  # Database-only console; the hosted bot refreshes settings itself.
+
 
 class LocalDashboard(Dashboard):
     def __init__(self, backend):
@@ -237,6 +241,7 @@ class LocalDashboard(Dashboard):
                 icon_url=rest_server_info(dict(metadata, id=str(gid))).get('icon_url') or saved.get('icon_url'),
                 prefix=config.command_prefix if config else 'uwu',
                 autoresponder=config.autoresponder_enabled if config else False,
+                features=feature_states(getattr(config, 'disabled_features', None) or ()),
                 exempt=gid == self.bot.settings.quota_exempt_guild_id,
                 limit=limits.get(gid, 40),
                 **usage.get(gid, dict(today_chats=0, today_commands=0, week_chats=0, week_commands=0))))

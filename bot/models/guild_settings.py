@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Integer, String, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from bot.database.base import Base
@@ -26,6 +26,9 @@ class GuildSettings(Base):
     )
     autoresponder_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
+    )
+    disabled_features: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default="[]"
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -12,7 +12,7 @@ async def reply_to_expired_game(bot, interaction):
         return
     custom_id = (interaction.data or {}).get("custom_id", "")
     footer = " ".join(embed.footer.text or "" for embed in message.embeds)
-    recognized = custom_id.startswith(("meyaya:scramble:", "meyaya:solo:", "meyaya:duel:", "meyaya:rebirth:")) or (
+    recognized = custom_id.startswith(("meyaya:scramble:", "meyaya:solo:", "meyaya:duel:", "meyaya:rebirth:", "meyaya:pair:")) or (
         "Only the player who started this puzzle" in footer
         or "Ends after 3 minutes without a choice" in footer
         or "Replay available for 3 minutes" in footer
@@ -25,6 +25,8 @@ async def reply_to_expired_game(bot, interaction):
         ("FunCog", "scramble_views"),
         ("SoloGamesCog", "views"),
         ("FantasyCog", "views"),
+        ("ShipCog", "pair_views"),
+        ("FunCog", "pair_views"),
     ):
         cog = bot.get_cog(cog_name)
         for view in getattr(cog, attribute, ()):
@@ -35,11 +37,18 @@ async def reply_to_expired_game(bot, interaction):
                     f"meyaya:solo:{view.id}:",
                     f"meyaya:duel:{getattr(view, 'token', '')}:",
                     f"meyaya:rebirth:{getattr(view, 'token', '')}:",
+                    f"meyaya:pair:{getattr(view, 'token', '')}:",
                 )
             )
             if (owns_message or owns_id) and not view.is_finished():
                 return
     if interaction.response.is_done():
+        return
+    if custom_id.startswith('meyaya:pair:'):
+        try:
+            await interaction.response.send_message('This random-pair button expired or Meyaya restarted. Open `/ship` or `/bestiescore` for a fresh one.', ephemeral=True)
+        except (discord.InteractionResponded, discord.HTTPException):
+            pass
         return
     try:
         await interaction.response.send_message(

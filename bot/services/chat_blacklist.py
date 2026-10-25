@@ -2,6 +2,9 @@
 
 import re
 import unicodedata
+import time
+from collections import OrderedDict
+from bot.services.chat_boundaries import direct_hostility, model_hostility_eligible
 from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert
 from bot.models.chat_blacklist import ChatBlacklist
@@ -45,21 +48,59 @@ class ChatBlacklistService:
         self.sessions = sessions
         self.blocked = frozenset()
         self.ready = False
+        self.ai_only = frozenset()
+        self._rudeness = OrderedDict()
+        self._pending_rudeness = set()
 
     async def load(self):
         async with self.sessions() as session:
             rows = (
                 await session.execute(
-                    select(ChatBlacklist.guild_id, ChatBlacklist.user_id).where(
+                    select(ChatBlacklist.guild_id, ChatBlacklist.user_id, ChatBlacklist.source).where(
                         ChatBlacklist.active.is_(True)
                     )
                 )
             ).all()
         self.blocked = frozenset((row[0], row[1]) for row in rows)
+        self.ai_only = frozenset((row[0], row[1]) for row in rows if len(row) > 2 and row[2] == 'ai_rudeness')
         self.ready = True
 
     def is_blocked(self, guild_id, user_id):
-        return guild_id is not None and (not self.ready or (guild_id, user_id) in self.blocked)
+        return guild_id is not None and (not self.ready or (guild_id, user_id) in self.blocked or (guild_id, user_id) in self._pending_rudeness)
+
+    def is_command_blocked(self, guild_id, user_id):
+        key = (guild_id, user_id)
+        return self.is_blocked(guild_id, user_id) and key not in self.ai_only and key not in self._pending_rudeness
+
+    async def note_rudeness(self, guild_id, user_id, text, *, message_id, directed=False, signal=None):
+        if self.is_blocked(guild_id, user_id):
+            return True
+        hostile = direct_hostility(text, directed=directed)
+        # A model signal extends language coverage, but only for a directly
+        # addressed new message. Quotes and requests to interpret text do not count.
+        if not hostile and signal == 'rude':
+            hostile = model_hostility_eligible(text, directed=directed)
+        if not hostile:
+            return False
+        now = time.monotonic()
+        key = (guild_id, user_id)
+        entries = [(stamp, mid) for stamp, mid in self._rudeness.get(key, ()) if now - stamp < 1800]
+        if any(mid == message_id for _, mid in entries):
+            return len(entries) >= 3
+        entries.append((now, message_id))
+        self._rudeness[key] = entries[-3:]
+        self._rudeness.move_to_end(key)
+        while len(self._rudeness) > 2048:
+            self._rudeness.popitem(last=False)
+        if len(entries) < 3:
+            return False
+        self._pending_rudeness.add(key)
+        try:
+            await self.set(guild_id, user_id, active=True, source='ai_rudeness',
+                           reason='Repeated direct hostility toward Meyaya: 3 distinct messages within 30 minutes. AI chat only.')
+        finally:
+            self._pending_rudeness.discard(key)
+        return True
 
     async def set(self, guild_id, user_id, *, active, reason, source="manual", actor_id=None):
         async with self.sessions() as session:
@@ -81,6 +122,9 @@ class ChatBlacklistService:
             await session.commit()
         key = (guild_id, user_id)
         self.blocked = self.blocked | {key} if active else self.blocked - {key}
+        self.ai_only = self.ai_only | {key} if active and source == 'ai_rudeness' else self.ai_only - {key}
+        if not active:
+            self._rudeness.pop(key, None)
 
     async def inspect(self, guild_id, user_id, text):
         if self.is_blocked(guild_id, user_id):

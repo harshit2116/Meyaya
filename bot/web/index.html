@@ -22,6 +22,7 @@
       </div>
       <div id="server-navigation" hidden><p id="sidebar-server-name" class="sidebar-server-name"></p>
         <button class="server-nav" data-panel="main">◈ Main page</button>
+        <button class="server-nav" data-panel="edit">⚙ Edit server</button>
         <button class="server-nav" data-panel="chat">♡ AI chat</button>
         <button class="server-nav" data-panel="commands">⌘ Command history</button>
         <button class="server-nav" data-panel="diagnostics">⌁ History &amp; diagnostics</button>
@@ -59,8 +60,9 @@
         <div id="server-main-chrome"><button id="server-back" class="quiet" type="button">← All servers</button><div class="toolbar"><div id="server-heading" class="server-heading"></div><button id="server-refresh" class="quiet" type="button">Refresh server</button></div></div>
         <div id="server-panel-main" class="server-panel">
         <p id="server-state" class="result-state" role="status"></p>
-        <div class="server-layout"><section id="server-detail-content" class="panel server-detail-panel"></section><section id="server-controls" class="panel server-detail-panel"></section></div>
+        <div class="server-layout"><section id="server-detail-content" class="panel server-detail-panel"></section><section id="server-usage" class="panel server-detail-panel"></section></div>
         </div>
+        <div id="server-panel-edit" class="server-panel" hidden><h2>Edit server</h2><p class="details">Manage this server's features and daily chat allowance. Changes are recorded in its settings history.</p><section id="server-controls" class="panel server-detail-panel"></section></div>
         <div id="server-panel-chat" class="server-panel" hidden></div>
         <div id="server-panel-diagnostics" class="server-panel" hidden><div class="toolbar"><h2>Server history &amp; diagnostics</h2><button id="diagnostics-refresh" class="quiet">Refresh</button></div><section id="server-insights" class="panel operations-panel"></section></div>
         <div id="server-panel-commands" class="server-panel" hidden>

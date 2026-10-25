@@ -42,7 +42,7 @@ class ByteCacheEntry:
 
 
 class RandomShipCommand(commands.HybridCommand):
-    """Accept the exact prefix-only `ship random` shortcut without changing /ship."""
+    """Accept a prefix-only random pair shortcut without changing slash member options."""
 
     async def _parse_arguments(self, ctx):
         index = ctx.view.index
@@ -67,6 +67,11 @@ class ShipCog(commands.Cog):
         self._card_cache: dict[object, ByteCacheEntry] = {}
         self._avatar_locks = WeakValueDictionary()
         self._random_picker = None
+        self.pair_views = set()
+
+    async def cog_unload(self):
+        for view in tuple(self.pair_views):
+            view.stop()
 
     async def _random_ship_pair(self, ctx):
         if ctx.guild is None:
@@ -118,10 +123,12 @@ class ShipCog(commands.Cog):
         else:
             async with background_typing(ctx.channel):
                 embed, file = await self._build_ship_response(user_one, user_two, ctx=ctx)
-        if file is None:
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send(embed=embed, file=file)
+        from bot.views.random_pair import RandomPairView
+        view = RandomPairView(self, getattr(ctx.guild, 'id', None), 'ship')
+        payload = dict(embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none())
+        if file is not None:
+            payload['file'] = file
+        view.message = await ctx.send(**payload)
 
     async def _build_ship_response(
         self,

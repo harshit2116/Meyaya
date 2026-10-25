@@ -42,6 +42,7 @@ from bot.services.profile_aesthetic import ProfileAestheticService
 from bot.services.chat_blacklist import ChatBlacklistService
 from bot.services.ai_guard import AIGuard
 from bot.logging.health import health
+from bot.services.guild_features import FeatureDisabled, command_feature
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,8 @@ class MeyayaBot(commands.Bot):
         self.started_at = time.monotonic()
         self._guild_prefixes: dict[int, str] = {}
         self._guild_autoresponders: dict[int, bool] = {}
+        self._guild_disabled_features = {}
+        self.add_check(self._feature_command_check)
         self._guild_chat_channels: dict[int, int | None] | None = None
         self.engine = build_async_engine(settings.database_url)
         self.session_factory: async_sessionmaker[AsyncSession] = build_session_factory(self.engine)
@@ -123,10 +126,26 @@ class MeyayaBot(commands.Bot):
         self.tree.interaction_check = self._blacklist_interaction_check
 
     async def _blacklist_interaction_check(self, interaction):
-        if self.chat_blacklist.is_blocked(interaction.guild_id, interaction.user.id):
+        if getattr(self.chat_blacklist, 'is_command_blocked', self.chat_blacklist.is_blocked)(interaction.guild_id, interaction.user.id):
             await interaction.response.defer(ephemeral=True)
             await interaction.delete_original_response()
             return False
+        feature = command_feature(getattr(getattr(interaction, 'command', None), 'qualified_name', None))
+        if feature and not self.feature_enabled(interaction.guild_id, feature):
+            await interaction.response.send_message(str(FeatureDisabled(feature)), ephemeral=True)
+            return False
+        return True
+
+    def feature_enabled(self, guild_id, feature):
+        return feature not in getattr(self, '_guild_disabled_features', {}).get(guild_id, ())
+
+    def cache_guild_features(self, guild_id, disabled):
+        self._guild_disabled_features[guild_id] = frozenset(disabled)
+
+    async def _feature_command_check(self, ctx):
+        feature = command_feature(getattr(ctx.command, 'qualified_name', None))
+        if feature and not self.feature_enabled(getattr(ctx.guild, 'id', None), feature):
+            raise FeatureDisabled(feature)
         return True
 
     @asynccontextmanager
@@ -285,6 +304,8 @@ class MeyayaBot(commands.Bot):
             message = f"I am missing `{original.param.name}`. Try `/help command:{command_name}`."
         elif isinstance(original, (commands.BadArgument, commands.UserInputError)):
             message = "I could not understand one of those arguments. Check `/help` for the format."
+        elif isinstance(original, FeatureDisabled):
+            message = str(original)
         elif isinstance(original, commands.CheckFailure):
             message = "You cannot use that command here."
         elif isinstance(original, SQLAlchemyError):
@@ -412,7 +433,7 @@ class MeyayaBot(commands.Bot):
         return
 
     async def on_message(self, message):
-        if self.chat_blacklist.is_blocked(
+        if getattr(self.chat_blacklist, 'is_command_blocked', self.chat_blacklist.is_blocked)(
             message.guild.id if message.guild else None, message.author.id
         ):
             return
@@ -478,6 +499,8 @@ class MeyayaBot(commands.Bot):
         return self._guild_autoresponders.get(guild_id, False)
 
     def chat_allowed(self, guild_id: int, channel_id: int) -> bool:
+        if not self.feature_enabled(guild_id, 'AI Chat'):
+            return False
         # If configuration could not load, don't accidentally bypass restrictions.
         if self._guild_chat_channels is None:
             return False
@@ -499,9 +522,11 @@ class MeyayaBot(commands.Bot):
                 responders = await GuildSettingsRepository(
                     session
                 ).list_autoresponders()
+                features = await GuildSettingsRepository(session).list_disabled_features()
             self._guild_chat_channels = channels
             self._guild_prefixes = prefixes
             self._guild_autoresponders = responders
+            self._guild_disabled_features = features
         except SQLAlchemyError:
             logger.warning("Could not reload server settings; keeping last known configuration")
 

@@ -46,6 +46,18 @@ def command_output_for(bot, channel_id: int, message_id: int) -> CommandOutput |
     return output
 
 
+def remember_output_message(bot, channel_id, message_id, command, invoker, summary):
+    """Keep follow-up answers aligned with the latest visible card, including rerolls."""
+    outputs = getattr(bot, '_meyaya_command_outputs', None)
+    if outputs is None:
+        outputs = bot._meyaya_command_outputs = OrderedDict()
+    outputs[(channel_id, message_id)] = (
+        time.monotonic(), CommandOutput(command, invoker.id, invoker.display_name[:80], summary))
+    outputs.move_to_end((channel_id, message_id))
+    while len(outputs) > _MAX_COMMAND_OUTPUTS:
+        outputs.popitem(last=False)
+
+
 class TimedContext(commands.Context):
     async def defer(self, *, ephemeral=False):
         if self.interaction is not None and self.interaction.response.is_done():
@@ -82,21 +94,8 @@ class TimedContext(commands.Context):
                     and not kwargs.get("ephemeral", False)
                     and getattr(sent, "id", None) is not None):
                 invoker = self.interaction.user if self.interaction is not None else self.author
-                outputs = getattr(self.bot, "_meyaya_command_outputs", None)
-                if outputs is None:
-                    outputs = OrderedDict()
-                    self.bot._meyaya_command_outputs = outputs
-                outputs[(self.channel.id, sent.id)] = (
-                    time.monotonic(),
-                    CommandOutput(
-                        command=command.qualified_name,
-                        invoker_id=invoker.id,
-                        invoker_name=invoker.display_name[:80],
-                        result_summary=getattr(self, "_meyaya_result_summary", ""),
-                    ),
-                )
-                while len(outputs) > _MAX_COMMAND_OUTPUTS:
-                    outputs.popitem(last=False)
+                remember_output_message(self.bot, self.channel.id, sent.id,
+                    command.qualified_name, invoker, getattr(self, "_meyaya_result_summary", ""))
             return sent
         finally:
             # Do not accidentally attach one card's data to a later response.

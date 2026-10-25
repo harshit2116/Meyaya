@@ -29,6 +29,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from bot.app import MeyayaBot
 from bot.services.usage import ChatLimitReached, is_silence
 from bot.services.autoresponder import reply_policy, is_conversation_closing
+from bot.services.chat_boundaries import is_low_effort_reply, direct_hostility
 from bot.services.elation import public_chat_channel
 from bot.services.ai_guard import AILimitReached
 from bot.prompts.composer import build_system_instruction
@@ -182,6 +183,10 @@ class ChatCog(commands.Cog):
             if not command_context.valid:
                 await message.reply("Meyaya chat is only available inside a server.")
             return
+        if not getattr(self.bot, 'feature_enabled', lambda *_: True)(message.guild.id, 'AI Chat'):
+            return
+        if is_low_effort_reply(message.content or '', has_attachments=bool(getattr(message, 'attachments', ())), screen_single_words=False):
+            return
         moderation = self.bot.get_cog("ModerationCog")
         if moderation and await moderation.should_block(message):
             return
@@ -221,12 +226,28 @@ class ChatCog(commands.Cog):
         elation = self.bot.get_cog("ElationCog")
         if elation and await elation.handle_message(message, reply_context):
             return
+        is_reply_to_meyaya = reply_context is not None and reply_context.author_id == self.bot.user.id
+        directed = self.bot.user in message.mentions or is_reply_to_meyaya
+        text = re.sub(rf'<@!?{self.bot.user.id}>', '', message.content or '').strip()
+        named_hostility = direct_hostility(text, directed=False)
+        hostile = named_hostility or direct_hostility(text, directed=directed)
+        previous_text = (reply_context.content + ' ' + reply_context.embed_summary
+                         if is_reply_to_meyaya else followup_question)
+        if not hostile and is_low_effort_reply(text, previous_text=previous_text,
+                has_attachments=bool(getattr(message, 'attachments', ()))):
+            return
+        note_rudeness = getattr(self.bot.chat_blacklist, 'note_rudeness', None)
+        if hostile and note_rudeness:
+            if command_context is None:
+                command_context = await self.bot.get_context(message)
+            if command_context.valid:
+                return
+            if await note_rudeness(message.guild.id, message.author.id, text,
+                    message_id=message.id, directed=directed):
+                return
         if message.mention_everyone:
             await self._maybe_proactive_reply(message, reply_context, mass_ping=True)
             return
-        is_reply_to_meyaya = (
-            reply_context is not None and reply_context.author_id == self.bot.user.id
-        )
         conversation_key = (message.guild.id, message.channel.id, message.author.id)
         if conversation_key not in self._chat_conversations:
             for key, candidate in self._chat_conversations.items():
@@ -244,7 +265,7 @@ class ChatCog(commands.Cog):
             and getattr(message, "reference", None) is None and not message.mentions
             and time.monotonic() - pending.last_received_at <= 2
         )
-        if self.bot.user not in message.mentions and not is_reply_to_meyaya and not is_continuation:
+        if self.bot.user not in message.mentions and not is_reply_to_meyaya and not is_continuation and not named_hostility:
             if pending is not None:
                 return
             if followup_question and not message.mentions and getattr(message, "reference", None) is None:
@@ -281,7 +302,6 @@ class ChatCog(commands.Cog):
 
         if await self.bot.chat_blacklist.inspect(message.guild.id, message.author.id, user_text):
             return
-
         llm = self.bot.build_llm_provider()
         if llm is None:
             await self.bot.request_log.record_message(message)
@@ -432,6 +452,7 @@ class ChatCog(commands.Cog):
         guild_id = message.guild.id
         context = await self._context_reads.read('channel', lambda: self._recent_proactive_messages(message, allow_fetch=False))
         instruction = build_system_instruction(profile="group", context_lines=[
+            self._direct_abuse_context(entries),
             "These incoming messages explicitly address Meyaya and are linked by a reply or shared topic. "
             "Answer together once. Keep verified speaker IDs distinct even when names match. "
             "Name people naturally when answering different points, without active pings. "
@@ -469,6 +490,7 @@ class ChatCog(commands.Cog):
             return
         if self._is_no_reply(reply.text):
             return
+
         text = self._render_custom_emojis(reply.text, self._usable_custom_emojis(message))
         for chunk in self._chunk_text(text):
             await message.reply(chunk, mention_author=False, allowed_mentions=discord.AllowedMentions.none())
@@ -554,6 +576,7 @@ class ChatCog(commands.Cog):
         if reply_context is not None and reply_context.command_name == "profilecheck":
             from bot.prompts.command_knowledge import PROFILE_HELP
             context_lines.append(PROFILE_HELP)
+        context_lines.append(self._direct_abuse_context(batch or [ChatEntry(message, user_text, reply_context)]))
         system_instruction = build_system_instruction(
             context_lines=context_lines,
             memory_lines=memory_lines,
@@ -621,6 +644,16 @@ class ChatCog(commands.Cog):
         # Never execute or persist hidden directives accompanying a silence token.
         if self._is_no_reply(reply.text):
             return
+
+        # Single-speaker assessments can extend hostility detection to languages
+        # outside the conservative lexical rules. Never attribute a group reply's
+        # aggregate tone to one person.
+        note_rudeness = getattr(self.bot.chat_blacklist, 'note_rudeness', None)
+        if note_rudeness and (not batch or len(batch) == 1):
+            directed = self.bot.user in message.mentions or (reply_context is not None and reply_context.author_id == self.bot.user.id)
+            if await note_rudeness(guild_id, message.author.id, user_text,
+                message_id=message.id, directed=directed, signal=getattr(reply, 'relationship_signal', None)):
+                return
 
         command_ran = await self._run_natural_command(context_message, reply.commands)
         if not command_ran:
@@ -693,6 +726,26 @@ class ChatCog(commands.Cog):
                     await session.commit()
             except SQLAlchemyError:
                 logger.exception("Failed to persist Meyaya memory; chat reply was sent")
+
+    def _direct_abuse_context(self, entries):
+        bot_id = getattr(getattr(self.bot, 'user', None), 'id', None)
+        speakers = []
+        for entry in entries:
+            mentions = getattr(entry.message, 'mentions', ())
+            directed = any(getattr(member, 'id', None) == bot_id for member in mentions)
+            directed = directed or (entry.reply_context is not None and entry.reply_context.author_id == bot_id)
+            if direct_hostility(entry.text, directed=directed):
+                speakers.append(entry.message.author.id)
+        if not speakers:
+            return ''
+        return (
+            'DIRECT ABUSE DETECTED IN CURRENT UNQUOTED MESSAGES. Verified speaker IDs: '
+            + ', '.join(map(str, dict.fromkeys(speakers)))
+            + '. Give those speakers a brief, cutting comeback in the language they used, '
+            'rather than pleading for politeness. Stay on their present words and behavior. '
+            'Other speakers still deserve helpful answers to their own questions. '
+            'No family counterattacks, invented personal claims, punishment announcements, or copied threats.'
+        )
 
     def _callback_gate(self):
         gate = getattr(self, "_memory_callbacks", None)
@@ -835,6 +888,11 @@ class ChatCog(commands.Cog):
             return
 
         content = (message.content or "").strip()
+        previous_text = (reply_context.content + ' ' + reply_context.embed_summary
+                         if reply_context is not None and reply_context.author_id == self.bot.user.id else followup_question)
+        if is_low_effort_reply(content, previous_text=previous_text,
+                has_attachments=bool(getattr(message, 'attachments', ()))):
+            return
         if not followup_question and is_conversation_closing(content, has_attachments=bool(getattr(message, "attachments", ()))):
             return
         if not content or (followup_question and len(content) > 1500):
