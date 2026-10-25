@@ -26,7 +26,7 @@ from bot.utils.command_context import remember_command_result
 logger = logging.getLogger(__name__)
 
 
-AVATAR_FETCH_SIZE = 256
+AVATAR_FETCH_SIZE = 512
 
 
 FILENAME = "ship.png"
@@ -105,11 +105,14 @@ class ShipCog(commands.Cog):
             attachment_filename=FILENAME if file is not None else None,
         )
         if ctx is not None:
+            from bot.services.ship_letter import ship_breakdown
+
             remember_command_result(
                 ctx, first_id=user_one.id, first_name=user_one.display_name,
                 second_id=user_two.id, second_name=user_two.display_name,
                 score=result.percentage, verdict=result.label,
-                method="Fresh random fun score; self-love scores 100. Not a real romantic assessment.",
+                breakdown=ship_breakdown(result.percentage),
+                method="Fresh random fun score; self-love scores 100. Breakdown bars are derived from that roll, not real romantic measurements.",
             )
         return embed, file
 

@@ -15,7 +15,7 @@ ANILIST_QUERY = """
 query ($id: Int!) {
   Character(id: $id) {
     id
-    name { full }
+    name { full native }
     image { large }
     siteUrl
     media(perPage: 5, sort: POPULARITY_DESC) {
@@ -43,6 +43,7 @@ class CharacterDisplay:
     image_url: str | None
     series: str
     source_url: str
+    native_name: str = ""
 
 
 def safe_anilist_image(url: str | None) -> bool:
@@ -118,6 +119,7 @@ class AniListCharacterProvider:
         return CharacterDisplay(
             provider_id=provider_id,
             name=(row.get("name") or {}).get("full") or "Unknown character",
+            native_name=(row.get("name") or {}).get("native") or "",
             image_url=image if safe_anilist_image(image) else None,
             series=series,
             source_url=f"https://anilist.co/character/{provider_id}",

@@ -53,6 +53,51 @@ class ElationCog(commands.Cog):
         for job in self.cleanup_jobs.values():
             job.cancel()
 
+    @commands.Cog.listener()
+    async def on_guild_remove(self, guild):
+        state = self.states.get(guild.id)
+        if not state or state["phase"] == "finished":
+            return
+        # Invalidate a model request or coronation before waiting for its lock.
+        # Keep all rollback evidence: members' nicknames survive a bot being kicked.
+        state["phase"] = "ending"
+        async with self.locks[guild.id]:
+            state["interrupted"] = True
+            self.store.save(state)
+            self.history.pop(guild.id, None)
+        logger.info("Elation interrupted by guild removal guild=%s", guild.id)
+
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        state = self.states.get(guild.id)
+        if state and state["phase"] != "finished":
+            state["phase"] = "ending"
+            self.store.save(state)
+            # Restore only. Never resume a takeover after rejoining.
+            await self.finish(guild.id)
+
+    @staticmethod
+    def restart_blocker(state):
+        """Shared by begin and status so an idle cooldown is never hidden."""
+        if not state:
+            return None
+        phase = state["phase"]
+        if phase in {"starting", "active"}:
+            return (f"Elation is **{phase}** in <#{state['channel_id']}>. "
+                    "Use `/elation stop` to end it.")
+        if phase != "finished":
+            channel = "done" if state.get("channel_restored") else "pending"
+            return ("Elation has ended, but restoration is still pending: "
+                    f"**{len(state['nicknames'])} nickname(s)**, channel restoration **{channel}**. "
+                    "I'll retry automatically. Check Manage Channels, Manage Nicknames, "
+                    "Change Nickname and my role position before starting another event.")
+        restart = state.get("restart_after", 0)
+        if time.time() < restart:
+            return ("No Elation event is active. The **15-minute restart cooldown** is still running. "
+                    f"You can begin again <t:{int(restart + 0.999)}:R> "
+                    f"(<t:{int(restart + 0.999)}:T>).")
+        return None
+
     @tasks.loop(seconds=15)
     async def cleanup(self):
         for gid, state in list(self.states.items()):
@@ -62,6 +107,8 @@ class ElationCog(commands.Cog):
 
     async def cleanup_guild(self, gid, state):
         try:
+            if self.bot.get_guild(gid) is None:
+                return  # No Discord API retries while Meyaya is absent.
             for mid, record in list(state.get("scenes", {}).items()):
                 if time.time() >= record["expires"]:
                     await self.remove_scene(state, mid)
@@ -106,8 +153,9 @@ class ElationCog(commands.Cog):
         gid = ctx.guild.id
         async with self.locks[gid]:
             prior = self.states.get(gid)
-            if prior and (prior["phase"] != "finished" or time.time() < prior["restart_after"]):
-                await ctx.send("An event is active, restoration is pending, or the 15-minute restart cooldown is still running.")
+            blocker = self.restart_blocker(prior)
+            if blocker:
+                await ctx.send(blocker, allowed_mentions=discord.AllowedMentions.none())
                 return
             if not 2 <= minutes <= 10:
                 await ctx.send("Choose between 2 and 10 minutes.")
@@ -138,12 +186,18 @@ class ElationCog(commands.Cog):
                     if isinstance(getattr(edited_channel, "name", None), str):
                         state["assigned_name"] = edited_channel.name
                         self.store.save(state)
+                    if state["phase"] != "starting":
+                        raise RuntimeError("Elation coronation was interrupted by guild removal")
                     me = await ctx.guild.fetch_member(self.bot.user.id)
+                    if state["phase"] != "starting":
+                        raise RuntimeError("Elation coronation was interrupted by guild removal")
                     state["nicknames"][str(me.id)] = {
                         "original": me.nick, "assigned": state["mask"]["nickname"], "changes": 1,
                     }
                     self.store.save(state)
                     await me.edit(nick=state["mask"]["nickname"], reason=REASON)
+                    if state["phase"] != "starting":
+                        raise RuntimeError("Elation coronation was interrupted by guild removal")
                     await self.send_scene(ctx, state, "MEYAYA ELATION: THE MASK IS ON",
                         f"**{state['mask']['emoji']} {state['mask']['name']}**\n"
                         f"Tonight your host is **{state['mask']['nickname']}**. "
@@ -157,6 +211,8 @@ class ElationCog(commands.Cog):
                         f"**The Unwinnable Debate · Round 1**\n## {state['round']['proposition']}\n\n"
                         "Convince me otherwise. I promise to be perfectly unreasonable."),
                         allowed_mentions=discord.AllowedMentions.none())
+                if state["phase"] != "starting":
+                    raise RuntimeError("Elation coronation was interrupted by guild removal")
                 state["phase"] = "active"
                 self.store.save(state)
             except Exception:
@@ -205,8 +261,10 @@ class ElationCog(commands.Cog):
             await ctx.send("Elation is disabled: saved restoration records need repair by the bot operator.")
             return
         state = self.states.get(ctx.guild.id)
-        if not state or state["phase"] == "finished":
-            await ctx.send("The crown is resting. No Elation event is active.")
+        if not state or state["phase"] not in {"starting", "active"}:
+            await ctx.send(self.restart_blocker(state) or
+                           "The crown is resting. No Elation event is active. You can use `/elation begin`.",
+                           allowed_mentions=discord.AllowedMentions.none())
             return
         await ctx.send(f"Elation: **{state['phase']}** in <#{state['channel_id']}> · "
                        f"{max(0, int(state['ends_at'] - time.time()))} seconds left · "
@@ -242,6 +300,8 @@ class ElationCog(commands.Cog):
                 return
             state["phase"] = "ending"
             self.store.save(state)
+            if self.bot.get_guild(gid) is None:
+                return  # Retain rollback records until she rejoins.
             # Restore people first, so a channel rename rate limit cannot hold their nicknames.
             for uid in list(state["nicknames"]):
                 await self.restore_member(state, int(uid))
@@ -267,7 +327,8 @@ class ElationCog(commands.Cog):
                     try:
                         await channel.send("**Elation has ended.** The mask is off.\n"
                                            "Congratulations! You've proven I was wrong. Unfortunately, being wrong was part of my plan.\n"
-                                           "**ACHIEVEMENT UNLOCKED: YOU FOUGHT THE LAW AND THE LAW WAS A CLOWN.** 🌸",
+                                           "**ACHIEVEMENT UNLOCKED: YOU FOUGHT THE LAW AND THE LAW WAS A CLOWN.** 🌸\n"
+                                           f"Elation can begin again <t:{int(state['restart_after'] + 0.999)}:R> (15-minute cooldown).",
                                            allowed_mentions=discord.AllowedMentions.none())
                     except discord.HTTPException:
                         pass
@@ -383,7 +444,7 @@ class ElationCog(commands.Cog):
 
     async def remove_scene(self, state, mid, message=None):
         record = state.get("scenes", {}).get(mid)
-        if record is None:
+        if record is None or self.bot.get_guild(state["guild_id"]) is None:
             return
         try:
             async with asyncio.timeout(12):
@@ -432,6 +493,8 @@ class ElationCog(commands.Cog):
         try:
             async with asyncio.timeout(12):
                 member = await guild.fetch_member(uid)
+                if state["phase"] != "active":
+                    return
                 if (member.bot or uid == guild.owner_id or member.top_role >= guild.me.top_role
                         or not guild.me.guild_permissions.manage_nicknames):
                     return

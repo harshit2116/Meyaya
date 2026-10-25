@@ -384,8 +384,8 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "rate", "rate <thing>", "Give anything a random score and verdict.", "Fun and Scores"
     ),
     HelpCommand(
-        "reddit", "reddit <post> [| custom comment]",
-        "Make a Reddit-style post in r/server-name, with your avatar and Meyaya's reply.",
+        "reddit", "reddit <post> [| reply direction]",
+        "Create an r/AskServerName thread with the server icon and AI replies from Meyaya and you as OP.",
         "Fun and Scores",
     ),
     HelpCommand("duck", "duck [@member]", "Send your avatar, or a member's, into the depths with an animated duck card.", "Fun and Scores"),
