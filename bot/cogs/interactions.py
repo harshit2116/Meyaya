@@ -16,7 +16,7 @@ from bot.app import MeyayaBot
 from bot.services.interactions import InteractionDefinition, InteractionResult
 from bot.utils.embeds import build_interaction_embed, meyaya_embed
 from bot.views.interactions import InteractionResponseView
-from bot.views.help import HelpView, build_help_embed
+from bot.views.help import HelpView, can_attach_help_art
 
 logger = logging.getLogger(__name__)
 
@@ -231,15 +231,11 @@ class InteractionsCog(commands.Cog):
                 bot_mention=bot_mention,
                 command_prefix=command_prefix,
                 bot=bot,
+                command_name=command,
+                illustrated=can_attach_help_art(interaction.channel, interaction.guild),
             )
             await interaction.response.send_message(
-                embed=build_help_embed(
-                    bot_mention=bot_mention,
-                    command_prefix=command_prefix,
-                    command_name=command,
-                    bot=bot,
-                ),
-                view=view,
+                view=view, files=view.files(), allowed_mentions=discord.AllowedMentions.none(),
             )
             view.message = await interaction.original_response()
 
@@ -263,15 +259,11 @@ class InteractionsCog(commands.Cog):
                 bot_mention=bot_mention,
                 command_prefix=command_prefix,
                 bot=bot,
+                command_name=command,
+                illustrated=can_attach_help_art(ctx.channel, ctx.guild),
             )
             view.message = await ctx.send(
-                embed=build_help_embed(
-                    bot_mention=bot_mention,
-                    command_prefix=command_prefix,
-                    command_name=command,
-                    bot=bot,
-                ),
-                view=view,
+                view=view, files=view.files(), allowed_mentions=discord.AllowedMentions.none(),
             )
 
         return commands.Command(

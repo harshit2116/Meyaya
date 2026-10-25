@@ -22,6 +22,7 @@ from bot.utils.embeds import meyaya_embed, score_bar
 from bot.utils.image_work import image_work, animation_work, BoundedImageGate
 from bot.utils.command_context import remember_command_result
 from bot.utils.display_mentions import display_mentions
+from bot.utils.member_names import MemberNames
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ class FunCog(commands.Cog):
 
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
+        self.member_names = MemberNames(bot)
         self.reddit_slots = BoundedImageGate(capacity=4, concurrency=2)
         self.duck_slots = BoundedImageGate(capacity=3)
         self.scramble_slots = BoundedImageGate(capacity=3)
@@ -153,7 +155,7 @@ class FunCog(commands.Cog):
             await ctx.send("I could not find anyone eligible to choose.")
             return
         winner_id = RNG.choice(eligible)
-        winner = ctx.guild.get_member(winner_id)
+        winner = await self.member_names.resolve(ctx.guild, winner_id, known=selected)
 
         safe_scenario = discord.utils.escape_mentions(discord.utils.escape_markdown(scenario))
         embed = meyaya_embed("Most Likely", icon="🎭")
@@ -163,7 +165,7 @@ class FunCog(commands.Cog):
         from bot.services.card_renderer import render_mostlikely
         png = await image_work(
             render_mostlikely, scenario,
-            getattr(winner, "display_name", None) or f"Member {winner_id}",
+            getattr(winner, "display_name", None) or "Unavailable member",
         )
         embed.set_image(url="attachment://mostlikely.png")
         if winner is not None:

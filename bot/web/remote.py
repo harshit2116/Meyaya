@@ -12,7 +12,8 @@ class RemoteDashboard(LocalDashboard):
     def __init__(self, settings):
         origin = settings.dashboard_remote_url.rstrip('/')
         parsed = urlsplit(origin)
-        tunnel = bool(getattr(settings, 'dashboard_ssh_host', '') and
+        tunnel = bool((getattr(settings, 'dashboard_ssh_host', '') or
+                       getattr(settings, 'dashboard_ssm_instance', '')) and
                       parsed.scheme == 'http' and parsed.hostname == '127.0.0.1')
         if ((parsed.scheme != 'https' and not tunnel) or not parsed.hostname or parsed.username or parsed.password
                 or parsed.path or parsed.query or parsed.fragment):

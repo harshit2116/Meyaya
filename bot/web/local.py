@@ -24,6 +24,7 @@ from bot.services.request_log import RequestLogService
 from bot.services.chat_blacklist import ChatBlacklistService
 from bot.web.dashboard import Dashboard
 from bot.web.server_info import rest_server_info, rest_member_preview
+from bot.web.tunnel import TunnelError
 
 
 class LocalBackend:
@@ -206,7 +207,10 @@ class LocalDashboard(Dashboard):
         return self.bot.get_guild(guild_id) is not None
 
     async def index(self, request):
-        response = await super().index(request)
+        # The hosted index is a streaming FileResponse, which has no .text.
+        # Local mode needs a small HTML transformation to bypass the login UI.
+        html = await asyncio.to_thread(Path(__file__).with_name('index.html').read_text, encoding='utf-8')
+        response = web.Response(text=html, content_type='text/html')
         response.text = response.text.replace('<body>', '<body data-local-dashboard="true">')
         response.text = response.text.replace('id="login" class="panel login"', 'id="login" class="panel login" hidden')
         response.text = response.text.replace('id="workspace" hidden', 'id="workspace"')
@@ -287,13 +291,15 @@ async def serve(port, *, open_browser=False):
         backend = LocalBackend(settings)
         dashboard = LocalDashboard(backend)
     try:
-        if settings.dashboard_ssh_host:
+        if settings.dashboard_ssh_host or settings.dashboard_ssm_instance:
             from bot.web.tunnel import start_tunnel
             tunnel = await start_tunnel(settings)
             async def monitor_tunnel():
                 nonlocal tunnel
                 while True:
                     await tunnel.wait()
+                    from bot.web.tunnel import stop_tunnel
+                    await stop_tunnel(tunnel)
                     print('AWS connection interrupted; reconnecting.', flush=True)
                     while True:
                         try:
@@ -339,6 +345,8 @@ def run():
         asyncio.run(serve(args.port, open_browser=args.open_browser))
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
+    except TunnelError as error:
+        raise SystemExit(f'Dashboard could not start: {error}') from None
     except Exception as error:
         # Do not print connection strings from database exception messages.
         raise SystemExit(f'Dashboard could not start ({type(error).__name__}). Check DATABASE_URL and whether the port is free.') from None

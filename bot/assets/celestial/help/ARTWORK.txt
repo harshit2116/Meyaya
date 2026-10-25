@@ -1,0 +1,7 @@
+Command Garden help illustrations, 25 October 2026
+
+Created with the built-in OpenAI imagegen tool. garden.jpg uses Meyaya's existing avatar as an identity reference: her pink hair, rose ornament, lavender eyes and fantasy clothing are preserved in a welcoming library-garden scene. discover.jpg illustrates profile style, fortunes and adventures; connect.jpg illustrates friendships, conversation and group fun. All are text-free illustrations, not screenshots of the Discord interface.
+
+Three static, optimized JPEG files total less than 600 KiB. Files are loaded once in a bounded immutable cache, attached on initial help delivery, and retained when users navigate the native Discord Components V2 guide. Commands, aliases, permissions, server prefixes and navigation remain native text and controls. No image generation or additional AI requests occur when help is used.
+
+The development artifact artifacts/help-art-prompts.json records the exact prompts. All images were produced with the built-in tool, not a CLI/API fallback.

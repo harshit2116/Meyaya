@@ -9,6 +9,7 @@ from discord.ext import commands
 from bot.app import MeyayaBot
 from bot.services.marriage import PendingProposalError, PendingProposalRegistry
 from bot.utils.embeds import meyaya_embed
+from bot.utils.member_names import MemberNames
 from bot.views.marriage import DivorceConfirmationView, MarriageProposalView
 
 MAX_VOW_LENGTH = 500
@@ -19,6 +20,7 @@ class MarriageCog(commands.Cog):
 
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
+        self.member_names = MemberNames(bot)
         self.pending = PendingProposalRegistry()
 
     @commands.hybrid_command(name="marry", description="Propose marriage to another member.")
@@ -51,8 +53,8 @@ class MarriageCog(commands.Cog):
             await ctx.send(f"{target.mention} is not married in the Meyaya universe.")
             return
 
-        partner = ctx.guild.get_member(summary.partner_id) if ctx.guild is not None else None
-        partner_name = partner.display_name if partner is not None else f"User {summary.partner_id}"
+        partner = await self.member_names.resolve(ctx.guild, summary.partner_id, historical=True)
+        partner_name = partner.display_name if partner is not None else "Unavailable member"
         embed = meyaya_embed(
             f"{target.display_name}'s Marriage",
             f"## {target.mention} + <@{summary.partner_id}>",

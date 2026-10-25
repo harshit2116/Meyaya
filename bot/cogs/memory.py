@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -13,6 +15,7 @@ from bot.models.meyaya_state import MeyayaUserState
 from bot.repositories.memories import MemoryRepository
 from bot.services.memory import MemoryOutcome, MemoryService
 from bot.utils.embeds import meyaya_embed
+from bot.utils.member_names import MemberNames
 
 MAX_MEMORY_LIST_LENGTH = 3800
 
@@ -22,6 +25,7 @@ class MemoryCog(commands.Cog):
 
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
+        self.member_names = MemberNames(bot)
 
     @commands.hybrid_command(
         name="memories",
@@ -128,10 +132,14 @@ class MemoryCog(commands.Cog):
             await self._send(ctx, f"Meyaya has not given anyone a nickname{target} yet.")
             return
 
+        members = await asyncio.gather(*(
+            self.member_names.resolve(
+                ctx.guild, record.user_id, known=(member, ctx.author), historical=True,
+            ) for record in records
+        ))
         lines = []
-        for record in records:
-            guild_member = ctx.guild.get_member(record.user_id)
-            display_name = guild_member.display_name if guild_member else f"User {record.user_id}"
+        for record, guild_member in zip(records, members):
+            display_name = guild_member.display_name if guild_member else "Unavailable member"
             safe_name = discord.utils.escape_markdown(display_name)
             safe_nickname = discord.utils.escape_markdown(record.nickname or "")
             lines.append(f'**{safe_name}** - "{safe_nickname}"')
