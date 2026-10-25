@@ -335,7 +335,7 @@ async def serve(port, *, open_browser=False):
 
 def run():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--port', type=int, default=8080)
+    parser.add_argument('--port', type=int, default=16000)
     parser.add_argument('--open-browser', action='store_true', help='Open your browser once the dashboard is ready')
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:

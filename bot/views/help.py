@@ -179,7 +179,7 @@ def build_help_embed(
         return embed
 
     embed = meyaya_embed(
-        "Meyaya's Command Garden",
+        "Meyaya's Command Directory",
         description=(
             "Every available command is listed below, grouped by category.\n\n"
             f"**Quick lookup** · `/help command:profile` or `{command_prefix} h p`\n"
@@ -201,13 +201,36 @@ def build_help_embed(
     return embed
 
 
-# The overview is a guide to the directory, rather than a wall of every command.
-# Every category remains one selection away, and every command has a detail page.
-START_CATEGORIES=("Essentials","Voice Chat","Memory","Roleplay","Fact Checking","Server Admin")
-DISCOVER_CATEGORIES=("Profile Studio","Fantasy / Profile","Fortune / Tarot","Single Player Games")
-CONNECT_CATEGORIES=("Social","Social Reactions","Fun and Scores","Daily Picks","Relationships",
-                    "Multiplayer Games","Meyaya Court")
+# Every command is visible directly across these four directory tabs.
+DIRECTORY_PAGES = (
+    ("Discover", ("Essentials", "Profile Studio", "Fantasy / Profile", "Fortune / Tarot")),
+    ("Together", ("Social", "Social Reactions", "Fun and Scores", "Relationships")),
+    ("Play & stories", ("Multiplayer Games", "Single Player Games", "Meyaya Court", "Roleplay", "Daily Picks")),
+    ("Voice & server", ("Voice Chat", "Memory", "Fact Checking", "Server Admin")),
+)
 PAGE_SIZE=6
+
+# Directory copy stays brief; command pages retain the complete catalog text.
+DIRECTORY_SUMMARIES = {
+    "profile": "Your profile, relationships, activity, and bond with Meyaya.",
+    "profilecheck": "Review your avatar, banner, decoration, and profile style.",
+    "aura": "Turn your profile colors into a personal aura card.",
+    "duostyle": "Compare two profiles in a shared style card.",
+    "callingcard": "A collectible card shaped by your style and Meyaya bond.",
+    "summon": "Summon a character with rarity, traits, and a signature passive.",
+    "guardian": "Meet your soul-bound guardian or preview rare summons.",
+    "awaken": "Discover your permanent fantasy identity.",
+    "fantasyprofile": "View your awakened character and build.",
+    "rebirth": "Start a new fantasy build after confirmation.",
+    "dungeon": "A saved story adventure through ten worlds with Meyaya.",
+    "versus": "Challenge another member or face Meyaya herself.",
+    "bossfight": "Fight Meyaya or Veyra, or watch their cinematic clash.",
+    "elation": "Meyaya takes over the channel. Try to outwit your new queen.",
+    "serversetup": "Configure chat access, automatic replies, and moderation.",
+    "serverdashboard": "View this server's allowance, activity, and settings.",
+    "tarot": "Three illustrated cards for your past, present, and future.",
+    "fate": "Discover your archetype, strength, path, and next chapter.",
+}
 
 
 def _resolve(name, bot):
@@ -219,27 +242,17 @@ def _resolve(name, bot):
     return canonical if canonical in COMMANDS_BY_NAME else None
 
 
-def _art_for(category):
-    if category in DISCOVER_CATEGORIES:return "discover"
-    if category in CONNECT_CATEGORIES:return "connect"
-    return "garden"
-
-
 def can_attach_help_art(channel, guild):
     if guild is None or channel is None or getattr(guild,"me",None) is None:
         return True
     return channel.permissions_for(guild.me).attach_files
 
 
-def _category_names(categories):
-    return " · ".join(f"**{name}**" for name in categories)
-
-
 class HelpCategorySelect(discord.ui.Select):
     def __init__(self,parent):
         self.help_view=parent
-        options=[discord.SelectOption(label="The Command Garden",value="__overview__",emoji="🌸",
-                    description="Start here, discover a feature, or choose a category.",default=parent.category is None)]
+        options=[discord.SelectOption(label="Command directory",value="__overview__",emoji="🌸",
+                    description="Browse every command across four compact pages.",default=parent.category is None)]
         options.extend(discord.SelectOption(label=f"{category} · {len(commands_in_category(category))}",
             value=category,description=CATEGORY_DESCRIPTIONS[category][:100],
             emoji=CATEGORY_EMOJIS[category],default=parent.category==category) for category in CATEGORY_ORDER)
@@ -272,7 +285,7 @@ class HelpButton(discord.ui.Button):
 
 
 class HelpView(discord.ui.LayoutView):
-    """One native illustrated guide. Attach art once; navigation edits only components."""
+    """Compact native command directory. One banner upload; text-only navigation."""
     def __init__(self,*,owner_id,bot_mention,command_prefix="uwu",bot=None,command_name=None,illustrated=True):
         super().__init__(timeout=300)
         self.owner_id=owner_id
@@ -283,6 +296,7 @@ class HelpView(discord.ui.LayoutView):
         self.category=None
         self.command_name=None
         self.page=0
+        self.directory_page=0
         self.message=None
         self.unknown=None
         self._navigation=asyncio.Lock()
@@ -309,40 +323,43 @@ class HelpView(discord.ui.LayoutView):
         self.add_item(discord.ui.Container(*(item for item in items if item is not None),accent_color=color))
 
     def _overview(self):
-        prefix=discord.utils.escape_markdown(self.command_prefix)
-        unknown=(f"I couldn't find **{discord.utils.escape_markdown(discord.utils.escape_mentions(self.unknown))}**. "
-                 "Choose a category below, or try `/help command:profilecheck`.\n\n") if self.unknown else ""
-        self._container(self._image("garden"),discord.ui.TextDisplay(
-            "## 🌸 Meyaya's Command Garden\n"+unknown+
-            "A little personality, a little magic, and a lot to try together. Pick a category below to see its commands."),
-            discord.ui.TextDisplay(
-                f"**Start with a conversation** · Mention {self.bot_mention}, or use `/join` to bring her into voice.\n"
-                f"**Use commands your way** · `/profile` · `{prefix} profile` · {self.bot_mention} `profile`\n"
-                f"**Find one quickly** · `/help command:profilecheck` · `{prefix} help ship`"),
-            discord.ui.TextDisplay("-# Start here & useful tools\n"+_category_names(START_CATEGORIES)))
-        # Browsing should be available before the longer illustrated tour.
+        title, categories = DIRECTORY_PAGES[self.directory_page]
+        parts = [self._image("directory"), discord.ui.TextDisplay(
+            f"## 🌸 Meyaya's command directory\n"
+            f"**{len(COMMANDS)} commands · {len(CATEGORY_ORDER)} categories** · "
+            "Choose a tab below, or jump straight to a category.")]
+        if self.unknown:
+            safe = discord.utils.escape_mentions(discord.utils.escape_markdown(self.unknown))
+            parts.append(discord.ui.TextDisplay(f"I couldn't find **{safe}**. Try a command or category below."))
+        parts.append(discord.ui.TextDisplay(
+            f"**Chat naturally** · Mention {self.bot_mention}. She follows conversations and remembers shared moments.\n"
+            f"**Commands** · `/profile` or `{self.command_prefix} profile` · **Details** · `/help command:profilecheck`"))
+        self._container(*parts)
+        tabs = [HelpButton(self, label, f"directory:{index}",
+                 style=discord.ButtonStyle.primary if index == self.directory_page else discord.ButtonStyle.secondary)
+                for index, (label, _) in enumerate(DIRECTORY_PAGES)]
+        self.add_item(discord.ui.ActionRow(*tabs))
         self.add_item(discord.ui.ActionRow(HelpCategorySelect(self)))
-        self._container(self._image("discover"),discord.ui.TextDisplay(
-            "## ✨ Your style. Your story.\n"
-            "Turn your profile into a keepsake, read your fortune, or step into Meyaya's world.\n\n"
-            "**Style** · `/profilecheck` · `/aura` · `/duostyle` · `/callingcard`\n"
-            "**Adventure** · `/awaken` → `/dungeon` · `/summon`\n"
-            "**A little perspective** · `/fortune` · `/tarot` · `/fate`"),
-            discord.ui.TextDisplay("-# Explore these categories\n"+_category_names(DISCOVER_CATEGORIES)),color=0xBAA4E6)
-        self._container(self._image("connect"),discord.ui.TextDisplay(
-            "## 💞 Better with your people\n"
-            "Make a friendship card, start a playful debate, or give the group chat something to argue about.\n\n"
-            f"**Pair up** · `/ship` · `{prefix} ship random` · `/bestiescore`\n"
-            "**Play together** · `/elation` · `/showdown` · `/court`\n"
-            "**Everyday chaos** · `/reddit` · `/duck` · `/roast`"),
-            discord.ui.TextDisplay("-# Find your kind of fun\n"+_category_names(CONNECT_CATEGORIES)))
+        for category in categories:
+            entries = commands_in_category(category)
+            if category == "Social Reactions":
+                lines = [" · ".join(f"`/{entry.name}`" for entry in entries)]
+            else:
+                lines = [f"`/{entry.name}` · {DIRECTORY_SUMMARIES.get(entry.name, entry.description)}" for entry in entries]
+            self._container(discord.ui.TextDisplay(
+                f"### {CATEGORY_EMOJIS[category]} {category} · {len(entries)}\n"
+                + (CATEGORY_DESCRIPTIONS[category] + "\n" if category == "Social Reactions" else "")
+                + "\n".join(lines)))
+        self.add_item(discord.ui.TextDisplay(
+            f"-# {title} · {self.directory_page+1}/{len(DIRECTORY_PAGES)} · "
+            "Choose a category above for usage, examples, and permissions."))
 
     def _category_page(self):
         commands=commands_in_category(self.category)
         self.page=max(0,min(self.page,self.page_count-1))
         start=self.page*PAGE_SIZE
         entries=commands[start:start+PAGE_SIZE]
-        parts=[self._image(_art_for(self.category)),discord.ui.TextDisplay(
+        parts=[discord.ui.TextDisplay(
             f"## {CATEGORY_EMOJIS[self.category]} {self.category}\n{CATEGORY_DESCRIPTIONS[self.category]}")]
         for command in entries:
             aliases=command_aliases(command.name,self.bot)
@@ -354,13 +371,13 @@ class HelpView(discord.ui.LayoutView):
                 f"-# `{self.command_prefix} {usage}`{shortcut}"))
         parts.append(discord.ui.TextDisplay(
             f"-# Page {self.page+1}/{self.page_count} · {start+1}–{start+len(entries)} of {len(commands)} commands. "
-            "Choose a command below for examples and permissions."))
+            "Choose a command above for examples and permissions."))
         self._container(*parts)
 
     def _command_page(self):
         embed=build_help_embed(bot_mention=self.bot_mention,command_prefix=self.command_prefix,
                               command_name=self.command_name,bot=self.bot)
-        parts=[self._image(_art_for(self.category)),discord.ui.TextDisplay(
+        parts=[discord.ui.TextDisplay(
             f"## {CATEGORY_EMOJIS[self.category]} /{self.command_name}\n{embed.description}")]
         for field in embed.fields:
             if field.name=="Category":continue
@@ -380,17 +397,15 @@ class HelpView(discord.ui.LayoutView):
             else:self._category_page()
         else:self._overview()
         if self.command_name:
-            buttons=[HelpButton(self,"← Back to category","back"),HelpButton(self,"Command Garden","home")]
+            buttons=[HelpButton(self,"← Back to category","back"),HelpButton(self,"All commands","home")]
         elif self.category:
             buttons=[]
             if self.page_count>1:
                 buttons.extend([HelpButton(self,"← Previous","previous",disabled=self.page==0),
                                 HelpButton(self,"Next →","next",disabled=self.page>=self.page_count-1)])
-            buttons.append(HelpButton(self,"Command Garden","home"))
+            buttons.append(HelpButton(self,"All commands","home"))
         else:
-            buttons=[HelpButton(self,"Profile Studio","Profile Studio"),
-                     HelpButton(self,"Dungeon & Fantasy","Fantasy / Profile"),
-                     HelpButton(self,"Fortune & Tarot","Fortune / Tarot")]
+            buttons=[]
         buttons.append(discord.ui.Button(label="Support server",style=discord.ButtonStyle.link,url=SUPPORT_INVITE))
         self.add_item(discord.ui.ActionRow(*buttons))
 
@@ -408,6 +423,13 @@ class HelpView(discord.ui.LayoutView):
             elif command:
                 self.command_name=_resolve(command,self.bot)
                 if self.command_name:self.category=COMMANDS_BY_NAME[self.command_name].category
+            elif action and action.startswith("directory:"):
+                try:
+                    index=int(action.split(":",1)[1])
+                except ValueError:
+                    index=0
+                self.directory_page=max(0,min(len(DIRECTORY_PAGES)-1,index))
+                self.category=None;self.command_name=None;self.page=0;self.unknown=None
             elif action=="home":
                 self.category=None;self.command_name=None;self.page=0;self.unknown=None
             elif action=="back":self.command_name=None
@@ -416,7 +438,7 @@ class HelpView(discord.ui.LayoutView):
             elif action in CATEGORY_ORDER:
                 self.category=action;self.command_name=None;self.page=0;self.unknown=None
             self.refresh_items()
-            # All three small immutable art files were attached at initial send.
+            # The compact banner was attached at initial send.
             # Keep those attachments; only component JSON changes on navigation.
             await interaction.response.edit_message(view=self,allowed_mentions=discord.AllowedMentions.none())
 

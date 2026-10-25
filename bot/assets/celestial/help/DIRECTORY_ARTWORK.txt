@@ -1,0 +1,3 @@
+directory.jpg: Meyaya Command Directory banner using the existing original artwork from bot/assets/listing/meyaya-banner.png.
+Export: cropped to a 1440x336 header, with a dark text scrim, pink and lavender typography, and an optimized JPEG export. The character is not regenerated or redrawn.
+The single cached banner is uploaded once per guide. All command names, descriptions, usage, and controls remain native Discord components.
