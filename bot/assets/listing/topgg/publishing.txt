@@ -1,0 +1,14 @@
+Meyaya top.gg publishing package
+
+Information > Long Description: paste description.min.html.
+Appearance > Custom CSS: paste custom.css, with no style tags.
+Short Description: paste headline.txt.
+
+All listing selectors are scoped to .meyaya-showcase. No JavaScript is required on top.gg.
+The readable HTML source is description.html; the compact version avoids Markdown-generated line breaks.
+Assets are hosted in bot/assets/listing on GitHub. Eight commands are mapped in ../command-showcase.json.
+
+The local preview includes Copy HTML, Copy CSS, and Copy headline controls.
+Preview: http://127.0.0.1:16400/artifacts/meyaya-listing/topgg/redesign-preview.html
+
+Check both Information and Appearance previews after saving. The final top.gg renderer may sanitize HTML/CSS differently from the local browser.

@@ -160,6 +160,27 @@
         "bytes": 249838,
         "sha256": "3b488d85c83b31cd10d5112d2c6fcc1babf028abd36d47a1cff050d455f3ce81"
       }
+    },
+    {
+      "command": "reddit",
+      "slash_command": "/reddit",
+      "prefix_example": "uwu reddit Meyaya is biased",
+      "title": "Ask the server",
+      "file": "reddit.png",
+      "alt": "Reddit-style thread with the server icon, a reply from Meyaya, and a reply from the command author marked OP.",
+      "width": 1300,
+      "height": 1173,
+      "format": "PNG",
+      "bytes": 202505,
+      "sha256": "f9b1dc1c720d1febd996195d6175512bc651e663d169e252c71a8cbe9751af50",
+      "animated": false,
+      "web_preview": {
+        "file": "web/reddit.webp",
+        "width": 1300,
+        "height": 1173,
+        "bytes": 78800,
+        "sha256": "4354d2f0a1c38cd3314b3398ceae4e6502915019ca549845e552a1dbdae2685c"
+      }
     }
   ]
 }
