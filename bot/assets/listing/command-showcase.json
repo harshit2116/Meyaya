@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "purpose": "Command showcase assets for the Meyaya top.gg listing.",
+  "asset_base": "bot/assets/listing",
+  "notes": [
+    "These are saved command-output examples for the listing, not runtime renderer assets.",
+    "Files are byte-for-byte copies of the supplied originals; GIF playback timing is preserved.",
+    "Use the command entries below for the new listing. Other existing files remain available for older listing sections.",
+    "profilecheck.gif is the selected new profilecheck showcase; profilecheck.png is an older static example.",
+    "The prefix examples use uwu; individual servers may configure a different prefix.",
+    "The web directory contains compact still previews for the listing; the supplied originals are retained. The profilecheck poster is used when reduced motion is requested."
+  ],
+  "commands": [
+    {
+      "command": "profilecheck",
+      "slash_command": "/profilecheck",
+      "prefix_example": "uwu profilecheck",
+      "title": "Profile Check",
+      "file": "profilecheck.gif",
+      "alt": "Animated profile review with style scores and improvement advice.",
+      "width": 1000,
+      "height": 667,
+      "format": "GIF",
+      "bytes": 5619132,
+      "sha256": "2d20884205c8543ea9bc5e25d11a53c4a991b9d197a63ee36f1c501420006a1a",
+      "animated": true,
+      "frames": 56,
+      "duration_ms": 5600,
+      "loop": 0,
+      "web_preview": {
+        "file": "web/profilecheck-poster.webp",
+        "width": 1000,
+        "height": 667,
+        "bytes": 75200,
+        "sha256": "b2a72827d6dd02918f761c8ea13ea69e861d300ae28e90e864ac59782af09891"
+      }
+    },
+    {
+      "command": "ship",
+      "slash_command": "/ship",
+      "prefix_example": "uwu ship",
+      "title": "The Love Letter",
+      "file": "ship.png",
+      "alt": "Two member portraits with compatibility, chemistry, chaos, and harmony scores.",
+      "width": 1600,
+      "height": 866,
+      "format": "PNG",
+      "bytes": 395895,
+      "sha256": "0ea51118535511411ef79a88d8485ade3cc77ac4d660864f6afe6b3195484a8b",
+      "animated": false,
+      "web_preview": {
+        "file": "web/ship.webp",
+        "width": 1440,
+        "height": 779,
+        "bytes": 90142,
+        "sha256": "e97ec16a530be5e0be481d9ad1cbf7d16433e98f659d8dacf6a7d0fe982111f1"
+      }
+    },
+    {
+      "command": "bestiescore",
+      "slash_command": "/bestiescore",
+      "prefix_example": "uwu bestiescore",
+      "title": "Bestie Club",
+      "file": "bestiescore.png",
+      "alt": "Scrapbook friendship card with two portraits, bestie energy, and a friendship report.",
+      "width": 1672,
+      "height": 941,
+      "format": "PNG",
+      "bytes": 2298686,
+      "sha256": "8d13c5ad172aa22ecc3fd443aba9bf24e2598b7f2ed4128dd2f0182c8148c5b5",
+      "animated": false,
+      "web_preview": {
+        "file": "web/bestiescore.webp",
+        "width": 1440,
+        "height": 810,
+        "bytes": 175220,
+        "sha256": "afac51b30fad275e13b42004f5470d9806ed162f8539b0fa240e2db944e1168f"
+      }
+    },
+    {
+      "command": "duostyle",
+      "slash_command": "/duostyle",
+      "prefix_example": "uwu duostyle",
+      "title": "Duo Style",
+      "file": "duostyle.png",
+      "alt": "Side-by-side profile style comparison with palettes, reflections, and color convergence.",
+      "width": 1600,
+      "height": 900,
+      "format": "PNG",
+      "bytes": 1479668,
+      "sha256": "ceb3eb687102faf6853cf53ae179f271072a8fd0a52382f2fd21e2c26e0ca0a8",
+      "animated": false,
+      "web_preview": {
+        "file": "web/duostyle.webp",
+        "width": 1440,
+        "height": 810,
+        "bytes": 177506,
+        "sha256": "29127816831fa2eab043c56ca5d2892df730c8aef0a44ad88c20aa40436927c7"
+      }
+    },
+    {
+      "command": "aura",
+      "slash_command": "/aura",
+      "prefix_example": "uwu aura",
+      "title": "Aura Archive",
+      "file": "aura.png",
+      "alt": "Profile aura card with archetype, essence, signature, affinity, and profile colors.",
+      "width": 1500,
+      "height": 1000,
+      "format": "PNG",
+      "bytes": 183695,
+      "sha256": "213b5dc34d85ff8e620a6876a25787ca2e8111574f27df761e45dd1799b8e3a9",
+      "animated": false,
+      "web_preview": {
+        "file": "web/aura.webp",
+        "width": 1440,
+        "height": 960,
+        "bytes": 95232,
+        "sha256": "9ce2161651e227a6ae0c40bb546d6cb1d13e6d1a2fc40abe67b67d044f5cd07d"
+      }
+    },
+    {
+      "command": "fortune",
+      "slash_command": "/fortune",
+      "prefix_example": "uwu fortune",
+      "title": "Daily Fortune",
+      "file": "fortune.png",
+      "alt": "Daily fortune with member portrait, luck, lucky number, color, theme, omen, and guidance.",
+      "width": 1400,
+      "height": 1120,
+      "format": "PNG",
+      "bytes": 414519,
+      "sha256": "98e92ba20bedca0f02e784db284697cb4c62103a80d3b49ab1a0b1695d922e93",
+      "animated": false,
+      "web_preview": {
+        "file": "web/fortune.webp",
+        "width": 1400,
+        "height": 1120,
+        "bytes": 106392,
+        "sha256": "17789c030d27895af25f1ad7c78464414901f670622827a5188ef69e19852dfc"
+      }
+    },
+    {
+      "command": "fate",
+      "slash_command": "/fate",
+      "prefix_example": "uwu fate",
+      "title": "Fate",
+      "file": "fate.png",
+      "alt": "Illustrated fate reading with archetype, path, core strength, next chapter, guidance, and omen.",
+      "width": 1421,
+      "height": 1107,
+      "format": "PNG",
+      "bytes": 2018688,
+      "sha256": "9536544698d10f7736b0ac0b405aa58c991e5b2fda444984226051cd65def7eb",
+      "animated": false,
+      "web_preview": {
+        "file": "web/fate.webp",
+        "width": 1421,
+        "height": 1107,
+        "bytes": 249838,
+        "sha256": "3b488d85c83b31cd10d5112d2c6fcc1babf028abd36d47a1cff050d455f3ce81"
+      }
+    }
+  ]
+}
