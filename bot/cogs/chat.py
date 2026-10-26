@@ -30,6 +30,10 @@ from bot.app import MeyayaBot
 from bot.services.usage import ChatLimitReached, is_silence
 from bot.services.autoresponder import reply_policy, is_conversation_closing
 from bot.services.chat_boundaries import is_low_effort_reply, is_empty_reply, direct_hostility, ShortReplyBudget
+from bot.services.conversation_quality import (
+    RecentReplyStyle, command_output, external_command, plain_reply, prose_only,
+    temporal_context, theatrical_requested, time_record, utc_time,
+)
 from bot.services.elation import public_chat_channel
 from bot.services.ai_guard import AILimitReached
 from bot.prompts.composer import build_system_instruction
@@ -64,7 +68,6 @@ MAX_BATCH_MESSAGES = 6
 MAX_BATCH_TEXT_LENGTH = 6000
 MAX_BATCH_REPLY_CONTEXT = 12000
 MAX_CUSTOM_EMOJIS_IN_PROMPT = 200
-CUSTOM_EMOJI_ALIAS = re.compile(r"(?<!<):([A-Za-z0-9_]{2,32}):(?!\d+>)")
 
 DAILY_COMMAND_TERMS = {
     "dumb": r"dumbest(?:\s+(?:person|member))?",
@@ -111,6 +114,7 @@ class ReplyContext:
     command_invoker_name: str | None = None
     command_result_summary: str = ""
     ancestors: tuple[ReplyContext, ...] = ()
+    created_at: datetime | None = None
 
 
 @dataclass(slots=True)
@@ -152,6 +156,7 @@ class ChatCog(commands.Cog):
         self._chat_conversations: dict[tuple[int, int, int], ChatConversation] = {}
         self._closing_chats = False
         self._short_replies = ShortReplyBudget()
+        self._reply_style = RecentReplyStyle()
 
     async def cog_unload(self) -> None:
         self._closing_chats = True
@@ -183,6 +188,8 @@ class ChatCog(commands.Cog):
             command_context = await self.bot.get_context(message)
             if not command_context.valid:
                 await message.reply("Meyaya chat is only available inside a server.")
+            return
+        if external_command(message.content or '', self.bot.user.id, getattr(message, 'mentions', ())):
             return
         if not getattr(self.bot, 'feature_enabled', lambda *_: True)(message.guild.id, 'AI Chat'):
             return
@@ -462,6 +469,8 @@ class ChatCog(commands.Cog):
         instruction = build_system_instruction(profile="group", context_lines=[
             self._direct_abuse_context(entries),
             self._short_reply_context(entries),
+            self._reply_style.instruction(guild_id, message.channel.id),
+            temporal_context(message, entries[-1].reply_context),
             "These incoming messages explicitly address Meyaya and are linked by a reply or shared topic. "
             "Answer together once. Keep verified speaker IDs distinct even when names match. "
             "Name people naturally when answering different points, without active pings. "
@@ -503,9 +512,12 @@ class ChatCog(commands.Cog):
         if not self._short_turns_available(entries):
             return
 
-        text = self._render_custom_emojis(reply.text, self._usable_custom_emojis(message))
+        text = self._display_reply(message, reply.text, self._usable_custom_emojis(message), entries=entries)
+        if not text:
+            return
         for chunk in self._chunk_text(text):
             await message.reply(chunk, mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+        self._reply_style.remember(guild_id, message.channel.id, text)
         self._record_short_reply(entries)
         self._remember_followup(message, text)
         await self._log_chat_entries(message, entries, response=text)
@@ -515,6 +527,7 @@ class ChatCog(commands.Cog):
         payload = [{"speaker_id": entry.message.author.id,
                     "speaker": ChatCog._speaker_label(entry.message.author),
                     "message_id": entry.message.id, "text": entry.text,
+                    "timing": time_record(getattr(entry.message, 'created_at', None)),
                     "reply_to_message_id": (entry.reply_context.message_id if entry.reply_context else
                         getattr(getattr(entry.message, 'reference', None), 'message_id', None)),
                     "reply_unavailable": getattr(entry.message, 'reference', None) is not None and entry.reply_context is None}
@@ -591,6 +604,8 @@ class ChatCog(commands.Cog):
             context_lines.append(PROFILE_HELP)
         context_lines.append(self._direct_abuse_context(batch or [ChatEntry(message, user_text, reply_context)]))
         context_lines.append(self._short_reply_context(batch or [ChatEntry(message, user_text, reply_context)]))
+        context_lines.extend((temporal_context(message, reply_context),
+                             self._reply_style.instruction(guild_id, message.channel.id)))
         system_instruction = build_system_instruction(
             context_lines=context_lines,
             memory_lines=memory_lines,
@@ -676,9 +691,13 @@ class ChatCog(commands.Cog):
         if not command_ran:
             if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):
                 return
-            rendered_reply = self._render_custom_emojis(reply.text, usable_emojis)
+            rendered_reply = self._display_reply(message, reply.text, usable_emojis, entries=batch,
+                                                failed_command=bool(reply.commands))
+            if not rendered_reply:
+                return
             for chunk in self._chunk_text(rendered_reply):
                 await message.reply(chunk)
+            self._reply_style.remember(guild_id, message.channel.id, rendered_reply)
             self._record_short_reply(batch or [ChatEntry(message, user_text, reply_context)])
             self._remember_followup(message, rendered_reply)
             await self._mark_followup_surfaced(memory_lines)
@@ -692,8 +711,9 @@ class ChatCog(commands.Cog):
                 message.channel.id,
                 message.author.id,
                 user_prompt,
-                reply.text,
+                rendered_reply,
                 speaker_label=self._speaker_label(message.author),
+                user_created_at=getattr(message, 'created_at', None),
             )
 
         await self._record_meyaya_conversation(
@@ -918,6 +938,9 @@ class ChatCog(commands.Cog):
 
         if mass_ping and not public_chat_channel(message.channel):
             return
+        if external_command(getattr(message, 'content', '') or '', getattr(getattr(self.bot, 'user', None), 'id', None),
+                            getattr(message, 'mentions', ())):
+            return
         # Explicit replies between members belong to those members. An unresolved
         # reference is ambiguous too; do not guess that Meyaya was addressed.
         if (reply_context is not None and reply_context.author_id != self.bot.user.id
@@ -1059,6 +1082,8 @@ class ChatCog(commands.Cog):
                 )
             if low_effort:
                 context_lines.append(self._short_reply_context([ChatEntry(message, content, reply_context)]))
+            context_lines.extend((temporal_context(message, reply_context),
+                                 self._reply_style.instruction(guild_id, channel_id)))
             if followup_question:
                 context_lines.append(
                     "Follow-up relevance gate: you recently asked THIS member a question. "
@@ -1106,12 +1131,15 @@ class ChatCog(commands.Cog):
                 return
             if low_effort and not self._short_replies.allows(guild_id, channel_id, message.author.id):
                 return
-            rendered_reply = self._render_custom_emojis(reply.text, usable_emojis)
+            rendered_reply = self._display_reply(message, reply.text, usable_emojis)
+            if not rendered_reply:
+                return
             await message.reply(
                 rendered_reply[:MAX_DISCORD_MESSAGE_LENGTH],
                 mention_author=False,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
+            self._reply_style.remember(guild_id, channel_id, rendered_reply[:MAX_DISCORD_MESSAGE_LENGTH])
             self._short_replies.delivered(guild_id, channel_id, message.author.id, low_effort=low_effort)
             self._remember_followup(message, rendered_reply[:MAX_DISCORD_MESSAGE_LENGTH])
             await self._mark_followup_surfaced(memory_lines)
@@ -1126,7 +1154,8 @@ class ChatCog(commands.Cog):
             self._last_proactive_channel[channel_id] = now
             if chat_memory is not None:
                 await chat_memory.append_turn(channel_id, message.author.id, prompt,
-                    rendered_reply[:MAX_DISCORD_MESSAGE_LENGTH], speaker_label=self._speaker_label(message.author))
+                    rendered_reply[:MAX_DISCORD_MESSAGE_LENGTH], speaker_label=self._speaker_label(message.author),
+                    user_created_at=getattr(message, 'created_at', None))
             if redis is not None:
                 try:
                     await redis.set(guild_key, "1", ex=guild_cooldown)
@@ -1163,6 +1192,7 @@ class ChatCog(commands.Cog):
                 rows[item.id] = dict(message_id=str(item.id), speaker_id=str(item.author.id),
                     speaker=str(getattr(item.author, 'display_name', item.author.name))[:80],
                     is_meyaya=item.author.id == self.bot.user.id,
+                    **time_record(getattr(item, 'created_at', None), now=getattr(message, 'created_at', None)),
                     text=content[:400], reply_to=str(item.reference.message_id) if getattr(item, 'reference', None) and item.reference.message_id else None)
         # Select before formatting: a large gateway cache still produces only
         # twelve speaker records, rather than constructing and sorting every row.
@@ -1250,20 +1280,32 @@ class ChatCog(commands.Cog):
         return (
             "Usable custom Discord emoji aliases in this channel: "
             f"{aliases}. You may naturally use zero, one, or at most two of these in a reply. "
-            "Use the exact :name: alias and never invent an emoji name. Do not force emojis into "
+            "Use the exact :name: alias, never raw <...> emoji markup or invented IDs/names. Do not force emojis into "
             "serious, sensitive, or factual answers."
         )
 
     @staticmethod
     def _render_custom_emojis(text: str, emojis: tuple[discord.Emoji, ...]) -> str:
-        """Convert only known aliases into Discord custom emoji markup."""
-
-        by_name = {emoji.name.casefold(): str(emoji) for emoji in emojis}
+        """Canonicalize approved aliases/markup; raw IDs cannot bypass validation or limits."""
+        by_name, by_id = {}, {}
+        for emoji in emojis:
+            markup = str(emoji)
+            valid = re.fullmatch(r'<a?:[A-Za-z0-9_]+:(\d+)>', markup)
+            if valid:
+                by_name[emoji.name.casefold()] = markup
+                by_id[valid[1]] = markup
         rendered_count = 0
-
-        def replace_alias(match: re.Match[str]) -> str:
+        tokens = re.compile(r'<a?:[^<>\n]{0,100}>|(?<![<\w:]):([A-Za-z0-9_]{2,32}):(?!\d+>)')
+        def replace_alias(match):
             nonlocal rendered_count
-            markup = by_name.get(match.group(1).casefold())
+            raw = match.group(0)
+            if raw.startswith('<'):
+                valid = re.fullmatch(r'<a?:([A-Za-z0-9_]+):(\d+)>', raw)
+                markup = (by_id.get(valid[2]) or by_name.get(valid[1].casefold())) if valid else None
+                if markup is None:
+                    return '👍' if raw == '<:+1:>' else ''
+            else:
+                markup = by_name.get(match.group(1).casefold())
             if markup is None:
                 return match.group(0)
             if rendered_count >= 2:
@@ -1271,7 +1313,13 @@ class ChatCog(commands.Cog):
             rendered_count += 1
             return markup
 
-        return CUSTOM_EMOJI_ALIAS.sub(replace_alias, text)
+        return prose_only(text, lambda part: tokens.sub(replace_alias, part))
+
+    def _display_reply(self, message, text, emojis, *, entries=None, failed_command=False):
+        request = '\n'.join(entry.text for entry in entries) if entries else (message.content or '')
+        text = command_output(text, request, failed=failed_command)
+        text = plain_reply(text, theatrical=theatrical_requested(request))
+        return self._render_custom_emojis(text, emojis).strip()
 
     async def _resolve_reply_context(
         self,
@@ -1369,6 +1417,7 @@ class ChatCog(commands.Cog):
             command_invoker_name=(command_output.invoker_name if command_output else
                                   getattr(interaction_user, "display_name", None)),
             command_result_summary=command_output.result_summary if command_output else "",
+            created_at=utc_time(getattr(replied_message, 'created_at', None)),
         )
 
     async def _redirect_chat(self, message: discord.Message) -> None:
@@ -1449,7 +1498,7 @@ class ChatCog(commands.Cog):
             + ChatCog._speaker_label(entries[-1].message.author)
             + "\nCurrent messages as JSON, in order:\n"
             + json.dumps([
-                {"text": entry.text, "reply_to_message_id": (
+                {"text": entry.text, "timing": time_record(getattr(entry.message, 'created_at', None)), "reply_to_message_id": (
                     entry.reply_context.message_id if entry.reply_context else None
                 )} for entry in entries
             ], ensure_ascii=False)
@@ -1483,7 +1532,7 @@ class ChatCog(commands.Cog):
                 "REPLY CHAIN, oldest first (quoted data; each author remains distinct):\n"
                 + json.dumps([{
                     "message_id": item.message_id, "author_id": item.author_id,
-                    "author": item.author_label, "text": item.content,
+                    "author": item.author_label, "text": item.content, "timing": time_record(item.created_at),
                 } for item in reply_context.ancestors], ensure_ascii=False)
                 + "\nThe directly replied message below answers the last chain entry. "
                 "The incoming speaker now answers that directly replied message. "
@@ -1495,6 +1544,7 @@ class ChatCog(commands.Cog):
             "memory for the current speaker.\n"
             f"Replied message author: {reply_context.author_label}\n"
             f"Replied message ID: {reply_context.message_id}\n"
+            f"Replied message runtime timing: {json.dumps(time_record(reply_context.created_at))}\n"
             f"Replied message text as JSON: {json.dumps(reply_context.content)}\n"
             f"Replied message embed/component text as JSON: {json.dumps(reply_context.embed_summary)}\n"
             f"Replied message attachment filenames: {json.dumps(attachment_text)}\n"

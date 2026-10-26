@@ -65,8 +65,8 @@
 .meyaya-showcase .my-cycle-typing i{width:4px;height:4px;border-radius:50%;background:#dca4cb}
 .meyaya-showcase .my-scene-count{position:absolute;bottom:3px;right:16px;font-size:8px;color:#977e9f;letter-spacing:.13em}
 .meyaya-showcase .my-sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
-.meyaya-showcase .my-foliage{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
-.meyaya-showcase>.my-section,.meyaya-showcase>.my-wayfinder,.meyaya-showcase>.my-closing,.meyaya-showcase>.my-colophon{position:relative;z-index:1}
+.meyaya-showcase .my-foliage{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+.meyaya-showcase>.my-section,.meyaya-showcase>.my-wayfinder,.meyaya-showcase>.my-closing,.meyaya-showcase>.my-colophon{position:relative;z-index:auto}
 .meyaya-showcase .my-foliage i{position:absolute;left:var(--x);top:var(--start);width:12px;height:22px;border-radius:90% 5% 90% 5%;background:linear-gradient(135deg,#efb4cf77,#b97ca333);animation:my-falling-leaf var(--duration) linear infinite;animation-delay:var(--delay)}
 .meyaya-showcase .my-foliage i::after{content:"";position:absolute;left:50%;top:15%;height:74%;width:1px;background:#ffe1ed4d;transform:rotate(25deg)}
 .meyaya-showcase .my-scroll-track{display:none}
@@ -175,7 +175,7 @@
 @keyframes my-chat-cycle{0%,30%{visibility:visible;opacity:1}31.5%{visibility:visible;opacity:0}33.333%,100%{visibility:hidden;opacity:0}}
 @keyframes my-type-letter{0%,29%{opacity:1}29.01%,100%{opacity:0}}
 @keyframes my-show-typing{0%{opacity:1}3.1%,100%{opacity:0}}
-@keyframes my-falling-leaf{0%{opacity:0;transform:translate3d(0,-50px,0) rotate(-20deg)}12%{opacity:.48}85%{opacity:.3}100%{opacity:0;transform:translate3d(var(--drift),480px,0) rotate(230deg)}}
+@keyframes my-falling-leaf{0%{opacity:0;transform:translate3d(0,-50px,0) rotate(-20deg)}12%{opacity:.48}85%{opacity:.3}100%{opacity:0;transform:translate3d(var(--drift),680px,0) rotate(230deg)}}
 @keyframes my-scroll-reveal{from{opacity:.65;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 @keyframes my-reading-progress{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 @supports(animation-timeline:view()){
@@ -184,3 +184,12 @@
 }
 @media(max-width:480px){.meyaya-showcase .my-chat-stage{height:255px}.meyaya-showcase .my-chat-foot{font-size:8px}.meyaya-showcase .my-hero h2{margin-top:6px}.meyaya-showcase .my-clean-demo>summary{padding:12px}.meyaya-showcase .my-clean-demo>summary code{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.meyaya-showcase .my-foliage{display:none}.meyaya-showcase .my-chat-stage{height:auto}.meyaya-showcase .my-chat-scene{position:relative;visibility:visible;opacity:1;padding-bottom:12px}.meyaya-showcase .my-chat-word>span{opacity:1}.meyaya-showcase .my-cycle-typing,.meyaya-showcase .my-scene-count{display:none}}
+
+html:has(.meyaya-showcase){scroll-behavior:smooth}
+@supports(overflow:clip){.meyaya-showcase{overflow:clip}}
+@supports(animation-timeline:view()){
+.meyaya-showcase .my-worlds figure,.meyaya-showcase .my-duel,.meyaya-showcase .my-debate,.meyaya-showcase .my-discover-grid>div{animation:my-scroll-reveal ease-out both;animation-timeline:view();animation-range:entry 0% entry 20%}
+}
+@media(prefers-reduced-motion:reduce){html:has(.meyaya-showcase){scroll-behavior:auto}}
+
+.meyaya-showcase>.my-hero,.meyaya-showcase>.my-wayfinder>*,.meyaya-showcase>.my-section>*,.meyaya-showcase>.my-closing>*,.meyaya-showcase>.my-colophon>*{position:relative;z-index:2}

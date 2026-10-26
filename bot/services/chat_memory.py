@@ -5,11 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import UTC, datetime
 
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from bot.services.llm import ChatMessage
+from bot.services.conversation_quality import utc_time, time_record
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,14 @@ class ChatMemoryService:
                     if isinstance(part, dict) and isinstance(part.get("text"), str)
                 )
             if content:
+                raw_stamp = item.get('created_at_utc')
+                try:
+                    stamp = utc_time(datetime.fromisoformat(raw_stamp)) if isinstance(raw_stamp, str) else None
+                except ValueError:
+                    stamp = None
+                if stamp:
+                    timing = json.dumps(time_record(stamp))
+                    content = 'HISTORY MESSAGE TIMING (runtime metadata): ' + timing + '\n' + content
                 history.append(
                     {
                         "role": "user" if role == "user" else "assistant",
@@ -90,13 +100,16 @@ class ChatMemoryService:
         model_text: str,
         *,
         speaker_label: str | None = None,
+        user_created_at: datetime | None = None,
     ) -> None:
         """Append a completed exchange and trim/expire the history. No-ops on Redis failure."""
 
         history_text = f"[{speaker_label}] {user_text}" if speaker_label else user_text
         entries = (
-            {"role": "user", "content": history_text},
-            {"role": "assistant", "content": model_text},
+            {"role": "user", "content": history_text,
+             'created_at_utc': utc_time(user_created_at).isoformat() if utc_time(user_created_at) else None},
+            {"role": "assistant", "content": model_text,
+             'created_at_utc': datetime.now(UTC).isoformat()},
         )
         key = self._key(channel_id, user_id)
 
