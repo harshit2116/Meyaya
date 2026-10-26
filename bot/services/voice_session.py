@@ -198,7 +198,7 @@ class VoiceChatSession:
                 "discord-ext-voice-recv is not installed. Install it to enable voice receiving."
             )
 
-        if self.bot.settings.gemini_api_key == "":
+        if not (self.bot.settings.gemini_api_key or getattr(self.bot.settings, 'gemini_api_key_2', '')):
             raise RuntimeError("GEMINI_API_KEY is missing")
 
         if not self._voice_budget_registered:
@@ -218,6 +218,7 @@ class VoiceChatSession:
             guild_id=channel.guild.id,
             channel_id=channel.id,
             api_key=self.bot.settings.gemini_api_key,
+            key_pool=getattr(getattr(self.bot, '_llm_provider', None), 'key_pool', None),
             model=self.bot.settings.gemini_live_model,
             voice_name=self.voice_name,
             system_instruction=build_voice_system_instruction(

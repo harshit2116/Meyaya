@@ -54,8 +54,11 @@ class GeminiLiveSession:
         on_reconnected: ReconnectCallback,
         guild_id: int | None = None,
         channel_id: int | None = None,
+        key_pool=None,
     ) -> None:
         self.api_key = api_key
+        self.key_pool = key_pool
+        self._key_index = None
         self.model = model
         self.guild_id = guild_id
         self.channel_id = channel_id
@@ -118,16 +121,15 @@ class GeminiLiveSession:
     async def start(self) -> None:
         if self._running:
             return
-        if not self.api_key:
+        if not self.api_key and not (self.key_pool and self.key_pool.slots):
             raise RuntimeError("GEMINI_API_KEY is not configured")
         if genai is None or types is None:
             await asyncio.to_thread(_load_sdk)
 
         self._loop = asyncio.get_running_loop()
-        self._client = genai.Client(api_key=self.api_key)
         self._running = True
         try:
-            await self._open_connection()
+            await self._open_with_keys()
         except BaseException:
             self._running = False
             await self._close_client()
@@ -138,6 +140,43 @@ class GeminiLiveSession:
             self._receiver_loop(), name="gemini-live-receiver"
         )
         self._sender_task = asyncio.create_task(self._sender_loop(), name="gemini-live-sender")
+
+    def _release_key(self):
+        if self._key_index is not None:
+            self.key_pool.release(self._key_index)
+            self._key_index = None
+
+    async def _open_with_keys(self):
+        if self.key_pool is None or len(self.key_pool.slots) <= 1:
+            if self._client is None:
+                key = self.key_pool.slots[0].value if self.key_pool and self.key_pool.slots else self.api_key
+                self._client = genai.Client(api_key=key)
+            await self._open_connection()
+            return
+        tried = set()
+        while len(tried) < len(self.key_pool.slots):
+            index = self.key_pool.acquire([i for i in range(len(self.key_pool.slots)) if i not in tried])
+            if index is None:
+                raise RuntimeError('Gemini credentials are temporarily unavailable')
+            self._key_index = index
+            tried.add(index)
+            try:
+                self._client = genai.Client(api_key=self.key_pool.slots[index].value)
+                await self._open_connection()
+                self.key_pool.success(index)
+                return
+            except asyncio.CancelledError:
+                await self._close_client()
+                raise
+            except Exception as error:
+                code = (getattr(error, 'code', None) or getattr(error, 'status_code', None)
+                        or getattr(getattr(error, 'response', None), 'status_code', None))
+                if code in {401, 403}:
+                    self.key_pool.block(index)
+                await self._close_connection()
+                await self._close_client()
+                if len(tried) == len(self.key_pool.slots):
+                    raise
 
     async def _open_connection(self) -> None:
         assert self._client is not None
@@ -188,6 +227,7 @@ class GeminiLiveSession:
     async def _close_client(self) -> None:
         client, self._client = self._client, None
         if client is None:
+            self._release_key()
             return
         try:
             async with asyncio.timeout(5):
@@ -199,6 +239,8 @@ class GeminiLiveSession:
                 await asyncio.to_thread(client.close)
             except Exception:
                 logger.debug("Error closing Gemini sync client", exc_info=True)
+            finally:
+                self._release_key()
 
     async def stop(self) -> None:
         if not self._running:
@@ -374,23 +416,31 @@ class GeminiLiveSession:
 
             logger.warning("[GEMINI] connection lost: %s", reason)
             await self._close_connection()
+            if self.key_pool is not None and len(self.key_pool.slots) > 1:
+                await self._close_client()
 
             attempt = 0
             while self._running:
                 attempt += 1
                 try:
-                    await self._open_connection()
+                    await self._open_with_keys()
                     logger.info("[GEMINI] reconnected successfully on attempt %s", attempt)
                     await self.on_reconnected()
                     return
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
-                    delay = min(2 ** (attempt - 1), 15)
+                    # The reconnect callback may fail after a socket opened.
+                    # Close that socket before replacing its client/key lease.
+                    if self._session is not None:
+                        await self._close_connection()
+                        if self.key_pool is not None and len(self.key_pool.slots) > 1:
+                            await self._close_client()
+                    delay = min(2 ** min(attempt - 1, 4), 15)
                     logger.warning(
                         "[GEMINI] reconnect attempt %s failed (%s); retrying in %ss",
                         attempt,
-                        exc,
+                        type(exc).__name__,
                         delay,
                     )
                     await asyncio.sleep(delay)

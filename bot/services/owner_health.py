@@ -72,6 +72,9 @@ class OwnerHealth:
             status, reason = 'unavailable', 'Daily budget exhausted'
         if not configured:
             status, reason = 'disabled', 'AI paused or not configured'
+        pool = getattr(service, 'key_pool', None)
+        if configured and pool is not None and pool.slots and pool.snapshot()['ready'] == 0:
+            status, reason = 'unavailable', 'All configured API keys are cooling down'
         return {'name': label, 'model': model or None, 'status': status, 'reason': reason,
                 'quota': quota, 'last_observation': observation}
 
@@ -82,7 +85,8 @@ class OwnerHealth:
         latency = getattr(bot, 'latency', None)
         latency = round(latency * 1000, 1) if isinstance(latency, (int, float)) and math.isfinite(latency) else None
         provider = getattr(bot, '_llm_provider', None)
-        configured = bool(getattr(settings, 'ai_enabled', False) and getattr(settings, 'gemini_api_key', ''))
+        configured = bool(getattr(settings, 'ai_enabled', False) and
+                          (getattr(settings, 'gemini_api_key', '') or getattr(settings, 'gemini_api_key_2', '')))
         names = {'fast': 'Gemini Fast', 'balanced': 'Gemini Flash',
                  'reasoning': 'Gemini Reason', 'grounded': 'Gemini Grounded'}
         models = [self._model(names.get(str(tier), 'Gemini Fallback'), service.model, budgets,
@@ -99,6 +103,7 @@ class OwnerHealth:
                 'dependencies': [{'name': 'Discord', 'status': 'healthy' if ready else 'unavailable',
                                   'latency_ms': latency, 'reason': 'Gateway heartbeat'}] + dependencies,
                 'models': models, 'host': dict(health.host),
+                'key_pool': provider.key_pool.snapshot() if getattr(provider, 'key_pool', None) else None,
                 'queue': {'active': getattr(guard, 'active', 0), 'waiting': getattr(guard, 'waiting', 0),
                           'active_limit': getattr(settings, 'ai_max_concurrent', 0),
                           'waiting_limit': getattr(settings, 'ai_queue_size', 0),

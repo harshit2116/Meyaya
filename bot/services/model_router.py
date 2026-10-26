@@ -176,6 +176,19 @@ class ModelRouter(LLMProvider):
 
     @guarded
     async def grounded_generate(
+        self, system_instruction: str, user_message: str, *,
+        max_output_tokens: int = 1800, timeout_seconds: int = 45,
+    ) -> GroundedReply:
+        # Bound all credential, endpoint and model fallbacks together.
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                return await self._grounded_generate_routed(system_instruction, user_message,
+                    max_output_tokens=max_output_tokens, timeout_seconds=timeout_seconds)
+        except TimeoutError:
+            event('llm_grounded_route_deadline', timeout_seconds=timeout_seconds)
+            raise GroundingError('Source-backed responses are temporarily unavailable. Please try again later.') from None
+
+    async def _grounded_generate_routed(
         self,
         system_instruction: str,
         user_message: str,
@@ -190,14 +203,17 @@ class ModelRouter(LLMProvider):
             provider, "model", None
         ):
             candidates.append(fallback)
-        for candidate in candidates:
+        started = asyncio.get_running_loop().time()
+        for index, candidate in enumerate(candidates):
+            remaining = timeout_seconds - (asyncio.get_running_loop().time() - started)
+            if remaining <= 0:
+                break
+            candidate_budget = remaining / (len(candidates) - index)
             try:
-                return await candidate.grounded_generate(
-                    system_instruction,
-                    user_message,
-                    max_output_tokens=max_output_tokens,
-                    timeout_seconds=timeout_seconds,
-                )
+                async with asyncio.timeout(candidate_budget):
+                    return await candidate.grounded_generate(
+                        system_instruction, user_message,
+                        max_output_tokens=max_output_tokens, timeout_seconds=candidate_budget)
             except AILimitReached:
                 raise
             except Exception as error:

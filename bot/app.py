@@ -248,42 +248,53 @@ class MeyayaBot(commands.Bot):
     async def close(self) -> None:
         """Close external resources before shutting down the bot."""
 
-        await self.request_log.close()
-        if self._dashboard_settings_refresh is not None:
-            self._dashboard_settings_refresh.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._dashboard_settings_refresh
-            self._dashboard_settings_refresh = None
-        if self._request_log_maintenance is not None:
-            self._request_log_maintenance.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._request_log_maintenance
-            self._request_log_maintenance = None
-        if self.dashboard is not None:
-            await self.dashboard.close()
-            self.dashboard = None
-        voice_cog = self.get_cog("VoiceLiveCog")
-        moderation_cog = self.get_cog("ModerationCog")
-        if moderation_cog is not None:
-            await moderation_cog.cog_unload()
-        if voice_cog is not None:
-            try:
-                await voice_cog.cog_unload()
-            except Exception:
-                logger.exception("Failed to unload VoiceLiveCog cleanly")
-
         try:
-            await super().close()
+            try:
+                await self.request_log.close()
+            except Exception:
+                logger.exception("Failed to close request logging cleanly")
         finally:
             try:
-                if self.http_session is not None and not self.http_session.closed:
-                    await self.http_session.close()
+                for name in ("_dashboard_settings_refresh", "_request_log_maintenance"):
+                    task = getattr(self, name)
+                    if task is not None:
+                        task.cancel()
+                        try:
+                            with suppress(asyncio.CancelledError):
+                                await task
+                        except Exception:
+                            logger.exception("Background maintenance failed during shutdown")
+                        finally:
+                            setattr(self, name, None)
+                if self.dashboard is not None:
+                    try:
+                        await self.dashboard.close()
+                    except Exception:
+                        logger.exception("Failed to close dashboard cleanly")
+                    finally:
+                        self.dashboard = None
+                for name in ("ModerationCog", "VoiceLiveCog"):
+                    cog = self.get_cog(name)
+                    if cog is not None:
+                        try:
+                            await cog.cog_unload()
+                        except Exception:
+                            logger.exception("Failed to unload %s cleanly", name)
             finally:
                 try:
-                    if self.redis is not None:
-                        await self.redis.aclose()
+                    # Bot.close unloads remaining cogs before shared clients close.
+                    # Failed or cancelled optional cleanup must not skip this step.
+                    await super().close()
                 finally:
-                    await self.engine.dispose()
+                    try:
+                        if self.http_session is not None and not self.http_session.closed:
+                            await self.http_session.close()
+                    finally:
+                        try:
+                            if self.redis is not None:
+                                await self.redis.aclose()
+                        finally:
+                            await self.engine.dispose()
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
         """Return friendly written-command errors and log only unexpected failures."""

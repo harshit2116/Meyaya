@@ -151,6 +151,7 @@ class ChatCog(commands.Cog):
         self._last_proactive_guild: dict[int, float] = {}
         self._last_proactive_channel: dict[int, float] = {}
         self._proactive_inflight: set[int] = set()
+        self._proactive_tasks: set[asyncio.Task] = set()
         self._context_reads = OptionalContext()
         self._memory_callbacks = MemoryCallbackGate(getattr(bot, "redis", None))
         self._busy_notices = {}
@@ -164,6 +165,8 @@ class ChatCog(commands.Cog):
         self._closing_chats = True
         workers = {state.worker for state in self._chat_conversations.values()
                    if state.worker is not None and state.worker is not asyncio.current_task()}
+        workers.update(task for task in self._proactive_tasks
+                       if task is not asyncio.current_task())
         for task in workers:
             task.cancel()
         if workers:
@@ -933,6 +936,25 @@ class ChatCog(commands.Cog):
 
     @discord_context("proactive")
     async def _maybe_proactive_reply(
+        self,
+        message: discord.Message,
+        reply_context: ReplyContext | None = None,
+        *, followup_question: str | None = None, mass_ping: bool = False,
+    ) -> None:
+        """Keep automatic work attached to the cog's lifecycle, including early reads."""
+        if self._closing_chats:
+            return
+        task = asyncio.current_task()
+        if task is not None:
+            self._proactive_tasks.add(task)
+        try:
+            await self._run_proactive_reply(
+                message, reply_context, followup_question=followup_question, mass_ping=mass_ping)
+        finally:
+            if task is not None:
+                self._proactive_tasks.discard(task)
+
+    async def _run_proactive_reply(
         self,
         message: discord.Message,
         reply_context: ReplyContext | None = None,

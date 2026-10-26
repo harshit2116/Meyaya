@@ -8,6 +8,7 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from contextvars import ContextVar
 
 import aiohttp
 
@@ -37,6 +38,12 @@ MAX_REPLY_WORDS = 220  # safety net only, keeps us well under Discord's 2000 cha
 RETRYABLE_STATUS_CODES = {502, 503, 504}
 MAX_REQUEST_ATTEMPTS = 2
 PROVIDER_COOLDOWN_SECONDS = 30
+_failure = ContextVar('gemini_credential_failure', default=None)
+
+
+def current_gemini_failure():
+    """Task-local safe outcome for credential failover, never prompt/provider text."""
+    return _failure.get()
 
 
 @dataclass
@@ -79,6 +86,7 @@ class GeminiService(LLMProvider):
                 'rate', 'fun', 'roast', 'compliment', 'proactive', 'monitor', 'moderation'}
             reason = await self.quota.acquire(optional=optional)
             if reason:
+                _failure.set(('quota', reason))
                 request_failure(reason)
                 return False
         return True
@@ -166,6 +174,7 @@ class GeminiService(LLMProvider):
         max_output_tokens: int | None = None,
         timeout_seconds: int | None = None,
     ) -> str | None:
+        _failure.set(None)
         state = self.availability
         if state.retry_at > time.monotonic() or state.probing:
             request_failure("provider_cooldown")
@@ -225,8 +234,7 @@ class GeminiService(LLMProvider):
             "contents": contents,
             "generationConfig": generation_config,
         }
-        headers = {"Content-Type": "application/json"}
-        params = {"key": self.api_key}
+        headers = {"Content-Type": "application/json", "x-goog-api-key": self.api_key}
 
         timeout = (
             aiohttp.ClientTimeout(total=timeout_seconds)
@@ -242,7 +250,6 @@ class GeminiService(LLMProvider):
                     url,
                     json=payload,
                     headers=headers,
-                    params=params,
                     timeout=timeout,
                 ) as response:
                     logger.debug(
@@ -253,6 +260,7 @@ class GeminiService(LLMProvider):
                     )
                     if response.status >= 400:
                         details = await self._error_details(response)
+                        _failure.set(('http', (response.status, details.get('error_category'))))
                         request_failure(f"http_{response.status}", attempt=attempt,
                                         **details)
                     if response.status == 429:
@@ -275,6 +283,7 @@ class GeminiService(LLMProvider):
                             response.status,
                         )
                         return None
+                    _failure.set(None)
                     response_data = await response.json()
                     if not isinstance(response_data, dict):
                         logger.error("Gemini returned a non-object JSON response")
@@ -283,6 +292,7 @@ class GeminiService(LLMProvider):
                     data = response_data
                     break
             except (aiohttp.ClientError, TimeoutError) as exc:
+                _failure.set(('transport', type(exc).__name__))
                 request_failure(type(exc).__name__, attempt=attempt)
                 if isinstance(exc, TimeoutError):
                     # Let the router try a different model rather than spending
@@ -323,6 +333,7 @@ class GeminiService(LLMProvider):
         timeout_seconds: int = 45,
     ) -> GroundedReply:
         """Generate source-annotated text, with a compatible endpoint fallback."""
+        _failure.set(None)
 
         if not self.api_key:
             request_failure("missing_api_key")
@@ -356,6 +367,12 @@ class GeminiService(LLMProvider):
             if result is not None:
                 return result
             logger.warning("Gemini Interactions grounding returned no usable model text.")
+        failure = current_gemini_failure()
+        if status in {401, 403} or (status == 400 and failure is not None
+                                   and failure == ('http', (400, 'api_key'))):
+            # Preserve terminal credential errors before endpoint fallback can
+            # overwrite them with a local pacing result.
+            raise GroundingError('Gemini credential was rejected')
         if status == 429:
             was_rate_limited = True
             rate_limit_retry = retry_after
@@ -422,6 +439,7 @@ class GeminiService(LLMProvider):
                     retry_after = self._retry_after_seconds(response.headers.get("Retry-After"))
                     if response.status >= 400:
                         details = await self._error_details(response)
+                        _failure.set(('http', (response.status, details.get('error_category'))))
                         request_failure(f"http_{response.status}", attempt=attempt, **details)
                     if response.status == 429:
                         await self._rate_backoff(details)
@@ -444,19 +462,21 @@ class GeminiService(LLMProvider):
                             "provider_error",
                         )
                         return None, response.status, retry_after
+                    _failure.set(None)
                     data = await response.json()
                     if not isinstance(data, dict):
                         return None, response.status, retry_after
                     record_response(data)
                     return data, response.status, retry_after
             except (aiohttp.ClientError, TimeoutError) as exc:
+                _failure.set(('transport', type(exc).__name__))
                 request_failure(type(exc).__name__, attempt=attempt)
                 if attempt < MAX_REQUEST_ATTEMPTS:
                     logger.warning(
                         "Gemini %s grounded request errored; retrying attempt=%s error=%s",
                         endpoint_name,
                         attempt + 1,
-                        exc,
+                        type(exc).__name__,
                     )
                     await asyncio.sleep(0.5 * attempt)
                     continue

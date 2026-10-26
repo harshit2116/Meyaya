@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from bot.data.voices import canonical_voice_name
@@ -42,7 +42,16 @@ class Settings(BaseSettings):
     dashboard_ssm_plugin: str = Field(default="", alias="DASHBOARD_SSM_PLUGIN")
     klipy_api_key: str = Field(default="", alias="KLIPY_API_KEY")
     klipy_rating: str = Field(default="g", alias="KLIPY_RATING")
-    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY", repr=False)
+    gemini_api_key_2: str = Field(default="", alias="GEMINI_API_KEY_2", repr=False,
+        validation_alias=AliasChoices("GEMINI_API_KEY_2", "GEMINI_API_KEY2", "GEMINI_SECONDARY_API_KEY"))
+    gemini_secondary_quota_namespace: str = Field(default="", max_length=80,
+        alias="GEMINI_SECONDARY_QUOTA_NAMESPACE")
+
+    @property
+    def gemini_keys(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(key.strip() for key in
+                     (self.gemini_api_key, self.gemini_api_key_2) if key.strip()))
     llm_provider: str = Field(default="gemini", alias="LLM_PROVIDER")
     ai_enabled: bool = Field(default=True, alias="AI_ENABLED")
     ai_max_concurrent: int = Field(default=2, ge=1, le=10, alias="AI_MAX_CONCURRENT")
