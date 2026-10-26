@@ -10,9 +10,9 @@ from time import monotonic
 from urllib.parse import urlparse
 
 import aiohttp
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
-from bot.services.aura_archive import _asset, _serif, _spark, _text
+from bot.services.aura_archive import _asset, _serif, _text
 from bot.services.character_catalog import RARITY_NAMES
 from bot.services.character_provider import safe_anilist_image
 from bot.utils.image_work import BoundedImageGate, image_work
@@ -24,18 +24,12 @@ IMAGE_LIMIT = 4 * 1024 * 1024
 
 @lru_cache(maxsize=1)
 def _frame():
-    path = Path(__file__).resolve().parents[1] / "assets/celestial/summon/card-frame.png"
-    with Image.open(path) as art:
-        source = art.convert("RGBA").resize(SIZE, Image.Resampling.LANCZOS)
-    result = ImageOps.colorize(
-        ImageOps.grayscale(source), "#21182e", "#ffd9ed", mid="#b174a3", midpoint=170
-    ).convert("RGBA")
-    # Artwork is decorative, never a text backdrop. Fade it out before the
-    # right-hand reading column, including long passives and the rights notice.
-    clear = Image.new("L", SIZE)
-    ImageDraw.Draw(clear).rectangle((695, 130, 1410, 963), fill=255)
-    clear = clear.filter(ImageFilter.GaussianBlur(12))
-    result.putalpha(ImageChops.multiply(source.getchannel("A"), ImageChops.invert(clear)))
+    # A neutral, code-drawn frame works with every character's artwork.
+    # Keep all detail on the border, leaving the portrait and reading area clear.
+    result = Image.new("RGBA", SIZE)
+    draw = ImageDraw.Draw(result)
+    draw.rounded_rectangle((61, 47, 642, 928), radius=24, outline="#465066", width=1)
+    draw.line((674, 48, 674, 950), fill="#2b3345", width=1)
     return result
 
 
@@ -43,8 +37,7 @@ def _frame():
 def _portrait_mask():
     mask = Image.new("L", (580, 880))
     draw = ImageDraw.Draw(mask)
-    draw.ellipse((0, 0, 579, 579), fill=255)
-    draw.rounded_rectangle((0, 285, 579, 879), radius=65, fill=255)
+    draw.rounded_rectangle((0, 0, 579, 879), radius=23, fill=255)
     return mask
 
 
@@ -61,17 +54,6 @@ def _native_font(size):
     return None
 
 
-@lru_cache(maxsize=16)
-def _signature_font(size):
-    for path in (
-        "C:/Windows/Fonts/segoesc.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf",
-    ):
-        if Path(path).is_file():
-            return ImageFont.truetype(path, size)
-    return _serif(size)
-
-
 def _star(draw, x, y, r, color):
     points = []
     for index in range(10):
@@ -82,69 +64,67 @@ def _star(draw, x, y, r, color):
 
 
 def _seal(draw, x, y, color, kind):
-    draw.ellipse((x - 41, y - 41, x + 41, y + 41), fill="#191528", outline=color, width=2)
+    draw.rounded_rectangle(
+        (x - 35, y - 35, x + 35, y + 35), radius=16,
+        fill="#171e2c", outline="#343e51", width=1,
+    )
     if kind == "class":
-        draw.arc((x - 23, y - 25, x + 24, y + 25), 65, 300, fill=color, width=8)
-        _spark(draw, x + 8, y, 14, color)
-        _spark(draw, x + 20, y - 20, 6, color)
+        draw.line(
+            ((x, y - 19), (x + 15, y), (x, y + 19), (x - 15, y), (x, y - 19)),
+            fill=color, width=2,
+        )
     elif kind == "traits":
-        for i in range(5):
-            angle = i * math.tau / 5
-            cx, cy = x + math.sin(angle) * 13, y + math.cos(angle) * 13
-            draw.ellipse((cx - 8, cy - 13, cx + 8, cy + 13), fill=color)
+        for offset in (-12, 0, 12):
+            draw.ellipse((x - 17, y + offset - 2, x - 13, y + offset + 2), fill=color)
+            draw.line((x - 5, y + offset, x + 17, y + offset), fill=color, width=2)
     else:
-        draw.rounded_rectangle((x - 22, y - 19, x - 1, y + 22), radius=4, fill=color)
-        draw.rounded_rectangle((x + 1, y - 13, x + 23, y + 27), radius=4, outline=color, width=3)
-        _spark(draw, x - 11, y + 1, 6, "#352039")
+        draw.rounded_rectangle((x - 18, y - 20, x + 8, y + 13), radius=4, outline=color, width=2)
+        draw.rounded_rectangle((x - 8, y - 11, x + 18, y + 22), radius=4,
+                               fill="#171e2c", outline=color, width=2)
 
 
 def render_summon_card(gameplay, display, portrait=None, avatar=None, member_name=""):
     """Use provider artwork as supplied; rarity and gameplay are never rerolled."""
     accent = RARITY_COLORS[gameplay.rarity_stars]
-    image = Image.new("RGBA", SIZE, "#0e1020")
+    image = Image.new("RGBA", SIZE, "#0c1018")
     draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((24, 24, 1476, 976), radius=32, fill="#101120", outline=accent, width=1)
+    draw.rounded_rectangle((24, 24, 1476, 976), radius=32, fill="#111722", outline="#343e51", width=1)
     art = _asset(portrait) if not gameplay.image_disabled else None
     if art is None:
-        art = Image.new("RGBA", (580, 880), "#211c32")
+        art = Image.new("RGBA", (580, 880), "#1a2230")
         placeholder = ImageDraw.Draw(art)
-        _spark(placeholder, 290, 350, 65, accent)
+        _star(placeholder, 290, 350, 24, accent)
         message = "ARTWORK HIDDEN" if gameplay.image_disabled else "ARTWORK UNAVAILABLE"
-        _text(placeholder, (65, 470, 450, 80), message, 26, "#d9c1df", minimum=18)
+        _text(placeholder, (65, 470, 450, 80), message, 26, "#b6c0d0", minimum=18)
     image.paste(ImageOps.fit(art, (580, 880), Image.Resampling.LANCZOS), (62, 48), _portrait_mask())
     # Darken only the signature area, keeping the supplied character art intact.
     shade = Image.new("RGBA", (580, 880))
     sd = ImageDraw.Draw(shade)
     for y in range(680, 880):
-        sd.line((0, y, 579, y), fill=(14, 10, 24, round((y - 680) / 200 * 180)))
+        sd.line((0, y, 579, y), fill=(10, 14, 22, round((y - 680) / 200 * 180)))
+    shade.putalpha(ImageChops.multiply(shade.getchannel("A"), _portrait_mask()))
     image.alpha_composite(shade, (62, 48))
     draw = ImageDraw.Draw(image)
-    draw.rectangle((680, 26, 1474, 974), fill="#101120")
-    draw.rounded_rectangle((694, 544, 1472, 687), radius=20, fill="#281a31")
-    draw.rounded_rectangle((694, 706, 1470, 808), radius=18, fill="#181529")
+    draw.rounded_rectangle((694, 544, 1448, 687), radius=16, fill="#192130")
+    draw.rounded_rectangle((694, 706, 1448, 808), radius=16, fill="#151d2a")
     image.alpha_composite(_frame())
     draw = ImageDraw.Draw(image)
-    draw.text((754, 57), "M E Y A Y A  S U M M O N", font=_serif(22), fill="#d6a3db")
-    _spark(draw, 716, 70, 14, "#f5adce")
-    draw.rounded_rectangle((1184, 43, 1398, 93), radius=25, fill="#211f40", outline=accent, width=2)
+    draw.text((736, 57), "M E Y A Y A  S U M M O N", font=_serif(22), fill="#b6c0d0")
+    draw.rounded_rectangle((710, 58, 714, 83), radius=2, fill=accent)
+    draw.rounded_rectangle((1184, 43, 1448, 93), radius=14, fill="#192130", outline="#39445a", width=1)
     draw.text(
         (1205, 54), RARITY_NAMES[gameplay.rarity_stars].upper(), font=_serif(23), fill="#f6e9ff"
     )
     # All six supported tiers fit without substituting a textual star glyph.
     for index in range(gameplay.rarity_stars):
         _star(draw, 1210 + index * 30, 110, 7, accent)
-    draw.line((700, 125, 1448, 125), fill="#524368")
+    draw.line((700, 125, 1448, 125), fill="#303a4c")
     _text(draw, (710, 141, 590, 83), display.name, 55, "#f4eeff", minimum=25)
     native_font = _native_font(23)
     if display.native_name and native_font is not None:
         native = display.native_name[:24]
-        draw.text((713, 236), native, font=native_font, fill="#d7b7ee")
-        # Vertical name strip follows the reference and remains optional when
-        # a production host has no CJK font installed.
-        draw.rounded_rectangle((76, 265, 121, 555), radius=12, fill="#241a32")
-        for index, char in enumerate(display.native_name[:8]):
-            draw.text((87, 281 + index * 30), char, font=native_font, fill="#f1c4e6")
-    _text(draw, (713, 281, 660, 57), display.series, 29, "#dfd3f1", minimum=18)
+        draw.text((713, 236), native, font=native_font, fill="#9ba9bd")
+    _text(draw, (713, 281, 660, 57), display.series, 29, "#bdc7d7", minimum=18)
     member_art = _asset(avatar)
     if member_art is not None:
         member_art = ImageOps.fit(member_art, (128, 128), Image.Resampling.LANCZOS)
@@ -152,62 +132,50 @@ def render_summon_card(gameplay, display, portrait=None, avatar=None, member_nam
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, 127, 127), radius=18, fill=255)
         image.paste(member_art, (1322, 148), mask)
     draw = ImageDraw.Draw(image)
-    draw.line((700, 344, 1447, 344), fill="#514566")
+    draw.line((700, 344, 1447, 344), fill="#303a4c")
     _seal(draw, 749, 401, accent, "class")
     draw.text((820, 373), "C L A S S", font=_serif(17), fill=accent)
     _text(draw, (820, 402, 555, 58), gameplay.class_name, 34, "#f3e8fc", minimum=22)
-    draw.line((820, 454, 1445, 454), fill="#514566")
-    _seal(draw, 749, 497, "#e69cc9", "traits")
-    draw.text((820, 464), "T R A I T S", font=_serif(17), fill="#e6b4de")
+    draw.line((820, 454, 1445, 454), fill="#303a4c")
+    _seal(draw, 749, 497, accent, "traits")
+    draw.text((820, 464), "T R A I T S", font=_serif(17), fill="#9ba9bd")
     _text(
         draw,
         (820, 489, 555, 47),
         " · ".join(gameplay.traits) or "Mysterious",
         29,
-        "#edc4e4",
+        "#d6deeb",
         minimum=17,
     )
-    _seal(draw, 749, 619, "#f286b4", "passive")
-    draw.text((827, 568), "S I G N A T U R E  P A S S I V E", font=_serif(18), fill="#ff92c1")
+    _seal(draw, 749, 619, accent, "passive")
+    draw.text((827, 568), "S I G N A T U R E  P A S S I V E", font=_serif(18), fill=accent)
     _text(
         draw,
         (827, 605, 535, 74),
         gameplay.passive or "Unknown potential",
         29,
-        "#f4c7e3",
+        "#d6deeb",
         minimum=18,
     )
-    draw.line((1076, 712, 1076, 777), fill="#9b6d9e")
-    _spark(draw, 739, 743, 14, "#d68cc7")
-    draw.text((789, 717), "R O S T E R  I D", font=_serif(16), fill=accent)
-    draw.text((789, 748), f"#{gameplay.internal_id:04d}", font=_serif(27), fill="#f4e8fa")
-    _spark(draw, 1124, 743, 14, accent)
-    draw.text((1178, 717), "P R O V I D E R", font=_serif(16), fill=accent)
-    draw.text((1178, 748), "AniList", font=_serif(27), fill="#f4e8fa")
+    draw.line((1076, 726, 1076, 786), fill="#303a4c")
+    draw.text((724, 724), "R O S T E R  I D", font=_serif(16), fill="#9ba9bd")
+    draw.text((724, 754), f"#{gameplay.internal_id:04d}", font=_serif(27), fill="#e8eef7")
+    draw.text((1110, 724), "P R O V I D E R", font=_serif(16), fill="#9ba9bd")
+    draw.text((1110, 754), "AniList", font=_serif(27), fill="#e8eef7")
     # These are card text, not painted imitation buttons: the live action is
     # a native Discord button delivered under the image.
-    draw.line((706, 823, 1449, 823), fill="#715475")
-    _text(draw, (711, 845, 660, 42), "Summoned for " + member_name, 28, "#edc2df", minimum=18)
+    draw.line((706, 823, 1449, 823), fill="#303a4c")
+    _text(draw, (711, 845, 660, 42), "Summoned for " + member_name, 28, "#d6deeb", minimum=18)
     _text(
         draw,
         (711, 914, 660, 44),
         "Character data and artwork: AniList. Rights belong to their respective owners.",
         17,
-        "#b9a4cd",
+        "#8d9bb0",
         minimum=14,
     )
     signature = " ".join(display.name.split())[:60]
-    signature_font = _signature_font(43)
-    while signature_font.size > 22 and draw.textlength(signature, font=signature_font) > 464:
-        signature_font = _signature_font(signature_font.size - 1)
-    draw.text(
-        (125, 830),
-        signature,
-        font=signature_font,
-        fill="#ffc4df",
-        stroke_width=1,
-        stroke_fill="#322034",
-    )
+    _text(draw, (92, 843, 520, 65), signature, 43, "#f4f7fc", minimum=22)
     output = BytesIO()
     image.convert("RGB").save(output, "PNG", compress_level=3)
     return output.getvalue()
