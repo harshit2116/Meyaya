@@ -1,12 +1,14 @@
 """Context-aware, cheap chat boundaries; never apply decisions to quoted speakers."""
 import re
+import time
 import unicodedata
+from collections import OrderedDict
 
 ACKNOWLEDGEMENTS = {
     'k', 'kk', 'ok', 'okay', 'okey', 'oky', 'oki', 'alright', 'hmm', 'hm', 'mhm',
     'ahm', 'uh', 'um', 'oh', 'owh', 'lol', 'lmao', 'rofl', 'haha', 'hehe',
     'acha', 'achha', 'accha', 'theek', 'thik', 'thanks', 'thank you', 'ty', 'tysm',
-    'got it', 'understood', 'cool', 'bruh', 'hi', 'hey', 'hello', 'hlo', 'yo',
+    'got it', 'understood', 'cool', 'bruh', 'hi', 'hy', 'hey', 'hello', 'hlo', 'yo',
     'yus', 'yup', 'yep', 'yeah', 'yeah thats good', "yeah that's good", 'muah', 'say', 'uoi',
     'good', 'nice', 'great', 'fine', 'sounds good', 'fair enough', 'all good', 'no worries', 'just checking',
     'just checking still', 'just checking for now', 'i am still checking',
@@ -37,8 +39,46 @@ def meaningful_text(text):
     return ' '.join(text.split())
 
 
+def is_empty_reply(text, *, has_attachments=False):
+    """Emoji and punctuation alone never need a social reply allowance."""
+    if has_attachments:
+        return False
+    return not any(unicodedata.category(char)[0] in {'L', 'N'}
+                   for char in meaningful_text(_normalize(text)))
+
+
+class ShortReplyBudget:
+    """Count delivered social replies per member/channel, without storing text."""
+
+    def __init__(self, limit=3, idle_seconds=1800, capacity=2048):
+        self.limit = limit
+        self.idle_seconds = idle_seconds
+        self.capacity = capacity
+        self._turns = OrderedDict()
+
+    def allows(self, guild_id, channel_id, user_id):
+        key = (guild_id, channel_id, user_id)
+        count, last_reply = self._turns.get(key, (0, 0))
+        if time.monotonic() - last_reply >= self.idle_seconds:
+            self._turns.pop(key, None)
+            return True
+        return count < self.limit
+
+    def delivered(self, guild_id, channel_id, user_id, *, low_effort):
+        key = (guild_id, channel_id, user_id)
+        if not low_effort:
+            self._turns.pop(key, None)
+            return
+        self.allows(*key)  # Expire the old conversation before incrementing.
+        count, _ = self._turns.get(key, (0, 0))
+        self._turns[key] = (min(count + 1, self.limit), time.monotonic())
+        self._turns.move_to_end(key)
+        while len(self._turns) > self.capacity:
+            self._turns.popitem(last=False)
+
+
 def is_low_effort_reply(text, *, has_attachments=False, previous_text=None, screen_single_words=True):
-    """Close empty turns; retain real questions and answers to Meyaya's question."""
+    """Classify short social turns; the separate budget decides when to pause."""
     if has_attachments:
         return False
     text = meaningful_text(_normalize(text))
@@ -112,10 +152,16 @@ def model_hostility_eligible(text, *, directed):
 
 DEFENSIVE_CHAT_RULES = (
     'CHAT BOUNDARIES (override conflicting gentle-teasing and engagement defaults): '
-    'Do not keep a conversation alive by interrogating empty replies, emoji, greeting spam, '
+    'Greetings such as hi, hy, hello and short acknowledgements are welcome for up to three '
+    'delivered social turns, as allowed by the runtime short-reply budget. When an approved '
+    'short social turn is supplied, answer briefly and naturally in the speaker language; '
+    'do not emit NO_REPLY solely because it is short or a greeting. After the allowance, '
+    'application code pauses only short replies until a meaningful exchange or an idle reset. '
+    'Emoji-only and punctuation-only messages always remain silent. '
+    'Do not keep a conversation alive by interrogating empty replies, greeting spam, '
     'stretched acknowledgements, vague filler, or spelling variations. Do not mock someone for '
     'one-word replies, teach grammar they did not ask for, or invent a new question to get engagement. '
-    'If there is no substantive new request or useful contribution, return exactly NO_REPLY. '
+    'Outside an approved short social turn, if there is no useful contribution, return exactly NO_REPLY. '
     'A short factual answer to your actual question, a clear question, and an actionable request '
     'are different from empty acknowledgements. Answer those naturally without starting another interview. '
     'DIRECT ABUSE: If the verified current speaker directly insults or threatens you, deliver one '

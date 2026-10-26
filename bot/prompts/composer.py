@@ -112,7 +112,8 @@ def build_system_instruction(
             "current turn merely acknowledges or ends the conversation and needs no "
             "response. In that case emit no other text or hidden directives. Do not "
             "stay silent for a question, correction, meaningful disclosure, attachment, "
-            "or an answer to your own question/offer. If a batch includes a substantive "
+            "an answer to your own question/offer, or an approved short social turn "
+            "with runtime allowance available. If a batch includes a substantive "
             "request followed by 'thanks' or 'okay', answer the request."
         )
         for rule in ("memory", "lore", "tools"):

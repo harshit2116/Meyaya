@@ -29,7 +29,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from bot.app import MeyayaBot
 from bot.services.usage import ChatLimitReached, is_silence
 from bot.services.autoresponder import reply_policy, is_conversation_closing
-from bot.services.chat_boundaries import is_low_effort_reply, direct_hostility
+from bot.services.chat_boundaries import is_low_effort_reply, is_empty_reply, direct_hostility, ShortReplyBudget
 from bot.services.elation import public_chat_channel
 from bot.services.ai_guard import AILimitReached
 from bot.prompts.composer import build_system_instruction
@@ -151,6 +151,7 @@ class ChatCog(commands.Cog):
         self._active_chats = 0
         self._chat_conversations: dict[tuple[int, int, int], ChatConversation] = {}
         self._closing_chats = False
+        self._short_replies = ShortReplyBudget()
 
     async def cog_unload(self) -> None:
         self._closing_chats = True
@@ -185,7 +186,11 @@ class ChatCog(commands.Cog):
             return
         if not getattr(self.bot, 'feature_enabled', lambda *_: True)(message.guild.id, 'AI Chat'):
             return
-        if is_low_effort_reply(message.content or '', has_attachments=bool(getattr(message, 'attachments', ())), screen_single_words=False):
+        if is_empty_reply(message.content or '', has_attachments=bool(getattr(message, 'attachments', ()))):
+            return
+        if (is_low_effort_reply(message.content or '', screen_single_words=False,
+                has_attachments=bool(getattr(message, 'attachments', ())))
+                and not self._short_replies.allows(message.guild.id, message.channel.id, message.author.id)):
             return
         moderation = self.bot.get_cog("ModerationCog")
         if moderation and await moderation.should_block(message):
@@ -217,7 +222,7 @@ class ChatCog(commands.Cog):
             if command_context.valid:
                 return
             addressed_text = re.sub(rf"<@!?{self.bot.user.id}>", "", message.content).strip()
-            if is_conversation_closing(
+            if not is_low_effort_reply(addressed_text) and is_conversation_closing(
                 addressed_text, has_attachments=bool(getattr(message, "attachments", ()))
             ):
                 return
@@ -233,8 +238,9 @@ class ChatCog(commands.Cog):
         hostile = named_hostility or direct_hostility(text, directed=directed)
         previous_text = (reply_context.content + ' ' + reply_context.embed_summary
                          if is_reply_to_meyaya else followup_question)
-        if not hostile and is_low_effort_reply(text, previous_text=previous_text,
-                has_attachments=bool(getattr(message, 'attachments', ()))):
+        low_effort = not hostile and is_low_effort_reply(text, previous_text=previous_text,
+                has_attachments=bool(getattr(message, 'attachments', ())))
+        if low_effort and not self._short_replies.allows(message.guild.id, message.channel.id, message.author.id):
             return
         note_rudeness = getattr(self.bot.chat_blacklist, 'note_rudeness', None)
         if hostile and note_rudeness:
@@ -292,7 +298,7 @@ class ChatCog(commands.Cog):
         if not user_text:
             return
 
-        if is_conversation_closing(
+        if not low_effort and is_conversation_closing(
             user_text,
             previous_text=(reply_context.content + " " + reply_context.embed_summary
                            if reply_context else None),
@@ -381,7 +387,9 @@ class ChatCog(commands.Cog):
                 entries = sorted(state.entries, key=lambda item: getattr(item.message, "id", 0))
                 state.entries = []
                 state.pending_chars = 0
-                entries = [item for item in entries if not self.bot.chat_blacklist.is_blocked(key[0], item.message.author.id)]
+                entries = [item for item in entries if not self.bot.chat_blacklist.is_blocked(key[0], item.message.author.id)
+                           and (not self._short_entry(item) or self._short_replies.allows(
+                               key[0], key[1], item.message.author.id))]
                 if not entries or self._closing_chats or not self.bot.chat_allowed(key[0], key[1]):
                     continue
                 latest = entries[-1].message
@@ -453,6 +461,7 @@ class ChatCog(commands.Cog):
         context = await self._context_reads.read('channel', lambda: self._recent_proactive_messages(message, allow_fetch=False))
         instruction = build_system_instruction(profile="group", context_lines=[
             self._direct_abuse_context(entries),
+            self._short_reply_context(entries),
             "These incoming messages explicitly address Meyaya and are linked by a reply or shared topic. "
             "Answer together once. Keep verified speaker IDs distinct even when names match. "
             "Name people naturally when answering different points, without active pings. "
@@ -491,9 +500,13 @@ class ChatCog(commands.Cog):
         if self._is_no_reply(reply.text):
             return
 
+        if not self._short_turns_available(entries):
+            return
+
         text = self._render_custom_emojis(reply.text, self._usable_custom_emojis(message))
         for chunk in self._chunk_text(text):
             await message.reply(chunk, mention_author=False, allowed_mentions=discord.AllowedMentions.none())
+        self._record_short_reply(entries)
         self._remember_followup(message, text)
         await self._log_chat_entries(message, entries, response=text)
 
@@ -577,6 +590,7 @@ class ChatCog(commands.Cog):
             from bot.prompts.command_knowledge import PROFILE_HELP
             context_lines.append(PROFILE_HELP)
         context_lines.append(self._direct_abuse_context(batch or [ChatEntry(message, user_text, reply_context)]))
+        context_lines.append(self._short_reply_context(batch or [ChatEntry(message, user_text, reply_context)]))
         system_instruction = build_system_instruction(
             context_lines=context_lines,
             memory_lines=memory_lines,
@@ -645,6 +659,9 @@ class ChatCog(commands.Cog):
         if self._is_no_reply(reply.text):
             return
 
+        if not self._short_turns_available(batch or [ChatEntry(message, user_text, reply_context)]):
+            return
+
         # Single-speaker assessments can extend hostility detection to languages
         # outside the conservative lexical rules. Never attribute a group reply's
         # aggregate tone to one person.
@@ -662,6 +679,7 @@ class ChatCog(commands.Cog):
             rendered_reply = self._render_custom_emojis(reply.text, usable_emojis)
             for chunk in self._chunk_text(rendered_reply):
                 await message.reply(chunk)
+            self._record_short_reply(batch or [ChatEntry(message, user_text, reply_context)])
             self._remember_followup(message, rendered_reply)
             await self._mark_followup_surfaced(memory_lines)
             await self._callback_gate().delivered(memory_lines)
@@ -726,6 +744,42 @@ class ChatCog(commands.Cog):
                     await session.commit()
             except SQLAlchemyError:
                 logger.exception("Failed to persist Meyaya memory; chat reply was sent")
+
+    def _short_entry(self, entry):
+        bot_id = getattr(getattr(self.bot, 'user', None), 'id', None)
+        reply = entry.reply_context
+        directed = any(getattr(member, 'id', None) == bot_id
+                       for member in getattr(entry.message, 'mentions', ()))
+        directed = directed or (reply is not None and reply.author_id == bot_id)
+        if direct_hostility(entry.text, directed=directed):
+            return False
+        previous = reply.content + ' ' + reply.embed_summary if reply and reply.author_id == bot_id else None
+        return is_low_effort_reply(entry.text, previous_text=previous,
+            has_attachments=bool(getattr(entry.message, 'attachments', ())))
+
+    def _short_reply_context(self, entries):
+        speakers = list(dict.fromkeys(entry.message.author.id for entry in entries if self._short_entry(entry)))
+        if not speakers:
+            return ''
+        return ('APPROVED SHORT SOCIAL TURN for speaker IDs: ' + ', '.join(map(str, speakers))
+                + '. Their short-reply allowance is available. Give one brief, natural response '
+                'in their language, including a greeting back for hi, hy or hello. Do not return '
+                'NO_REPLY just because it is short. Do not mock brevity, invent a question to '
+                'prolong the exchange, or mention counters or restrictions. Application code handles the pause.')
+
+    def _short_turns_available(self, entries):
+        return all(not self._short_entry(entry) or self._short_replies.allows(
+            entry.message.guild.id, entry.message.channel.id, entry.message.author.id)
+            for entry in entries)
+
+    def _record_short_reply(self, entries):
+        grouped = {}
+        for entry in entries:
+            message = entry.message
+            key = (message.guild.id, message.channel.id, message.author.id)
+            grouped[key] = grouped.get(key, True) and self._short_entry(entry)
+        for key, low_effort in grouped.items():
+            self._short_replies.delivered(*key, low_effort=low_effort)
 
     def _direct_abuse_context(self, entries):
         bot_id = getattr(getattr(self.bot, 'user', None), 'id', None)
@@ -890,20 +944,23 @@ class ChatCog(commands.Cog):
         content = (message.content or "").strip()
         previous_text = (reply_context.content + ' ' + reply_context.embed_summary
                          if reply_context is not None and reply_context.author_id == self.bot.user.id else followup_question)
-        if is_low_effort_reply(content, previous_text=previous_text,
-                has_attachments=bool(getattr(message, 'attachments', ()))):
+        if is_empty_reply(content, has_attachments=bool(getattr(message, 'attachments', ()))):
             return
-        if not followup_question and is_conversation_closing(content, has_attachments=bool(getattr(message, "attachments", ()))):
+        low_effort = is_low_effort_reply(content, previous_text=previous_text,
+            has_attachments=bool(getattr(message, 'attachments', ())))
+        if low_effort and not self._short_replies.allows(message.guild.id, message.channel.id, message.author.id):
+            return
+        if not low_effort and not followup_question and is_conversation_closing(content, has_attachments=bool(getattr(message, "attachments", ()))):
             return
         if not content or (followup_question and len(content) > 1500):
             return
-        if not followup_question and not mass_ping and len(content) < 6:
+        if not low_effort and not followup_question and not mass_ping and len(content) < 6:
             return
         if content.startswith("/"):
             return
         visible_text = re.sub(r"<a?:\w+:\d+>|<@!?\d+>|https?://\S+", " ", content)
         visible_words = [word for word in visible_text.split() if any(char.isalnum() for char in word)]
-        if not followup_question and not mass_ping and len(visible_words) < 2:
+        if not low_effort and not followup_question and not mass_ping and len(visible_words) < 2:
             return
 
         is_monitored = getattr(monitor_cog, "is_channel_monitored", lambda _: False)(message)
@@ -1000,6 +1057,8 @@ class ChatCog(commands.Cog):
                     "pretend an emergency/event was described if the message contains only a ping. "
                     "Stay silent for sensitive announcements where a joke would be inappropriate."
                 )
+            if low_effort:
+                context_lines.append(self._short_reply_context([ChatEntry(message, content, reply_context)]))
             if followup_question:
                 context_lines.append(
                     "Follow-up relevance gate: you recently asked THIS member a question. "
@@ -1045,12 +1104,15 @@ class ChatCog(commands.Cog):
 
             if mass_ping and not public_chat_channel(message.channel):
                 return
+            if low_effort and not self._short_replies.allows(guild_id, channel_id, message.author.id):
+                return
             rendered_reply = self._render_custom_emojis(reply.text, usable_emojis)
             await message.reply(
                 rendered_reply[:MAX_DISCORD_MESSAGE_LENGTH],
                 mention_author=False,
                 allowed_mentions=discord.AllowedMentions.none(),
             )
+            self._short_replies.delivered(guild_id, channel_id, message.author.id, low_effort=low_effort)
             self._remember_followup(message, rendered_reply[:MAX_DISCORD_MESSAGE_LENGTH])
             await self._mark_followup_surfaced(memory_lines)
             await self._callback_gate().delivered(memory_lines)
