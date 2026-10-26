@@ -21,6 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from bot.app import MeyayaBot
 from bot.prompts.composer import build_voice_system_instruction
+from bot.utils.conversation_identity import server_identity_context
 from bot.repositories.server_lore import ServerLoreRepository
 from bot.services.audio import (
     PcmStreamAudioSource,
@@ -212,6 +213,7 @@ class VoiceChatSession:
 
         assert self.voice_client is not None
         state_lines = await self._load_meyaya_state_lines(channel)
+        state_lines.append(server_identity_context(channel.guild))
         self._gemini = GeminiLiveSession(
             guild_id=channel.guild.id,
             channel_id=channel.id,
