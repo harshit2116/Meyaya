@@ -34,3 +34,4 @@ body:has(#view-server:not([hidden])) main:has(#dashboard-header[hidden]){padding
 .feature-toggle {margin:0;padding:10px;background:rgba(223,156,193,.045);border-radius:9px;}
 
 .usage-reset-section {border-top:1px solid var(--border,#443545);padding-top:18px;margin-top:24px;}
+.member-identity{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;min-width:0;overflow-wrap:anywhere}.member-identity h3{margin:0}.member-display-name{min-width:0;overflow-wrap:anywhere}.member-username{font-size:12px;font-weight:400;color:var(--muted);overflow-wrap:anywhere}.record-heading>.member-identity{flex:1}.record-heading>.status{white-space:nowrap}

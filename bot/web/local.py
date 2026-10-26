@@ -117,6 +117,22 @@ class LocalBackend:
     def get_guild(self, guild_id):
         return self.guilds_by_id.get(guild_id)
 
+    async def fetch_user(self, user_id):
+        """Resolve one dashboard identity over REST without a gateway connection."""
+        if not self.settings.discord_token:
+            return None
+        try:
+            async with ClientSession(timeout=ClientTimeout(total=2),
+                    headers={'Authorization': f'Bot {self.settings.discord_token}'}) as client:
+                async with client.get(f'https://discord.com/api/v10/users/{int(user_id)}') as response:
+                    if response.status != 200:
+                        return None
+                    user = await response.json()
+            return SimpleNamespace(id=int(user['id']), name=user['username'],
+                display_name=user.get('global_name') or user['username'])
+        except (ClientError, TimeoutError, ValueError, KeyError, TypeError):
+            return None
+
     async def server_details(self, guild_id, *, summary=False):
         """Bounded on-demand reads including one 50-member page; no gateway."""
         saved = self._saved_identities.get(guild_id)

@@ -90,6 +90,8 @@ class Dashboard:
         self._owner_lock = asyncio.Lock()
         self._member_previews = {}
         self._member_lock = asyncio.Lock()
+        self._member_names = {}
+        self._member_name_slots = asyncio.Semaphore(3)
         self.security = DashboardSecurity(bot.settings)
         token = bot.settings.dashboard_token
         api_token = getattr(bot.settings, 'dashboard_api_token', '')
@@ -261,19 +263,13 @@ class Dashboard:
                     select(ChatBlacklist).order_by(ChatBlacklist.updated_at.desc()).limit(200)
                 )
             ).all()
+        items = [dict(guild_id=str(row.guild_id), user_id=str(row.user_id),
+                      active=row.active, reason=row.reason, source=row.source,
+                      updated_at=row.updated_at.isoformat()) for row in rows]
+        await self._add_member_identities(items)
         return web.json_response(
             {
-                "items": [
-                    {
-                        "guild_id": str(row.guild_id),
-                        "user_id": str(row.user_id),
-                        "active": row.active,
-                        "reason": row.reason,
-                        "source": row.source,
-                        "updated_at": row.updated_at.isoformat(),
-                    }
-                    for row in rows
-                ]
+                "items": items
             }
         )
 
@@ -418,7 +414,9 @@ class Dashboard:
         kind = request.query.get('kind', 'all')
         if kind not in {'all', 'direct', 'automatic'}:
             raise web.HTTPBadRequest(text='Invalid conversation filter')
-        return web.json_response(await self.bot.request_log.page(guild_id, before, kind=kind))
+        data = await self.bot.request_log.page(guild_id, before, kind=kind)
+        await self._add_member_identities(data['items'], guild_id=guild_id)
+        return web.json_response(data)
 
     async def command_history(self, request):
         try:
@@ -593,6 +591,53 @@ class Dashboard:
         ):
             raise web.HTTPBadRequest(text="Invalid dashboard filter")
         return guild_id, limit, offset, query, status
+
+    def _cached_member_identity(self, guild_id, user_id, fallback=None):
+        guild = self.bot.get_guild(guild_id) if guild_id else None
+        member = getattr(guild, 'get_member', lambda _: None)(user_id) if guild else None
+        user = member or getattr(self.bot, 'get_user', lambda _: None)(user_id)
+        if user is None:
+            entry = self._member_names.get(user_id)
+            if entry and entry[0] > time.monotonic():
+                user = entry[1]
+        return {'user_name': fallback or getattr(user, 'display_name', None) or f'User {user_id}',
+                'user_username': getattr(user, 'name', None)}
+
+    async def _add_member_identities(self, items, *, guild_id=None):
+        """Enrich old records by stable ID; never guess a handle from a nickname."""
+        recorded_names = {id(item): item.get('user_name') for item in items}
+        missing = set()
+        for item in items:
+            uid = int(item['user_id'])
+            gid = guild_id if guild_id is not None else int(item['guild_id'])
+            identity = self._cached_member_identity(gid, uid, item.get('user_name'))
+            item.update(identity)
+            entry = self._member_names.get(uid)
+            if not identity['user_username'] and not (entry and entry[0] > time.monotonic()):
+                missing.add(uid)
+        fetch = getattr(self.bot, 'fetch_user', None)
+        if fetch is None or not missing:
+            return
+
+        async def lookup(uid):
+            async with self._member_name_slots:
+                try:
+                    user = await fetch(uid)
+                except (discord.HTTPException, TimeoutError):
+                    user = None
+                self._member_names[uid] = (time.monotonic() + (300 if user else 30), user)
+                while len(self._member_names) > 512:
+                    self._member_names.pop(next(iter(self._member_names)))
+        try:
+            # Exact-user reads only. Page loading never fetches a whole guild,
+            # spawns background work, or waits indefinitely on Discord limits.
+            async with asyncio.timeout(2.5):
+                await asyncio.gather(*(lookup(uid) for uid in sorted(missing)[:8]))
+        except TimeoutError:
+            pass
+        for item in items:
+            gid = guild_id if guild_id is not None else int(item['guild_id'])
+            item.update(self._cached_member_identity(gid, int(item['user_id']), recorded_names[id(item)]))
 
     def _member_label(self, guild_id: int | None, user_id: int, fallback: str | None = None):
         guild = self.bot.get_guild(guild_id) if guild_id else None

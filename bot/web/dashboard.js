@@ -71,6 +71,18 @@ function element(tag, text, className) {
   return node;
 }
 
+function memberIdentity(item, nameTag = "strong") {
+  const userId = item.user_id === null || item.user_id === undefined ? "" : String(item.user_id);
+  const name = typeof item.user_name === "string" && item.user_name.trim()
+    ? item.user_name : userId ? `Member ${userId}` : "Unknown member";
+  const username = typeof item.user_username === "string" ? item.user_username.trim().replace(/^@/, "") : "";
+  const identity = element("div", undefined, "member-identity");
+  if (userId) identity.title = `Discord ID: ${userId}`;
+  identity.append(element(nameTag, name, "member-display-name"),
+    element("span", username ? `@${username}` : "Username unavailable", "member-username"));
+  return identity;
+}
+
 function metric(label, value) {
   const node = element("div");
   node.append(element("span", label), element("b", String(value)));
@@ -537,6 +549,7 @@ async function loadRequests(older) {
     for (const item of data.items) {
       const entry = element("article", undefined, "discord-exchange");
       const user = discordMessage(item.user_name, item.content);
+      user.querySelector(".discord-message-heading").replaceChildren(memberIdentity(item));
       const reply = discordMessage("Meyaya", item.response ?? "Reply not recorded.", true);
       if (item.kind === "auto_chat") user.querySelector(".discord-message-heading").append(element("span", "Automatic reply", "conversation-type auto-reply"));
       entry.append(user, reply); $("request-items").append(entry);
@@ -719,7 +732,10 @@ async function loadBlacklist() {
     for (const item of data.items) {
       const card = element("article", undefined, "record-card");
       const server = servers.find(server => server.id === item.guild_id);
-      card.append(element("h3", `Member ${item.user_id} - ${item.active ? "Blocked" : "Restored"}`), element("p", `${server?.name || item.guild_id} - ${item.source} - ${new Date(item.updated_at).toLocaleString()}`), element("p", item.reason));
+      const heading = element("div", undefined, "record-heading");
+      heading.append(memberIdentity(item, "h3"), element("span", item.active ? "Blocked" : "Restored", "status"));
+      card.append(heading, element("p", `Discord ID: ${known(item.user_id)}`, "details"),
+        element("p", `${server?.name || item.guild_id} - ${item.source} - ${new Date(item.updated_at).toLocaleString()}`), element("p", item.reason));
       if (item.active) {
         const button = element("button", "Restore access");
         button.onclick = async () => {
