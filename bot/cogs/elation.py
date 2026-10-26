@@ -359,7 +359,7 @@ class ElationCog(commands.Cog):
         self.attempts[gid] = now
         self.busy.add(gid)
         try:
-            instruction = build_system_instruction(profile="elation", context_lines=[
+            instruction = build_system_instruction(profile="elation", guild_id=gid, context_lines=[
                 performance_context(state),
                 "You are Meyaya playfully ruling this channel in an explicitly announced temporary prank. "
                 "Members are trying to convince you to return it. Respond warmly and theatrically, "

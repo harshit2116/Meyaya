@@ -269,7 +269,7 @@ class FunCog(commands.Cog):
         llm = builder() if builder else None
         if llm is None:
             return fallback
-        system = build_system_instruction(profile="flavor", context_lines=[
+        system = build_system_instruction(profile="flavor", guild_id=ctx.guild.id, context_lines=[
             "Write a fictional Reddit thread with exactly two connected replies.",
             "First: Meyaya responds directly to the post in her witty, playful personality. "
             "Second: the original poster replies naturally to Meyaya, not as Meyaya.",
@@ -485,6 +485,7 @@ class FunCog(commands.Cog):
 
         system_instruction = build_system_instruction(
             profile="flavor",
+            guild_id=ctx.guild.id if ctx.guild else None,
             context_lines=[
                 f"Current member Discord ID: {ctx.author.id}",
                 f"Current member handle: {ctx.author.name}",

@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 IDENTITY_PATH = Path(__file__).resolve().parents[1] / "private" / "meyaya_identity.json"
 AYAYA_USER_ID = 715925710849572904
+PAPA_GUILD_ID = 1479860234183905443
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +21,15 @@ class PrivateIdentity:
 
     parents: dict[int, str]
     favorite_user_ids: frozenset[int]
+
+    def for_guild(self, guild_id: int | None) -> PrivateIdentity:
+        """Creator family/favorite status is private to the designated server."""
+        if guild_id == PAPA_GUILD_ID:
+            return self
+        return PrivateIdentity(
+            parents={uid: name for uid, name in self.parents.items() if uid != AYAYA_USER_ID},
+            favorite_user_ids=self.favorite_user_ids - {AYAYA_USER_ID},
+        )
 
     def is_parent(self, user_id: int) -> bool:
         return user_id in self.parents

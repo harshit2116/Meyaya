@@ -10,7 +10,7 @@ from typing import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.data.private_identity import PrivateIdentity, get_private_identity
+from bot.data.private_identity import AYAYA_USER_ID, PAPA_GUILD_ID, PrivateIdentity, get_private_identity
 from bot.models.meyaya_state import MeyayaGlobalState, MeyayaUserState
 from bot.repositories.meyaya_state import MeyayaStateRepository
 
@@ -299,9 +299,9 @@ class MeyayaSystemService:
         now = self._now()
         global_state = await self.states.get_global(scope_id)
         user_state = await self.states.get_user(scope_id, user_id)
-        return self.prompt_lines_from_records(user_id, display_name, global_state, user_state, now=now)
+        return self.prompt_lines_from_records(user_id, display_name, global_state, user_state, now=now, guild_id=guild_id)
 
-    def prompt_lines_from_records(self, user_id, display_name, global_state, user_state, *, now=None):
+    def prompt_lines_from_records(self, user_id, display_name, global_state, user_state, *, now=None, guild_id=None):
         """Reuse freshly loaded profile records without fetching them again."""
         now = now or self._now()
         global_values = self._effective_global(global_state, now)
@@ -311,6 +311,7 @@ class MeyayaSystemService:
             user_values,
             user_id=user_id,
             display_name=display_name,
+            guild_id=guild_id,
         )
 
     async def profile_state(
@@ -324,7 +325,7 @@ class MeyayaSystemService:
         now = self._now()
         global_state = await self.states.get_global(scope_id)
         user_state = await self.states.get_user(scope_id, user_id)
-        return self.profile_state_from_records(user_id, global_state, user_state, now=now)
+        return self.profile_state_from_records(user_id, global_state, user_state, now=now, guild_id=guild_id)
 
     def profile_state_from_records(
         self,
@@ -333,6 +334,7 @@ class MeyayaSystemService:
         user_state: MeyayaUserState | None,
         *,
         now: datetime | None = None,
+        guild_id: int | None = None,
     ) -> MeyayaProfileState:
         """Build public profile state from records loaded by a larger aggregate query."""
 
@@ -341,20 +343,21 @@ class MeyayaSystemService:
         familiarity, affection, user_annoyance, nickname = self._relationship_values(
             user_id,
             self._effective_user(user_state, current),
+            guild_id=guild_id,
         )
         return MeyayaProfileState(
             mood=mood,
             energy=energy,
             global_annoyance=global_annoyance,
             relationship=self._relationship_label_for_user(
-                user_id, familiarity, affection, user_annoyance
+                user_id, familiarity, affection, user_annoyance, guild_id=guild_id
             ),
             familiarity=familiarity,
             affection=affection,
             user_annoyance=user_annoyance,
             nickname=nickname,
-            is_parent=self.identity.is_parent(user_id),
-            is_favorite=self.identity.is_favorite(user_id),
+            is_parent=self.identity.for_guild(guild_id).is_parent(user_id),
+            is_favorite=self.identity.for_guild(guild_id).is_favorite(user_id),
         )
 
     async def voice_prompt_lines(
@@ -383,10 +386,11 @@ class MeyayaSystemService:
             values = self._relationship_values(
                 user_id,
                 self._effective_user(user_states.get(user_id), now),
+                guild_id=guild_id,
             )
             familiarity, affection, user_annoyance, nickname = values
             relationship = self._relationship_label_for_user(
-                user_id, familiarity, affection, user_annoyance
+                user_id, familiarity, affection, user_annoyance, guild_id=guild_id
             )
             nickname_text = f', nickname "{nickname}"' if nickname else ""
             relationship_lines.append(
@@ -414,7 +418,7 @@ class MeyayaSystemService:
 
         state = await self.states.get_user(self._scope_id(guild_id), user_id)
         familiarity, affection, annoyance, _ = self._relationship_values(
-            user_id, self._effective_user(state, self._now())
+            user_id, self._effective_user(state, self._now()), guild_id=guild_id
         )
 
         if annoyance >= 65:
@@ -439,13 +443,14 @@ class MeyayaSystemService:
         *,
         user_id: int,
         display_name: str,
+        guild_id: int | None = None,
     ) -> list[str]:
         mood, energy, global_annoyance, reason = global_values
         familiarity, affection, user_annoyance, nickname = self._relationship_values(
-            user_id, user_values
+            user_id, user_values, guild_id=guild_id
         )
         relationship = self._relationship_label_for_user(
-            user_id, familiarity, affection, user_annoyance
+            user_id, familiarity, affection, user_annoyance, guild_id=guild_id
         )
         lines = [
             "THE MEYAYA SYSTEM is active. Let this state subtly shape tone; never read these values aloud.",
@@ -546,10 +551,14 @@ class MeyayaSystemService:
         familiarity: int,
         affection: int,
         annoyance: int,
+        *, guild_id: int | None = None,
     ) -> str:
-        if self.identity.is_parent(user_id):
+        if user_id == AYAYA_USER_ID and guild_id != PAPA_GUILD_ID:
+            return "her creator"
+        identity = self.identity.for_guild(guild_id)
+        if identity.is_parent(user_id):
             return "one of her parents and favorite people"
-        if self.identity.is_favorite(user_id):
+        if identity.is_favorite(user_id):
             return "one of her favorite people"
         return self._relationship_label(familiarity, affection, annoyance)
 
@@ -557,9 +566,10 @@ class MeyayaSystemService:
         self,
         user_id: int,
         values: tuple[int, int, int, str | None],
+        *, guild_id: int | None = None,
     ) -> tuple[int, int, int, str | None]:
         familiarity, affection, annoyance, nickname = values
-        if self.identity.is_favorite(user_id):
+        if self.identity.for_guild(guild_id).is_favorite(user_id):
             familiarity = 100
             affection = 100
         return familiarity, affection, annoyance, nickname

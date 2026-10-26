@@ -223,6 +223,7 @@ class VoiceChatSession:
             system_instruction=build_voice_system_instruction(
                 extra_instruction=self.bot.settings.gemini_live_system_instruction,
                 state_lines=state_lines,
+                guild_id=channel.guild.id,
             ),
             on_output_audio=self._on_gemini_audio,
             on_interrupted=self._on_gemini_interrupted,

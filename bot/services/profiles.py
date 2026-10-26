@@ -49,6 +49,7 @@ class ProfileService:
             user_id,
             global_state,
             user_state,
+            guild_id=guild_id,
         )
         marriage_summary = (
             MarriageService.summary_from_record(marriage, user_id) if marriage is not None else None
@@ -58,7 +59,7 @@ class ProfileService:
         total_interactions = stats.total_interactions if stats is not None else 0
         return ProfileSummary(
             prompt_lines=tuple(self.meyaya_system.prompt_lines_from_records(
-                user_id, display_name, global_state, user_state
+                user_id, display_name, global_state, user_state, guild_id=guild_id
             )) if display_name is not None else (),
             total_given=total_given,
             total_received=total_received,
