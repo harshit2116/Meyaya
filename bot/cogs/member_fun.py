@@ -115,6 +115,7 @@ class MemberFunCog(commands.Cog):
             )
             reply = await self.bot.generate_chat(
                 ctx.guild.id,
+                quota_user_id=ctx.author.id,
                 system_instruction=system,
                 user_message=json.dumps({"task": task, "members": facts, "draw": extra}),
                 max_output_tokens=550,

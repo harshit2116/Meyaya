@@ -103,6 +103,7 @@ class RoleplayCog(commands.Cog):
                     ctx.guild.id,
                     instruction,
                     message,
+                    quota_user_id=ctx.author.id,
                     max_output_tokens=300,
                 )
             if generated is None or not generated.text.strip():

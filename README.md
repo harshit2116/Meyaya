@@ -36,3 +36,45 @@ Mention her without a command to chat.
 
 Try `/awaken`, `/fantasyprofile`, `/guardian`, `/profilecheck`, or `/bossfight`.
 Server managers can use `/serversetup` and change the prefix with `/prefix`.
+
+## Voting
+
+Use `/vote`, `uwu vote`, or `@Meyaya vote` for the top.gg link and your reward
+balance. After voting, press **Check vote** or run `/vote` again to verify and
+claim the reward. Each confirmed vote grants **20 personal AI text replies for 12 hours
+from the vote**. These are available across servers after a server uses its shared
+allowance. Unused replies expire; weekend votes still grant 20 replies. Direct
+chat and requested AI text commands can use them. Automatic replies, combined
+group replies, and voice do not spend personal credits. Disabled chat, blacklists,
+channel restrictions, and AI resource limits still apply.
+
+When a new vote reward is claimed, Meyaya attempts one thank-you DM with an
+Elysia GIF from Klipy, the reward amount, and its expiry time. Rechecking an
+already claimed vote does not send another DM. Closed DMs or delivery failures
+leave the saved reward available and are noted in the claim response.
+
+For deployment:
+
+1. Apply `python -m alembic upgrade head` before starting the updated bot.
+2. Get a **v1 project API token** from Meyaya's top.gg **Integrations & API**
+   settings. Select read access only: `project.votes.read` and
+   `project.information.read`. No write permissions are used.
+3. Store it privately as `TOPGG_API_TOKEN` in the deployment environment.
+   `TOPGG_PROJECT_ID=891928922138710016` identifies Meyaya's existing listing;
+   verification rejects a token for another project. Set `TOPGG_ENABLED=true`
+   and restart Meyaya. No webhook, domain, tunnel, or inbound HTTP listener is needed.
+4. Cast a real vote and use `/vote` or **Check vote**. Confirm 20 bonus replies,
+   then repeat the check to verify it does not refill the balance. Slash commands
+   and button responses show your balance privately; prefix commands reply publicly.
+
+All Top.gg requests are authenticated HTTPS GETs. Verification first confirms the
+token's listing, then checks the requesting member's Discord ID. Votes are
+deduplicated using the original vote timestamp and member ID, so rechecks never
+reset the reward or extend its 12-hour lifetime. Requests have bounded timeouts,
+a short cache, a local rate cap, and provider rate-limit backoff. Provider failures
+leave saved rewards intact. Failed or silent AI generations refund their reserved
+reply. Shared quota resets leave personal rewards unchanged.
+
+Rewards default to disabled until configured. `/vote` still provides the voting
+link and clearly states when rewards are inactive. Vote receipts contain only
+the deterministic receipt ID, Discord user ID, timestamps, and allowance counters.

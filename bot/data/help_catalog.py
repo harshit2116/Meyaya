@@ -81,7 +81,7 @@ CATEGORY_ORDER: tuple[str, ...] = (
 )
 
 COMMAND_ORDER: dict[str, tuple[str, ...]] = {
-    "Essentials": ("help", "profile", "nickname", "gif", "feedback"),
+    "Essentials": ("help", "profile", "nickname", "gif", "vote", "feedback"),
     "Profile Studio": ("profilecheck", "aura", "duostyle", "callingcard"),
     "Social": ("roast", "compliment", "rank", "impersonate"),
     "Social Reactions": (
@@ -140,6 +140,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
 
 
 COMMANDS: tuple[HelpCommand, ...] = (
+    HelpCommand("vote", "vote", "Vote on top.gg and check your personal bonus AI replies.", "Essentials"),
     HelpCommand("elation", "elation [begin|stop|optout|status]", "Convince Queen Meyaya to end her temporary channel takeover. Includes nickname opt-out.", "Multiplayer Games"),
     HelpCommand("feedback", "feedback", "Join Pondside Lounge to report bugs or suggest features.", "Essentials"),
     HelpCommand("serversetup", "serversetup", "Set up chat access, automatic replies, and moderation with a guided menu.", "Server Admin"),

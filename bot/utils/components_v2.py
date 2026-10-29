@@ -354,6 +354,15 @@ def _remember(result, view):
         _message_views[message_id] = view
 
 
+async def send_native_embed(destination, embed):
+    """Deliver an explicitly requested classic embed through the shared transport."""
+    token = _delivering.set(True)
+    try:
+        return await destination.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
+    finally:
+        _delivering.reset(token)
+
+
 def install_components_v2():
     """Install once at bot startup across channel, DM and interaction delivery."""
     global _installed

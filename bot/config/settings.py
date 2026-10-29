@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from bot.data.voices import canonical_voice_name
@@ -24,6 +24,16 @@ class Settings(BaseSettings):
     redis_required: bool = Field(default=False, alias="REDIS_REQUIRED")
     redis_tls_verify: bool = Field(default=True, alias="REDIS_TLS_VERIFY")
     quota_exempt_guild_id: int = Field(default=1479860234183905443, alias="QUOTA_EXEMPT_GUILD_ID")
+    topgg_enabled: bool = Field(default=False, alias="TOPGG_ENABLED")
+    topgg_api_token: str = Field(default="", alias="TOPGG_API_TOKEN", repr=False)
+    topgg_project_id: str = Field(default="891928922138710016", pattern=r"^[1-9][0-9]{0,18}$", alias="TOPGG_PROJECT_ID")
+
+    @model_validator(mode="after")
+    def validate_topgg(self):
+        if self.topgg_enabled and not self.topgg_api_token.strip():
+            raise ValueError("TOPGG_ENABLED requires a Top.gg v1 API token with read access")
+        return self
+
     dashboard_enabled: bool = Field(default=False, alias="DASHBOARD_ENABLED")
     dashboard_host: str = Field(default="127.0.0.1", alias="DASHBOARD_HOST")
     dashboard_port: int = Field(default=8080, ge=1, le=65535, alias="DASHBOARD_PORT")

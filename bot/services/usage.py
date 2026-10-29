@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert, array
 from bot.models.usage import GuildUsage
 from bot.models.guild_settings import GuildSettings
 from bot.models.guild_identity import GuildIdentity
+from bot.services.topgg_votes import TopggVoteService
 
 
 class ChatLimitReached(Exception):
@@ -18,6 +19,7 @@ class ChatLimitReached(Exception):
 class UsageReservation:
     day: date
     generation: int
+    vote_id: str | None = None
 
 
 def is_silence(text: str) -> bool:
@@ -25,12 +27,14 @@ def is_silence(text: str) -> bool:
 
 
 class UsageService:
-    def __init__(self, session_factory, exempt_guild_id):
+    def __init__(self, session_factory, exempt_guild_id, *, vote_rewards_enabled=False):
         self.sessions = session_factory
         self.exempt_guild_id = exempt_guild_id
+        self.vote_rewards_enabled = vote_rewards_enabled
 
-    async def reserve(self, guild_id):
-        day = datetime.now(UTC).date()
+    async def reserve(self, guild_id, *, user_id=None):
+        now = datetime.now(UTC)
+        day = now.date()
         async with self.sessions() as session:
             limit = await session.scalar(
                 select(GuildSettings.daily_chat_limit).where(GuildSettings.guild_id == guild_id)
@@ -46,27 +50,42 @@ class UsageService:
                 where=True if unlimited else GuildUsage.chats < limit,
             ).returning(GuildUsage.reset_generation)
             count = await session.scalar(statement)
+            vote_id = None
+            if count is None and self.vote_rewards_enabled and user_id is not None:
+                vote_id = await TopggVoteService.reserve(session, user_id, now)
+                if vote_id is not None:
+                    count = await session.scalar(update(GuildUsage).where(
+                        GuildUsage.guild_id == guild_id, GuildUsage.day == day,
+                    ).values(bonus_chats=GuildUsage.bonus_chats + 1)
+                      .returning(GuildUsage.reset_generation))
             if count is None:
+                vote_hint = " Use /vote to earn 20 personal bonus replies for 12 hours." if self.vote_rewards_enabled else ""
                 raise ChatLimitReached(
-                    f"This server has used its {limit} daily Meyaya messages. The allowance resets at midnight UTC."
+                    f"This server has used its {limit} daily Meyaya messages. The allowance resets at midnight UTC.{vote_hint}"
                 )
             await session.execute(update(GuildIdentity).where(GuildIdentity.guild_id == guild_id)
                                   .values(last_activity_at=datetime.now(UTC)))
             await session.commit()
-        return UsageReservation(day, count)
+        return UsageReservation(day, count, vote_id)
 
     async def refund(self, guild_id, day):
         reservation = day if isinstance(day, UsageReservation) else None
         actual_day = reservation.day if reservation else day
         async with self.sessions() as session:
             conditions = [GuildUsage.guild_id == guild_id, GuildUsage.day == actual_day]
-            if reservation is not None:
-                conditions.append(GuildUsage.reset_generation == reservation.generation)
-            await session.execute(
-                update(GuildUsage)
-                .where(*conditions)
-                .values(chats=func.greatest(0, GuildUsage.chats - 1))
-            )
+            if reservation is not None and reservation.vote_id is not None:
+                # Match reserve's guild-then-vote lock order to avoid deadlocks.
+                await session.execute(update(GuildUsage).where(*conditions)
+                    .values(bonus_chats=func.greatest(0, GuildUsage.bonus_chats - 1)))
+                await TopggVoteService.refund(session, reservation.vote_id)
+            else:
+                if reservation is not None:
+                    conditions.append(GuildUsage.reset_generation == reservation.generation)
+                await session.execute(
+                    update(GuildUsage)
+                    .where(*conditions)
+                    .values(chats=func.greatest(0, GuildUsage.chats - 1))
+                )
             await session.execute(update(GuildIdentity).where(GuildIdentity.guild_id == guild_id)
                                   .values(last_activity_at=datetime.now(UTC)))
             await session.commit()
@@ -137,9 +156,12 @@ class UsageService:
                                 case((GuildUsage.day == today, GuildUsage.chats), else_=0)
                             ).label("today_chats"),
                             func.sum(
+                                case((GuildUsage.day == today, GuildUsage.bonus_chats), else_=0)
+                            ).label("today_bonus_chats"),
+                            func.sum(
                                 case((GuildUsage.day == today, GuildUsage.commands), else_=0)
                             ).label("today_commands"),
-                            func.sum(GuildUsage.chats).label("week_chats"),
+                            func.sum(GuildUsage.chats + GuildUsage.bonus_chats).label("week_chats"),
                             func.sum(GuildUsage.commands).label("week_commands"),
                         )
                         .where(GuildUsage.day >= today - timedelta(days=6))

@@ -337,6 +337,7 @@ function renderServerControls(target, server) {
     const card = element("form", undefined, "card");
     card.append(element("h3", `Settings for ${server.name}`), element("div", server.id, "id"), element("span", server.exempt ? "✦ Main server - Unlimited" : `${server.today_chats} / ${server.limit} Meyaya replies today`, "badge"));
     const progress = element("progress"); progress.max = Math.max(1, server.limit); progress.value = server.exempt ? 0 : server.today_chats; progress.setAttribute("aria-label", "Daily allowance used"); card.append(progress);
+    if (server.today_bonus_chats) card.append(element("p", `${server.today_bonus_chats} personal voting bonus replies used today, in addition to the shared allowance.`, "details"));
     const prefixLabel = element("label", "Command prefix"), prefix = element("input"); prefix.value = server.prefix; prefix.maxLength = 10; prefix.required = true; prefixLabel.append(prefix);
     const limitLabel = element("label", "Daily Meyaya reply allowance (0 disables chat)"), limit = element("input"); limit.type = "number"; limit.min = "0"; limit.max = "10000"; limit.required = true; limit.value = server.limit; limit.disabled = server.exempt; limitLabel.append(limit);
     const toggle = element("label", undefined, "toggle"), auto = element("input"); auto.type = "checkbox"; auto.checked = server.autoresponder; toggle.append(auto, element("span", "Automatic replies enabled"));
@@ -435,7 +436,7 @@ function renderServers() {
       (filter === "unavailable" && (isFormerServer(server) || server.available === false)));
   const sort = $("server-sort").value;
   visible.sort((a,b) => {
-    const score = server => sort === "activity" ? (server.today_chats + server.today_commands) :
+    const score = server => sort === "activity" ? (server.today_chats + (server.today_bonus_chats ?? 0) + server.today_commands) :
       sort === "members" ? (server.members ?? -1) : sort === "joined" ? (Date.parse(server.joined_at) || 0) : 0;
     return score(b) - score(a) || a.name.localeCompare(b.name);
   });
@@ -452,7 +453,7 @@ function renderServers() {
     const card = element("button", undefined, "server-tile"); card.type = "button";
     const icon = serverIcon(server), owner = element("p", `Owner · ${server.owner_name || (isFormerServer(server) ? "Not previously recorded" : "Loading…")}`, "server-owner");
     const activity = element("div", undefined, "server-tile-activity");
-    activity.append(metric("AI chats today", known(server.today_chats)), metric("Commands today", known(server.today_commands)));
+    activity.append(metric("AI chats today", known(server.today_chats + (server.today_bonus_chats ?? 0))), metric("Commands today", known(server.today_commands)));
     card.append(icon, element("h3", server.name), owner, activity, element("span", server.id, "id"), element("span", "View server →", "tile-link"));
     if (server.membership === "removed" || (server.local && server.available === false)) card.append(element("span", "No longer in server · saved records", "details"));
     card.setAttribute("aria-label", `View ${server.name}`);
@@ -521,7 +522,7 @@ function applyServerData(data) {
   servers = data.servers;
   servers.forEach(server => { server.readOnly = isFormerServer(server) || (data.mode === "remote" && !data.can_edit); });
   $("connection").textContent = data.mode === "remote" ? `● Live AWS bot · ${data.can_edit ? "editing enabled" : "read-only"}` : data.mode === "local" ? "● Local dashboard · cloud database" : data.ready ? "● Connected" : "Connecting to Discord";
-  $("total").textContent = servers.filter(server => !isFormerServer(server)).length; $("chats").textContent = servers.reduce((n, server) => n + server.today_chats, 0); $("commands").textContent = servers.reduce((n, server) => n + server.today_commands, 0);
+  $("total").textContent = servers.filter(server => !isFormerServer(server)).length; $("chats").textContent = servers.reduce((n, server) => n + server.today_chats + (server.today_bonus_chats ?? 0), 0); $("commands").textContent = servers.reduce((n, server) => n + server.today_commands, 0);
   populateGuildFilters();
   if (!pageServerId) { renderServers(); loadOverviewInsights(); }
   if (pageServerId) {

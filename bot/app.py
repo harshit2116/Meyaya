@@ -43,6 +43,7 @@ from bot.services.chat_blacklist import ChatBlacklistService
 from bot.services.ai_guard import AIGuard
 from bot.logging.health import health
 from bot.services.guild_features import FeatureDisabled, command_feature
+from bot.services.topgg_votes import TopggVoteService
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,10 @@ class MeyayaBot(commands.Bot):
         self._guild_chat_channels: dict[int, int | None] | None = None
         self.engine = build_async_engine(settings.database_url)
         self.session_factory: async_sessionmaker[AsyncSession] = build_session_factory(self.engine)
-        self.usage = UsageService(self.session_factory, settings.quota_exempt_guild_id)
+        self.usage = UsageService(self.session_factory, settings.quota_exempt_guild_id,
+                                  vote_rewards_enabled=settings.topgg_enabled)
+        self.votes = TopggVoteService(self.session_factory)
+        self.topgg_api = None
         self.request_log = RequestLogService(self.session_factory)
         self.chat_blacklist = ChatBlacklistService(self.session_factory)
         self.ai_guard = AIGuard(self.session_factory, settings)
@@ -191,6 +195,11 @@ class MeyayaBot(commands.Bot):
             connector=connector,
             timeout=HTTP_TIMEOUT,
         )
+        if self.settings.topgg_enabled:
+            from bot.services.topgg_api import TopggAPI
+
+            self.topgg_api = TopggAPI(self.http_session, self.settings.topgg_api_token,
+                                      self.settings.topgg_project_id)
         # These services are stateless wrappers around shared clients. Reuse
         # them instead of allocating a new wrapper for every command/message.
         self._klipy_service = KlipyService(
@@ -214,6 +223,7 @@ class MeyayaBot(commands.Bot):
         await self.load_extension("bot.cogs.ship")
         await self.load_extension("bot.cogs.fun")
         await self.load_extension("bot.cogs.extras")
+        await self.load_extension("bot.cogs.voting")
         await self.load_extension("bot.cogs.member_fun")
         await self.load_extension("bot.cogs.celestial")
         await self.load_extension("bot.cogs.fantasy")
@@ -396,7 +406,7 @@ class MeyayaBot(commands.Bot):
             self._profile_aesthetic_service = ProfileAestheticService(self)
         return self._profile_aesthetic_service
 
-    async def generate_chat(self, guild_id, *args, **kwargs):
+    async def generate_chat(self, guild_id, *args, quota_user_id=None, **kwargs):
         """Reserve before generation and refund failures or silence responses."""
         if guild_id is None:
             raise ChatLimitReached("Meyaya chat commands are only available inside a server.")
@@ -405,7 +415,10 @@ class MeyayaBot(commands.Bot):
             # Connection establishment, allowance lookup, reservation and commit
             # all share this budget; cold connections need room for each step.
             async with asyncio.timeout(15):
-                day = await self.usage.reserve(guild_id) if guild_id is not None else None
+                if quota_user_id is None:
+                    day = await self.usage.reserve(guild_id)
+                else:
+                    day = await self.usage.reserve(guild_id, user_id=quota_user_id)
         reserve_ms = (time.monotonic() - reserve_started) * 1000
         if reserve_ms >= 250:
             logger.info("chat_quota reserve_ms=%.0f", reserve_ms)

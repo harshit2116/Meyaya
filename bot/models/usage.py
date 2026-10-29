@@ -12,6 +12,7 @@ class GuildUsage(Base):
     guild_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     day: Mapped[date] = mapped_column(Date, primary_key=True)
     chats: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    bonus_chats: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
     reset_generation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
     commands: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     command_counts: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,

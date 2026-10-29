@@ -633,7 +633,8 @@ class ChatCog(commands.Cog):
         async with background_typing(message.channel):
             try:
                 reply, _ = await asyncio.gather(
-                    self.bot.generate_chat(guild_id, system_instruction, generation_prompt, history=history),
+                    self.bot.generate_chat(guild_id, system_instruction, generation_prompt,
+                                           history=history, quota_user_id=message.author.id),
                     self._log_chat_entries(message, batch),
                 )
             except ChatLimitReached as exc:

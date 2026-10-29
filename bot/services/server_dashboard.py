@@ -36,6 +36,7 @@ async def server_overview(bot, guild_id):
             "limit": limit, "used": used, "unlimited": unlimited,
             "remaining": None if unlimited else max(0, limit - used),
             "commands": usage.commands if usage else 0,
+            "bonus_chats": usage.bonus_chats if usage else 0,
             "reset": int(datetime.combine(today + timedelta(days=1), datetime.min.time(), tzinfo=UTC).timestamp()),
             "channel": settings.chat_channel_id if settings else None,
             "autoresponder": settings.autoresponder_enabled if settings else False,
@@ -52,6 +53,8 @@ def dashboard_embed(guild, data):
     remaining = "Unlimited" if data["unlimited"] else str(data["remaining"])
     embed.add_field(name="Today's messages", value=f"Allowance **{allowance}**\nUsed **{data['used']}**\nRemaining **{remaining}**", inline=True)
     embed.add_field(name="Today's activity", value=f"Commands completed **{data['commands']}**\nResets <t:{data['reset']}:R>\nMidnight UTC", inline=True)
+    if data.get("bonus_chats"):
+        embed.add_field(name="Voting bonus replies", value=f"**{data['bonus_chats']}** personal bonus replies used today, in addition to the shared allowance.", inline=False)
     embed.add_field(name="Most chat requests - last 7 days", value=(
         "\n".join(f"{index}. <@{member_id}> - {count} requests" for index, (member_id, count) in enumerate(data["top"], 1))
         or "No chat requests recorded yet."

@@ -398,7 +398,7 @@ class Dashboard:
         errors = [row for row in reversed(list(health_telemetry.errors.values())) if str(row.get('guild_id')) == str(gid)][:20]
         return web.json_response(dict(history=[dict(id=row.id, type=row.event_type,
             timestamp=row.occurred_at.isoformat(), actor=row.actor, details=row.details) for row in events],
-            trend=[dict(day=row.day.isoformat(), chats=row.chats, commands=row.commands) for row in daily],
+            trend=[dict(day=row.day.isoformat(), chats=row.chats + row.bonus_chats, commands=row.commands) for row in daily],
             errors=errors, identity=await self._saved_server(gid)))
 
     async def requests(self, request):
