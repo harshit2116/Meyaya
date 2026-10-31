@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     redis_tls_verify: bool = Field(default=True, alias="REDIS_TLS_VERIFY")
     quota_exempt_guild_id: int = Field(default=1479860234183905443, alias="QUOTA_EXEMPT_GUILD_ID")
     topgg_enabled: bool = Field(default=False, alias="TOPGG_ENABLED")
+    topgg_auto_detect_enabled: bool = Field(default=True, alias="TOPGG_AUTO_DETECT_ENABLED")
+    topgg_poll_interval_seconds: int = Field(default=60, ge=60, le=3600, alias="TOPGG_POLL_INTERVAL_SECONDS")
     topgg_api_token: str = Field(default="", alias="TOPGG_API_TOKEN", repr=False)
     topgg_project_id: str = Field(default="891928922138710016", pattern=r"^[1-9][0-9]{0,18}$", alias="TOPGG_PROJECT_ID")
 

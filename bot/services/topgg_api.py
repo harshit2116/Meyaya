@@ -6,6 +6,7 @@ import json
 import logging
 import time
 from collections import OrderedDict, deque
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
@@ -20,6 +21,48 @@ MAX_RESPONSE_BYTES = 32768
 
 class TopggUnavailable(Exception):
     """Safe message for a verification failure; never include provider content."""
+
+
+class TopggCursorExpired(TopggUnavailable):
+    """Restart the current history window when a saved cursor is no longer valid."""
+
+
+@dataclass(frozen=True)
+class VotePage:
+    votes: tuple[VerifiedVote, ...]
+    cursor: str | None
+    complete: bool
+
+
+def parse_vote_page(payload, bot_id: int, *, now=None) -> VotePage:
+    if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+        raise InvalidVote("Invalid vote page")
+    records = payload["data"]
+    if len(records) > 200:
+        raise InvalidVote("Vote page too large")
+    if not records:
+        return VotePage((), None, True)
+    cursor = payload.get("cursor")
+    if not isinstance(cursor, str) or not 1 <= len(cursor) <= 2048:
+        raise InvalidVote("Missing pagination cursor")
+    votes = []
+    now = now or datetime.now(UTC)
+    for record in records:
+        if not isinstance(record, dict):
+            raise InvalidVote("Invalid vote record")
+        identity = record.get("platform_id")
+        if (
+            not isinstance(identity, str)
+            or not identity.isascii()
+            or not identity.isdecimal()
+            or not 1 <= len(identity) <= 19
+            or not 0 < int(identity) < 2**63
+        ):
+            raise InvalidVote("Invalid Discord voter ID")
+        vote = parse_vote_status(record, bot_id, int(identity), now=now)
+        if vote is not None:
+            votes.append(vote)
+    return VotePage(tuple(votes), cursor, False)
 
 
 def parse_vote_status(payload, bot_id: int, user_id: int, *, now=None) -> VerifiedVote | None:
@@ -102,16 +145,22 @@ class TopggAPI:
                     delays.append(value)
         self._blocked_until = max(self._blocked_until, time.monotonic() + max(delays))
 
-    async def _get(self, suffix="", *, missing_vote=False):
+    @property
+    def retry_after_seconds(self):
+        return max(0, self._blocked_until - time.monotonic())
+
+    async def _get(self, suffix="", *, missing_vote=False, params=None):
         await self._reserve_request()
         try:
             async with self.http.get(
                 API_ROOT + suffix,
-                params={"source": "discord"} if missing_vote else None,
+                params={"source": "discord"} if missing_vote else params,
                 headers={"Authorization": f"Bearer {self._token}", "Accept": "application/json"},
                 timeout=aiohttp.ClientTimeout(total=4, connect=2),
                 allow_redirects=False,
             ) as response:
+                if params and "cursor" in params and response.status in {400, 404, 410, 422}:
+                    raise TopggCursorExpired("The saved Top.gg vote cursor is no longer valid.")
                 if response.status == 404 and missing_vote:
                     return None
                 if response.status in {401, 403, 404}:
@@ -172,8 +221,25 @@ class TopggAPI:
             raise TopggUnavailable(
                 "Top.gg returned an invalid vote status. Please try again later."
             ) from None
+        self._remember_vote(user_id, vote)
+        return vote
+
+    def _remember_vote(self, user_id, vote):
         self._cache[user_id] = (time.monotonic() + (30 if vote else 5), vote)
         self._cache.move_to_end(user_id)
         while len(self._cache) > 512:
             self._cache.popitem(last=False)
-        return vote
+
+    async def vote_page(self, bot_id: int, *, since: datetime, cursor=None) -> VotePage:
+        await self.verify_project(bot_id)
+        params = {"cursor": cursor} if cursor is not None else {"startDate": since.isoformat()}
+        data = await self._get("/votes", params=params)
+        try:
+            page = parse_vote_page(data, bot_id)
+        except InvalidVote:
+            raise TopggUnavailable(
+                "Top.gg returned an invalid vote page. The scan will be retried."
+            ) from None
+        for vote in page.votes:
+            self._remember_vote(vote.user_id, vote)
+        return page

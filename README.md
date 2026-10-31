@@ -37,18 +37,25 @@ Mention her without a command to chat.
 Try `/awaken`, `/fantasyprofile`, `/guardian`, `/profilecheck`, or `/bossfight`.
 Server managers can use `/serversetup` and change the prefix with `/prefix`.
 
+New members receive a short welcome guide on their first direct AI chat attempt.
+**Continue chat** answers their original message using the normal chat rules;
+the guide itself makes no AI request and spends no chat allowance. It appears
+once per person across servers. `/guide` reopens it, and **All commands** opens
+the private command directory. Existing conversation participants are preserved
+by the migration and will not be interrupted by a new welcome.
+
 ## Voting
 
 Use `/vote`, `uwu vote`, or `@Meyaya vote` for the top.gg link and your reward
-balance. After voting, press **Check vote** or run `/vote` again to verify and
-claim the reward. Each confirmed vote grants **20 personal AI text replies for 12 hours
+balance. New votes are checked automatically every 60 seconds. **Check vote**
+and `/vote` can also verify immediately. Each confirmed vote grants **20 personal AI text replies for 12 hours
 from the vote**. These are available across servers after a server uses its shared
 allowance. Unused replies expire; weekend votes still grant 20 replies. Direct
 chat and requested AI text commands can use them. Automatic replies, combined
 group replies, and voice do not spend personal credits. Disabled chat, blacklists,
 channel restrictions, and AI resource limits still apply.
 
-When a new vote reward is claimed, Meyaya attempts one thank-you DM with an
+When a new vote reward is detected or claimed, Meyaya attempts one thank-you DM with an
 Elysia GIF from Klipy, the reward amount, and its expiry time. Rechecking an
 already claimed vote does not send another DM. Closed DMs or delivery failures
 leave the saved reward available and are noted in the claim response.
@@ -63,7 +70,8 @@ For deployment:
    `TOPGG_PROJECT_ID=891928922138710016` identifies Meyaya's existing listing;
    verification rejects a token for another project. Set `TOPGG_ENABLED=true`
    and restart Meyaya. No webhook, domain, tunnel, or inbound HTTP listener is needed.
-4. Cast a real vote and use `/vote` or **Check vote**. Confirm 20 bonus replies,
+4. Cast a real vote and allow about a minute for detection, or use **Check vote**.
+   Confirm 20 bonus replies,
    then repeat the check to verify it does not refill the balance. Slash commands
    and button responses show your balance privately; prefix commands reply publicly.
 
@@ -74,6 +82,21 @@ reset the reward or extend its 12-hour lifetime. Requests have bounded timeouts,
 a short cache, a local rate cap, and provider rate-limit backoff. Provider failures
 leave saved rewards intact. Failed or silent AI generations refund their reserved
 reply. Shared quota resets leave personal rewards unchanged.
+
+Automatic detection uses at most three history pages per tick, shares the API
+rate cap with interactive checks, and backs off on failures. A durable cursor
+resumes larger scans after a restart; completed scans overlap by five minutes
+to catch delayed results. The first scan and recovery after long downtime cover
+the last 12 hours, so expired votes cannot produce fresh rewards. A short database
+lease prevents two running pollers from advancing the same scan simultaneously.
+
+Thank-you DMs use a separate bounded worker and durable pending receipts. The DM
+attempt is saved before Discord delivery, so restarts and simultaneous manual
+checks cannot resend it. As with closed DMs, a crash during an in-flight attempt
+can leave the reward saved without a delivered DM; attempts are not retried.
+Existing receipts are marked attempted by the migration to avoid old thank-you
+messages being resent. Set `TOPGG_AUTO_DETECT_ENABLED=false` for manual-only
+detection, or change `TOPGG_POLL_INTERVAL_SECONDS` (minimum 60).
 
 Rewards default to disabled until configured. `/vote` still provides the voting
 link and clearly states when rewards are inactive. Vote receipts contain only

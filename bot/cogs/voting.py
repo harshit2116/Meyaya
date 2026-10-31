@@ -8,7 +8,8 @@ from discord.ext import commands
 from sqlalchemy.exc import SQLAlchemyError
 
 from bot.services.topgg_api import TopggUnavailable
-from bot.services.topgg_votes import VOTE_CREDITS
+from bot.services.topgg_poll import TopggPoller
+from bot.services.topgg_votes import VOTE_CREDITS, PollLeaseLost
 from bot.utils.components_v2 import MeyayaView, send_native_embed
 from bot.utils.embeds import meyaya_embed
 
@@ -80,28 +81,113 @@ class VoteView(MeyayaView):
 class VotingCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self._poll_task = None
+        self._notification_task = None
+        self._notification_wakeup = asyncio.Event()
+
+    async def cog_load(self):
+        if not self.bot.settings.topgg_enabled:
+            return
+        self._notification_task = asyncio.create_task(
+            self._notification_loop(), name="topgg-vote-dms"
+        )
+        if self.bot.settings.topgg_auto_detect_enabled:
+            self._poll_task = asyncio.create_task(self._poll_loop(), name="topgg-vote-poll")
+
+    async def cog_unload(self):
+        tasks = [task for task in (self._poll_task, self._notification_task) if task is not None]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self._poll_task = self._notification_task = None
+
+    async def _poll_loop(self):
+        await self.bot.wait_until_ready()
+        poller = TopggPoller(
+            self.bot.topgg_api, self.bot.votes, self.bot.user.id, self.bot.settings.topgg_project_id
+        )
+        interval = self.bot.settings.topgg_poll_interval_seconds
+        failures = 0
+        while True:
+            try:
+                count = await poller.poll_once()
+                failures = 0
+                if count:
+                    self._notification_wakeup.set()
+                    logger.info("Top.gg automatic vote rewards added count=%s", count)
+            except (
+                TopggUnavailable,
+                SQLAlchemyError,
+                TimeoutError,
+                OSError,
+                PollLeaseLost,
+            ) as error:
+                # No tokens, provider bodies, cursors or database parameters.
+                failures = min(failures + 1, 4)
+                logger.warning(
+                    "Top.gg automatic vote check unavailable error=%s", type(error).__name__
+                )
+            delay = min(interval * 2**failures, max(interval, 900))
+            await asyncio.sleep(max(delay, self.bot.topgg_api.retry_after_seconds))
+
+    async def _notification_loop(self):
+        await self.bot.wait_until_ready()
+        while True:
+            self._notification_wakeup.clear()
+            delay = 60
+            try:
+                if await self._deliver_pending_notifications_once() == 10:
+                    delay = 1
+            except (SQLAlchemyError, TimeoutError, OSError) as error:
+                logger.warning(
+                    "Top.gg pending DM delivery unavailable error=%s", type(error).__name__
+                )
+            try:
+                await asyncio.wait_for(self._notification_wakeup.wait(), timeout=delay)
+            except TimeoutError:
+                pass
+
+    async def _deliver_pending_notifications_once(self):
+        async with asyncio.timeout(5):
+            pending = await self.bot.votes.pending_notifications(limit=10)
+        for vote in pending:
+            await self.send_vote_thanks(None, vote)
+        return len(pending)
 
     async def send_vote_thanks(self, recipient, vote):
-        if recipient.id != vote.user_id:
+        if recipient is not None and recipient.id != vote.user_id:
             logger.warning("Vote thank-you recipient mismatch")
             return False
         try:
+            async with asyncio.timeout(5):
+                if not await self.bot.votes.claim_notification(vote.vote_id):
+                    return None
             async with asyncio.timeout(8):
+                if recipient is None:
+                    recipient = self.bot.get_user(vote.user_id) or await self.bot.fetch_user(
+                        vote.user_id
+                    )
                 await send_native_embed(recipient, vote_thanks_embed(vote))
             return True
-        except (discord.HTTPException, OSError, TimeoutError) as error:
+        except (discord.HTTPException, OSError, TimeoutError, SQLAlchemyError) as error:
             # DM permissions and delivery are optional; never log exception bodies.
             logger.info("Vote thank-you DM unavailable error=%s", type(error).__name__)
             return False
 
     async def reward_embed(self, user_id, *, recipient=None):
         enabled = self.bot.settings.topgg_enabled
+        claim_instruction = (
+            "New votes are detected automatically, usually within a minute. "
+            "Press **Check vote** or run `/vote` to check sooner. "
+            if getattr(self.bot.settings, "topgg_auto_detect_enabled", True)
+            else "After voting, press **Check vote** or run `/vote` again to claim your reward. "
+        )
         description = (
             f"Vote for Meyaya to receive **{VOTE_CREDITS} personal AI replies** for **12 hours**.\n"
             "They work across servers after the server's shared chat allowance runs out. "
             "Mention me directly or use an AI text command to spend them. "
             "Automatic and combined group replies use the server allowance.\n\n"
-            "After voting, press **Check vote** or run `/vote` again to claim your reward. "
+            f"{claim_instruction}"
             "Unused replies expire 12 hours after the original vote. "
             "Disabled chat, server restrictions, and AI limits still apply."
             if enabled
@@ -135,7 +221,7 @@ class VotingCog(commands.Cog):
         # concurrent commands, cog reloads and process restarts.
         if new_vote is not None and recipient is not None:
             sent = await self.send_vote_thanks(recipient, new_vote)
-            if not sent:
+            if sent is False:
                 note += "\nYour reward is saved, but I couldn't send your thank-you DM."
         embed.add_field(name="Vote verification", value=note, inline=False)
         try:

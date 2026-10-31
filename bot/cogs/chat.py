@@ -198,7 +198,12 @@ class ChatCog(commands.Cog):
             return
         if not getattr(self.bot, 'feature_enabled', lambda *_: True)(message.guild.id, 'AI Chat'):
             return
-        if is_empty_reply(message.content or '', has_attachments=bool(getattr(message, 'attachments', ()))):
+        if (
+            is_empty_reply(
+                message.content or '', has_attachments=bool(getattr(message, 'attachments', ()))
+            )
+            and self.bot.user not in getattr(message, 'mentions', ())
+        ):
             return
         if (is_low_effort_reply(message.content or '', screen_single_words=False,
                 has_attachments=bool(getattr(message, 'attachments', ())))
@@ -308,6 +313,8 @@ class ChatCog(commands.Cog):
             message.content,
         ).strip()
         if not user_text:
+            if directed:
+                await self._maybe_show_first_use(message, can_continue=False)
             return
 
         if not low_effort and is_conversation_closing(
@@ -320,6 +327,8 @@ class ChatCog(commands.Cog):
 
         if await self.bot.chat_blacklist.inspect(message.guild.id, message.author.id, user_text):
             return
+        if directed and await self._maybe_show_first_use(message):
+            return
         llm = self.bot.build_llm_provider()
         if llm is None:
             await self.bot.request_log.record_message(message)
@@ -331,6 +340,53 @@ class ChatCog(commands.Cog):
         entry = ChatEntry(message, user_text, reply_context)
         conversation_key = self._related_chat_key(conversation_key, entry)
         await self._enqueue_chat(conversation_key, entry)
+
+    async def _maybe_show_first_use(self, message, *, can_continue=True):
+        service = getattr(self.bot, "first_use", None)
+        if service is None:
+            return False
+        from bot.views.first_use import FirstUseView, first_use_embed
+
+        try:
+            async with asyncio.timeout(5):
+                claim = await service.claim(message.author.id)
+        except (SQLAlchemyError, TimeoutError):
+            logger.warning("First-use guide check unavailable")
+            return False
+        if claim.state == "seen":
+            return False
+        if claim.state == "pending":
+            return True
+        view = FirstUseView(
+            self.bot, message.author.id, chat=self, source=message if can_continue else None
+        )
+        try:
+            async with asyncio.timeout(8):
+                view.message = await message.reply(
+                    embed=first_use_embed(self.bot, message.guild.id, can_continue=can_continue),
+                    view=view,
+                    mention_author=False,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+        except (discord.Forbidden, discord.NotFound):
+            view.stop()
+            try:
+                async with asyncio.timeout(5):
+                    await service.release(message.author.id, claim.token)
+            except (SQLAlchemyError, TimeoutError):
+                logger.warning("First-use guide retry unavailable")
+            return True
+        except (discord.HTTPException, TimeoutError, OSError):
+            view.stop()
+            # Delivery is ambiguous. Retain the marker to avoid repeated welcomes.
+            service.remember(message.author.id)
+            return True
+        try:
+            async with asyncio.timeout(5):
+                await service.finish(message.author.id, claim.token)
+        except (SQLAlchemyError, TimeoutError):
+            logger.warning("First-use guide acknowledgement unavailable")
+        return True
 
     def _related_chat_key(self, own_key, entry):
         if own_key in self._chat_conversations:
