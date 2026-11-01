@@ -9,6 +9,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from bot.models.request_log import RequestLog
+from bot.models.voice_summary import VoiceSummary
 
 logger = logging.getLogger(__name__)
 RETENTION_DAYS = 7
@@ -186,6 +187,11 @@ class RequestLogService:
             await session.execute(
                 delete(RequestLog).where(
                     RequestLog.created_at < datetime.now(UTC) - timedelta(days=RETENTION_DAYS)
+                )
+            )
+            await session.execute(
+                delete(VoiceSummary).where(
+                    VoiceSummary.ended_at < datetime.now(UTC) - timedelta(days=RETENTION_DAYS)
                 )
             )
             await session.commit()

@@ -45,6 +45,7 @@ from bot.logging.health import health
 from bot.services.guild_features import FeatureDisabled, command_feature
 from bot.services.topgg_votes import TopggVoteService
 from bot.services.first_use import FirstUseService
+from bot.services.voice_summary import VoiceSummaryService
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,7 @@ class MeyayaBot(commands.Bot):
                                   vote_rewards_enabled=settings.topgg_enabled)
         self.votes = TopggVoteService(self.session_factory)
         self.first_use = FirstUseService(self.session_factory)
+        self.voice_summaries = VoiceSummaryService(self.session_factory)
         self.topgg_api = None
         self.request_log = RequestLogService(self.session_factory)
         self.chat_blacklist = ChatBlacklistService(self.session_factory)
@@ -299,14 +301,19 @@ class MeyayaBot(commands.Bot):
                     await super().close()
                 finally:
                     try:
-                        if self.http_session is not None and not self.http_session.closed:
-                            await self.http_session.close()
+                        summaries = getattr(self, "voice_summaries", None)
+                        if summaries is not None:
+                            await summaries.close()
                     finally:
                         try:
-                            if self.redis is not None:
-                                await self.redis.aclose()
+                            if self.http_session is not None and not self.http_session.closed:
+                                await self.http_session.close()
                         finally:
-                            await self.engine.dispose()
+                            try:
+                                if self.redis is not None:
+                                    await self.redis.aclose()
+                            finally:
+                                await self.engine.dispose()
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
         """Return friendly written-command errors and log only unexpected failures."""

@@ -35,6 +35,7 @@ AudioCallback = Callable[[bytes], Awaitable[None]]
 InterruptCallback = Callable[[], Awaitable[None]]
 InputSentCallback = Callable[[int], Awaitable[None]]
 ReconnectCallback = Callable[[], Awaitable[None]]
+TranscriptionCallback = Callable[[str, str], None]
 _QUEUE_EMPTY = object()
 
 
@@ -55,6 +56,7 @@ class GeminiLiveSession:
         guild_id: int | None = None,
         channel_id: int | None = None,
         key_pool=None,
+        on_transcription: TranscriptionCallback | None = None,
     ) -> None:
         self.api_key = api_key
         self.key_pool = key_pool
@@ -68,6 +70,7 @@ class GeminiLiveSession:
         self.on_interrupted = on_interrupted
         self.on_input_audio_sent = on_input_audio_sent
         self.on_reconnected = on_reconnected
+        self.on_transcription = on_transcription
 
         self._client = None
         self._conn_cm = None
@@ -92,7 +95,7 @@ class GeminiLiveSession:
         self._output_chunk_count = 0
 
     def _config(self) -> dict:
-        return {
+        config = {
             "response_modalities": ["AUDIO"],
             "system_instruction": {"parts": [{"text": self.system_instruction}]},
             "speech_config": {
@@ -106,6 +109,10 @@ class GeminiLiveSession:
                 }
             },
         }
+        if self.on_transcription is not None:
+            config["input_audio_transcription"] = {}
+            config["output_audio_transcription"] = {}
+        return config
 
     def _metric(self, name: str, **fields) -> None:
         event(
@@ -485,6 +492,19 @@ class GeminiLiveSession:
 
             if getattr(server, "interrupted", False):
                 await self.on_interrupted()
+
+            if self.on_transcription is not None:
+                # Transcription-only events need not contain a model audio turn.
+                # This callback only updates bounded RAM; no I/O on the audio path.
+                try:
+                    for role, field in (("user", "input_transcription"), ("assistant", "output_transcription")):
+                        text = getattr(getattr(server, field, None), "text", None)
+                        if isinstance(text, str) and text:
+                            self.on_transcription(role, text)
+                    if getattr(server, "turn_complete", False):
+                        self.on_transcription("boundary", "")
+                except Exception as error:
+                    logger.warning("Voice summary capture unavailable error=%s", type(error).__name__)
 
             model_turn = getattr(server, "model_turn", None)
             if model_turn is None:

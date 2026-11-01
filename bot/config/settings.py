@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     ai_max_output_tokens: int = Field(default=2048, ge=100, le=8192, alias="AI_MAX_OUTPUT_TOKENS")
     voice_max_sessions: int = Field(default=1, ge=1, le=5, alias="VOICE_MAX_SESSIONS")
     voice_session_minutes: int = Field(default=10, ge=1, le=60, alias="VOICE_SESSION_MINUTES")
+    voice_summaries_enabled: bool = Field(default=True, alias="VOICE_SUMMARIES_ENABLED")
     gemini_fallback_model: str = Field(default="", alias="GEMINI_FALLBACK_MODEL")
     gemini_model: str = Field(default="gemini-3.5-flash-lite", alias="GEMINI_MODEL")
     gemini_fast_model: str = Field(default="gemini-3.5-flash-lite", alias="GEMINI_FAST_MODEL")

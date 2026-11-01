@@ -172,6 +172,7 @@ class Dashboard:
         self.app.router.add_get("/api/servers/{guild_id}/commands", self.server_commands)
         self.app.router.add_get("/api/servers/{guild_id}/requests", self.requests)
         self.app.router.add_get("/api/servers/{guild_id}/command-history", self.command_history)
+        self.app.router.add_get("/api/servers/{guild_id}/voice-summaries", self.voice_summaries)
         self.app.router.add_get("/api/memories", self.memories)
         self.app.router.add_get("/api/nicknames", self.nicknames)
         self.app.router.add_get("/api/operations", self.operations)
@@ -324,10 +325,11 @@ class Dashboard:
         from bot.models.usage import GuildUsage
         from bot.models.request_log import RequestLog
         from bot.models.chat_blacklist import ChatBlacklist
+        from bot.models.voice_summary import VoiceSummary
         identities = await saved_identities(self.bot.db_session)
         async with self.bot.db_session() as session:
             ids = await session.scalars(union(*(select(model.guild_id) for model in (
-                GuildSettings, GuildUsage, RequestLog, BotMemory, MeyayaUserState, ChatBlacklist))))
+                GuildSettings, GuildUsage, RequestLog, BotMemory, MeyayaUserState, ChatBlacklist, VoiceSummary))))
             for gid in ids:
                 if gid is not None:
                     identities.setdefault(gid, dict(id=str(gid), name=f'Server {gid}',
@@ -429,6 +431,18 @@ class Dashboard:
         if not await self._known_server(guild_id):
             raise web.HTTPNotFound(text='Server not found')
         return web.json_response(await self.bot.request_log.page(guild_id, before, kind='command'))
+
+    async def voice_summaries(self, request):
+        try:
+            guild_id = int(request.match_info['guild_id'])
+            before = int(request.query['before']) if 'before' in request.query else None
+            if not 0 < guild_id < 2**63 or (before is not None and not 0 < before < 2**63):
+                raise ValueError()
+        except ValueError:
+            raise web.HTTPBadRequest(text='Invalid server or pagination cursor')
+        if not await self._known_server(guild_id):
+            raise web.HTTPNotFound(text='Server not found')
+        return web.json_response(await self.bot.voice_summaries.page(guild_id, before))
 
     async def server_details(self, request):
         try:

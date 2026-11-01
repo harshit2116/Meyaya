@@ -24,6 +24,7 @@ Meyaya is a Discord bot for chat, games, profiles, and voice conversations.
 - Social reactions, daily picks, compatibility scores, and consent-based marriage.
 - Profile cards, avatar puzzles, solo adventures, and multiplayer games.
 - Live voice conversations through Gemini.
+- Private dashboard recaps of completed voice sessions, retained for seven days.
 - Server setup, moderation, and an optional administration dashboard.
 
 The interface uses Discord Components V2 for cards, menus, and interactive games.
@@ -43,6 +44,22 @@ the guide itself makes no AI request and spends no chat allowance. It appears
 once per person across servers. `/guide` reopens it, and **All commands** opens
 the private command directory. Existing conversation participants are preserved
 by the migration and will not be interrupted by a new welcome.
+
+## Voice summaries
+
+Completed Meyaya voice sessions create a short recap in each server's private
+dashboard under **Voice summaries**. The recap includes the main topics and
+explicit follow-ups, alongside the channel, session time, duration, and detected
+speakers. It uses one bounded background text-generation request through the
+existing model guard and provider quotas; it spends no member chat allowance.
+
+Only the recap and session metadata are stored, for seven days. Audio is never
+recorded to disk, and the automatic transcription used to build the recap stays
+in bounded process memory until generation finishes. Pauses, reconnections, or
+buffer limits mark the recap as having limited coverage. Generation failures are
+shown as unavailable, with no transcript fallback. Abrupt process termination
+can lose an unfinished session recap. Nothing is posted to the voice channel.
+Set `VOICE_SUMMARIES_ENABLED=false` and restart to disable capture and generation.
 
 ## Voting
 

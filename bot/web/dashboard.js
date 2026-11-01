@@ -8,6 +8,7 @@ const notice = message => { $("notice").textContent = message; };
 let pageServerId = new URLSearchParams(location.search).get("server");
 let selectedServerPanel = new URLSearchParams(location.search).get("panel") || "main";
 let commandHistoryCursor = null, commandHistoryVersion = 0;
+let voiceSummaryCursor = null, voiceSummaryVersion = 0;
 const serverWindows = new Map();
 const serverWindowTimers = new Map();
 const apiCache = new Map(), apiPending = new Map();
@@ -16,7 +17,7 @@ function invalidateApiCache() { cacheRevision++; apiCache.clear(); apiPending.cl
 function apiTTL(path) {
   if (path === "/api/servers" || path === "/api/overview") return 15000;
   if (/^\/api\/servers\/\d+\/(details|summary)(\?|$)/.test(path)) return 60000;
-  if (/^\/api\/servers\/\d+\/(requests|command-history|commands|insights)(\?|$)/.test(path)) return 10000;
+  if (/^\/api\/servers\/\d+\/(requests|command-history|voice-summaries|commands|insights)(\?|$)/.test(path)) return 10000;
   return 0;
 }
 async function api(path, options = {}) {
@@ -183,11 +184,15 @@ function lock() {
   $("operations-summary").replaceChildren(); $("operations-features").replaceChildren(); $("operations-models").replaceChildren(); $("operations-recent").replaceChildren();
   $("operations-commands").replaceChildren(); $("server-detail-content").replaceChildren(); $("server-controls").replaceChildren(); $("server-usage").replaceChildren(); $("server-heading").replaceChildren();
   $("server-command-usage").replaceChildren();
+  voiceSummaryVersion++; voiceSummaryCursor = null;
+  $("voice-summary-items").replaceChildren(); $("voice-summary-state").textContent = "";
+  $("voice-summary-more").hidden = true;
   $("workspace").hidden = true; $("navigation").hidden = true; $("login").hidden = false;
   $("connection").textContent = "Locked";
 }
 
 function switchView(name, autoLoad = true) {
+  if (name !== "server") voiceSummaryVersion++;
   if (name !== "server") $("dashboard-header").hidden = false;
   $("global-navigation").hidden = name === "server";
   $("server-navigation").hidden = name !== "server";
@@ -898,7 +903,7 @@ async function loadServerInsights(guildId) {
 }
 
 function switchServerPanel(panel, updateUrl = true) {
-  if (!["main", "edit", "chat", "commands", "diagnostics"].includes(panel)) panel = "main";
+  if (!["main", "edit", "chat", "voice", "commands", "diagnostics"].includes(panel)) panel = "main";
   selectedServerPanel = panel;
   $("dashboard-header").hidden = panel !== "main";
   $("server-main-chrome").hidden = panel !== "main";
@@ -906,7 +911,7 @@ function switchServerPanel(panel, updateUrl = true) {
   for (const node of document.querySelectorAll(".server-nav")) node.classList.toggle("active", node.dataset.panel === panel);
   const server = servers.find(s => s.id === pageServerId);
   if (!server) return;
-  const subtitles = {main:"Basic server information.",edit:"Features, command prefix, and daily allowance.",chat:"Conversations with Meyaya, including automatic replies.",commands:"Successful commands and usage counts.",diagnostics:"Membership history, settings audit, and diagnostics."};
+  const subtitles = {main:"Basic server information.",edit:"Features, command prefix, and daily allowance.",chat:"Conversations with Meyaya, including automatic replies.",voice:"Short recaps of completed voice conversations.",commands:"Successful commands and usage counts.",diagnostics:"Membership history, settings audit, and diagnostics."};
   $("page-title").textContent = server.name; $("page-subtitle").textContent = subtitles[panel];
   if (updateUrl) history.pushState(null, "", `/?server=${server.id}&panel=${panel}`);
   if (panel === "main") loadServerBasics(server.id);
@@ -915,11 +920,47 @@ function switchServerPanel(panel, updateUrl = true) {
     $("request-title").textContent = "AI chat"; loadRequests(false);
   } else { requestVersion++; }
   if (panel === "commands") { loadServerCommands(server.id); loadCommandHistory(false); }
+  if (panel === "voice") loadVoiceSummaries(false);
+  else { voiceSummaryVersion++; }
   if (panel === "diagnostics") loadServerInsights(server.id);
 }
 for (const button of document.querySelectorAll(".server-nav")) button.addEventListener("click", () => switchServerPanel(button.dataset.panel));
 $("sidebar-all-servers").addEventListener("click", () => $("server-back").click());
 $("chat-kind").addEventListener("change", () => loadRequests(false));
+$("voice-summary-refresh").addEventListener("click", () => { invalidateApiCache(); loadVoiceSummaries(false); });
+$("voice-summary-more").addEventListener("click", () => loadVoiceSummaries(true));
+async function loadVoiceSummaries(older) {
+  const gid = pageServerId, version = ++voiceSummaryVersion;
+  if (!gid || !token) return;
+  $("voice-summary-state").textContent = "Loading voice summaries…";
+  $("voice-summary-more").disabled = true;
+  if (!older) { voiceSummaryCursor = null; $("voice-summary-items").replaceChildren(); }
+  try {
+    const query = older && voiceSummaryCursor ? `?before=${encodeURIComponent(voiceSummaryCursor)}` : "";
+    const data = await api(`/api/servers/${gid}/voice-summaries${query}`);
+    if (!token || pageServerId !== gid || selectedServerPanel !== "voice" || version !== voiceSummaryVersion) return;
+    for (const item of data.items) {
+      const row = element("article", undefined, "memory-entry");
+      const heading = element("div", undefined, "record-heading");
+      heading.append(element("h3", item.channel_name || "Voice channel"), element("time", new Date(item.started_at).toLocaleString(), "details"));
+      row.append(heading);
+      const duration = `${Math.floor(item.duration_seconds / 60)}m ${item.duration_seconds % 60}s`;
+      const names = item.participants.map(person => person.name || "Member");
+      row.append(element("p", `${duration} · Speakers: ${names.join(", ") || "None detected"}`, "details"));
+      const fallback = item.status === "no_speech" ? "No intelligible member speech was available to summarize." : "A summary couldn't be generated for this session.";
+      row.append(element("p", item.summary || fallback, "record-value voice-summary-text"));
+      if (item.partial) row.append(element("p", "Limited coverage: some speech was unavailable. This recap covers only the captured portions.", "details"));
+      $("voice-summary-items").append(row);
+    }
+    voiceSummaryCursor = data.next_cursor;
+    $("voice-summary-more").hidden = !voiceSummaryCursor;
+    $("voice-summary-state").textContent = $("voice-summary-items").children.length ? `${$("voice-summary-items").children.length} voice sessions shown` : "No completed voice sessions recorded in the last seven days. Summaries start with this update.";
+  } catch (error) {
+    if (version === voiceSummaryVersion) $("voice-summary-state").textContent = error.message;
+  } finally {
+    if (version === voiceSummaryVersion) $("voice-summary-more").disabled = false;
+  }
+}
 $("command-history-refresh").addEventListener("click", () => loadCommandHistory(false));
 $("command-history-more").addEventListener("click", () => loadCommandHistory(true));
 async function loadCommandHistory(older) {

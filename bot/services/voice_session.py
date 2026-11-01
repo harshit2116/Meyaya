@@ -32,6 +32,7 @@ from bot.services.audio import (
 from bot.services.gemini_live import GeminiLiveSession
 from bot.services.meyaya_system import MeyayaSystemService
 from bot.services.voice_diagnostics import VoiceDiagnostics
+from bot.services.voice_summary import VoiceSummaryBuffer
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,12 @@ class VoiceChatSession:
         self._voice_budget_task = None
         self._voice_budget_registered = False
         self._familiarity_task = None
+        self._summary_buffer = (
+            VoiceSummaryBuffer() if getattr(bot.settings, "voice_summaries_enabled", False) else None
+        )
+        self._summary_channel_id = None
+        self._summary_channel_name = "Voice channel"
+        self._summary_participants = {}
 
     @property
     def connected_channel_id(self) -> int | None:
@@ -212,6 +219,8 @@ class VoiceChatSession:
             await self.voice_client.move_to(channel)
 
         assert self.voice_client is not None
+        self._summary_channel_id = channel.id
+        self._summary_channel_name = channel.name[:100]
         state_lines = await self._load_meyaya_state_lines(channel)
         state_lines.append(server_identity_context(channel.guild))
         self._gemini = GeminiLiveSession(
@@ -230,6 +239,7 @@ class VoiceChatSession:
             on_interrupted=self._on_gemini_interrupted,
             on_input_audio_sent=self._on_gemini_input_sent,
             on_reconnected=self._on_gemini_reconnected,
+            on_transcription=self._summary_buffer.add if self._summary_buffer is not None else None,
         )
         await self._gemini.start()
 
@@ -296,6 +306,9 @@ class VoiceChatSession:
         if self._closed:
             return
         self._closed = True
+        summary_ended_at = datetime.now(UTC)
+        if self._summary_buffer is not None and self._user_is_speaking:
+            self._summary_buffer.partial = True
         await self.checkpoint_voice_usage(final=True)
         if self._voice_budget_task and self._voice_budget_task is not asyncio.current_task():
             self._voice_budget_task.cancel()
@@ -338,6 +351,29 @@ class VoiceChatSession:
             self.bot.ai_guard.end_voice(self.guild_id)
             self._voice_budget_registered = False
 
+        # The service owns the background recap task. No audio/transcript is
+        # written, and all normal stop paths hand off a session at most once.
+        buffer = self._summary_buffer
+        self._summary_buffer = None
+        if buffer is not None:
+            source = buffer.take()
+            service = getattr(self.bot, "voice_summaries", None)
+            if service is not None and self._voice_usage_started and self._summary_channel_id:
+                service.enqueue(
+                    source=source,
+                    has_member_speech=buffer.has_member_speech,
+                    provider=self.bot.build_llm_provider(),
+                    session_id=self._voice_usage_id,
+                    guild_id=self.guild_id,
+                    channel_id=self._summary_channel_id,
+                    channel_name=self._summary_channel_name,
+                    started_at=self._voice_usage_started,
+                    ended_at=summary_ended_at,
+                    participants=list(self._summary_participants.values()),
+                    partial=buffer.partial,
+                )
+            self._summary_participants.clear()
+
     def enqueue_user_audio(self, pcm16: bytes) -> None:
         if self._closed or self._gemini is None or self._song_playing or not self.listening_enabled:
             return
@@ -360,6 +396,9 @@ class VoiceChatSession:
 
     async def _on_gemini_reconnected(self) -> None:
         """Reset local turn state after Gemini replaces a failed WebSocket."""
+
+        if self._summary_buffer is not None:
+            self._summary_buffer.add("gap", "")
 
         self.diagnostics.increment("reconnects")
         self._user_is_speaking = False
@@ -444,6 +483,8 @@ class VoiceChatSession:
         )
 
     async def set_listening(self, enabled: bool) -> None:
+        if not enabled and self._summary_buffer is not None:
+            self._summary_buffer.add("gap", "")
         self.listening_enabled = enabled
         self._sink.end_utterance()
         self._user_is_speaking = False
@@ -468,6 +509,8 @@ class VoiceChatSession:
             options="-vn -t 90",
         )
         self._song_playing = True
+        if self._summary_buffer is not None:
+            self._summary_buffer.add("gap", "")
         self._sink.end_utterance()
         if self._end_of_utterance_handle is not None:
             self._end_of_utterance_handle.cancel()
@@ -520,6 +563,17 @@ class VoiceChatSession:
 
         if self._closed or self._song_playing or not self.listening_enabled:
             return
+
+        if self._summary_buffer is not None and user_id not in self._summary_participants:
+            if len(self._summary_participants) < 64:
+                guild = self.bot.get_guild(self.guild_id)
+                member = guild.get_member(user_id) if guild else None
+                self._summary_participants[user_id] = {
+                    "user_id": str(user_id),
+                    "name": getattr(member, "display_name", "Member")[:100],
+                }
+            else:
+                self._summary_buffer.partial = True
 
         # Discord does not reliably provide silent PCM packets after a person stops
         # speaking.  Schedule the end ourselves so Gemini receives an explicit turn

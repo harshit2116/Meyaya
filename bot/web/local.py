@@ -16,11 +16,13 @@ from bot.models.guild_settings import GuildSettings
 from bot.services.guild_identity import remember_identity, saved_identities
 from bot.models.usage import GuildUsage
 from bot.models.request_log import RequestLog
+from bot.models.voice_summary import VoiceSummary
 from bot.models.memory import BotMemory
 from bot.models.meyaya_state import MeyayaUserState
 from bot.models.chat_blacklist import ChatBlacklist
 from bot.services.usage import UsageService
 from bot.services.request_log import RequestLogService
+from bot.services.voice_summary import VoiceSummaryService
 from bot.services.chat_blacklist import ChatBlacklistService
 from bot.web.dashboard import Dashboard
 from bot.web.server_info import rest_server_info, rest_member_preview
@@ -35,6 +37,7 @@ class LocalBackend:
         self.db_session = build_session_factory(self.engine)
         self.usage = UsageService(self.db_session, settings.quota_exempt_guild_id)
         self.request_log = RequestLogService(self.db_session)
+        self.voice_summaries = VoiceSummaryService(self.db_session)
         self.chat_blacklist = ChatBlacklistService(self.db_session)
         self.guilds_by_id = {}
         self._guild_names = {}
@@ -106,7 +109,7 @@ class LocalBackend:
             self._saved_identities = await saved_identities(self.db_session)
             async with self.db_session() as session:
                 ids = await session.scalars(union(*(select(model.guild_id) for model in (
-                    GuildSettings, GuildUsage, RequestLog, BotMemory, MeyayaUserState, ChatBlacklist
+                    GuildSettings, GuildUsage, RequestLog, BotMemory, MeyayaUserState, ChatBlacklist, VoiceSummary
                 ))))
                 # New/quiet servers may not have any database rows yet.
                 all_ids = {gid for gid in ids if gid is not None} | self._guild_names.keys() | self._saved_identities.keys()

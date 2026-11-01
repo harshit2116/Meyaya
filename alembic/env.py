@@ -27,6 +27,7 @@ from bot.models import voice_usage  # noqa: F401
 from bot.models import guild_identity  # noqa: F401
 from bot.models import topgg_vote  # noqa: F401
 from bot.models import first_use  # noqa: F401
+from bot.models import voice_summary  # noqa: F401
 
 config = context.config
 

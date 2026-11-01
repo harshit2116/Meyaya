@@ -24,6 +24,7 @@
         <button class="server-nav" data-panel="main">◈ Main page</button>
         <button class="server-nav" data-panel="edit">⚙ Edit server</button>
         <button class="server-nav" data-panel="chat">♡ AI chat</button>
+        <button class="server-nav" data-panel="voice">🎙 Voice summaries</button>
         <button class="server-nav" data-panel="commands">⌘ Command history</button>
         <button class="server-nav" data-panel="diagnostics">⌁ History &amp; diagnostics</button>
         <button id="sidebar-all-servers" class="quiet">← All servers</button>
@@ -64,6 +65,15 @@
         </div>
         <div id="server-panel-edit" class="server-panel" hidden><h2>Edit server</h2><p class="details">Manage this server's features and daily chat allowance. Changes are recorded in its settings history.</p><section id="server-controls" class="panel server-detail-panel"></section></div>
         <div id="server-panel-chat" class="server-panel" hidden></div>
+        <div id="server-panel-voice" class="server-panel" hidden>
+          <section class="panel operations-panel">
+            <div class="toolbar"><h2>Voice summaries</h2><button id="voice-summary-refresh" class="quiet" type="button">Refresh</button></div>
+            <p class="details">Short recaps appear after Meyaya's voice sessions end and are retained for seven days. Audio recordings and full transcripts are not saved. AI summaries can miss or mishear details.</p>
+            <p id="voice-summary-state" class="result-state" role="status"></p>
+            <div id="voice-summary-items" class="record-list"></div>
+            <button id="voice-summary-more" type="button" hidden>Load older summaries</button>
+          </section>
+        </div>
         <div id="server-panel-diagnostics" class="server-panel" hidden><div class="toolbar"><h2>Server history &amp; diagnostics</h2><button id="diagnostics-refresh" class="quiet">Refresh</button></div><section id="server-insights" class="panel operations-panel"></section></div>
         <div id="server-panel-commands" class="server-panel" hidden>
         <section class="panel operations-panel"><div class="toolbar"><h2>Command history</h2><button id="command-history-refresh" class="quiet">Refresh</button></div><p class="details">Successful prefix and slash commands from the last seven days. Command names only; arguments are not retained. History starts with this update.</p><p id="command-history-state" role="status"></p><div id="command-history-items"></div><button id="command-history-more" hidden>Load older commands</button></section>

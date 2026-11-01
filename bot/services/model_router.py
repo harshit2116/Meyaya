@@ -28,6 +28,7 @@ FAST_FEATURES = frozenset(
         "roast",
         "compliment",
         "rank",
+        "voice_summary",
     }
 )
 REASONING_FEATURES = frozenset(
