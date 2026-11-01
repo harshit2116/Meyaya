@@ -44,7 +44,8 @@ from bot.services.ai_guard import AIGuard
 from bot.logging.health import health
 from bot.services.guild_features import FeatureDisabled, command_feature
 from bot.services.topgg_votes import TopggVoteService
-from bot.services.first_use import FirstUseService
+from bot.services.first_use import FirstUsePending, FirstUseService
+from bot.data.help_catalog import COMMANDS_BY_NAME
 from bot.services.voice_summary import VoiceSummaryService
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,7 @@ class MeyayaBot(commands.Bot):
         self._guild_autoresponders: dict[int, bool] = {}
         self._guild_disabled_features = {}
         self.add_check(self._feature_command_check)
+        self.add_check(self._first_use_command_check)
         self._guild_chat_channels: dict[int, int | None] | None = None
         self.engine = build_async_engine(settings.database_url)
         self.session_factory: async_sessionmaker[AsyncSession] = build_session_factory(self.engine)
@@ -142,6 +144,15 @@ class MeyayaBot(commands.Bot):
         if feature and not self.feature_enabled(interaction.guild_id, feature):
             await interaction.response.send_message(str(FeatureDisabled(feature)), ephemeral=True)
             return False
+        if getattr(getattr(interaction, "command", None), "wrapped", None) is not None:
+            # Pause slash commands before HybridAppCommand.prepare acquires or
+            # releases command concurrency. The saved context keeps its options.
+            context = await self.get_context(interaction)
+            context.command = interaction.command.wrapped
+            try:
+                await self._first_use_command_check(context)
+            except FirstUsePending:
+                return False
         return True
 
     def feature_enabled(self, guild_id, feature):
@@ -154,6 +165,21 @@ class MeyayaBot(commands.Bot):
         feature = command_feature(getattr(ctx.command, 'qualified_name', None))
         if feature and not self.feature_enabled(getattr(ctx.guild, 'id', None), feature):
             raise FeatureDisabled(feature)
+        return True
+
+    async def _first_use_command_check(self, ctx):
+        command = ctx.command
+        entry = COMMANDS_BY_NAME.get(command.qualified_name.split(" ", 1)[0]) if command else None
+        # Help and an explicitly requested tour stay directly accessible.
+        # Administrative commands must never wait behind an introduction.
+        if (ctx.guild is None or command is None or ctx.author.bot
+                or command.qualified_name in {"guide", "help"}
+                or (entry is not None and entry.category == "Server Admin")
+                or type(getattr(command, "cog", None)).__name__ in {"AdminCog", "ModerationCog"}):
+            return True
+        chat = self.get_cog("ChatCog")
+        if chat is not None and await chat._maybe_show_first_use(ctx, command_context=ctx):
+            raise FirstUsePending()
         return True
 
     @asynccontextmanager
@@ -321,6 +347,8 @@ class MeyayaBot(commands.Bot):
         if isinstance(error, commands.CommandNotFound):
             return
         original = getattr(error, "original", error)
+        if isinstance(original, FirstUsePending):
+            return
         if isinstance(original, ImageBusy):
             message = str(original)
         elif isinstance(original, commands.CommandOnCooldown):
@@ -361,6 +389,8 @@ class MeyayaBot(commands.Bot):
         """Return the same friendly error language for slash commands."""
 
         original = getattr(error, "original", error)
+        if isinstance(original, FirstUsePending):
+            return
         if isinstance(original, ImageBusy):
             message = str(original)
         elif isinstance(original, discord.app_commands.CommandOnCooldown):

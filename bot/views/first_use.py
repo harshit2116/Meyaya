@@ -17,7 +17,7 @@ from bot.views.help import HelpView
 logger = logging.getLogger(__name__)
 
 
-def first_use_embed(bot, guild_id, *, can_continue=False, page=0):
+def first_use_embed(bot, guild_id, *, can_continue=False, page=0, command_name=None):
     enabled = getattr(bot, "feature_enabled", lambda *_: True)
     if page == 1:
         lines = []
@@ -40,11 +40,14 @@ def first_use_embed(bot, guild_id, *, can_continue=False, page=0):
             lines.append(
                 "Some activities are disabled in this server. `/help` shows the command directory."
             )
-        lines.append(
-            "You're ready! **Start chatting** answers your original message."
-            if can_continue
-            else "You're ready! Press **Send Meyaya hello** to start a conversation in this channel."
-        )
+        if command_name:
+            lines.append(f"You're ready! **Continue command** resumes `/{command_name}`.")
+        else:
+            lines.append(
+                "You're ready! **Start chatting** answers your original message."
+                if can_continue
+                else "You're ready! Press **Send Meyaya hello** to start a conversation in this channel."
+            )
         embed = meyaya_embed("Let's do something together!", "\n\n".join(lines), icon="🌸")
         embed.set_footer(text="2 / 2 · End of guide · Reopen anytime with /guide")
         return embed
@@ -81,12 +84,18 @@ def first_use_embed(bot, guild_id, *, can_continue=False, page=0):
 
 
 class FirstUseView(MeyayaView):
-    def __init__(self, bot, owner_id, *, chat=None, source=None, guild_id=None):
+    def __init__(
+        self, bot, owner_id, *, chat=None, source=None, guild_id=None, command_context=None
+    ):
         super().__init__(timeout=180)
         self.bot = bot
         self.owner_id = owner_id
         self.chat = chat
         self.source = source
+        self.command_context = command_context
+        self.command_name = (
+            command_context.command.qualified_name if command_context is not None else None
+        )
         self.message = None
         self._continued = False
         self._finished_guide = False
@@ -96,7 +105,11 @@ class FirstUseView(MeyayaView):
         self._last_profile = float("-inf")
         self.guild_id = source.guild.id if source is not None else guild_id
         self.continue_button = discord.ui.Button(
-            label="Start chatting" if source is not None else "Send Meyaya hello",
+            label=(
+                "Continue command"
+                if command_context is not None
+                else "Start chatting" if source is not None else "Send Meyaya hello"
+            ),
             style=discord.ButtonStyle.primary,
         )
         self.continue_button.callback = self.continue_chat
@@ -115,7 +128,9 @@ class FirstUseView(MeyayaView):
         if self._finished_guide:
             if self._continued:
                 self.continue_button.disabled = True
-                self.continue_button.label = "Chat started"
+                self.continue_button.label = (
+                    "Command resumed" if self.command_context is not None else "Chat started"
+                )
                 self.add_item(self.continue_button)
             self._button("All commands", self.open_help)
         elif self._guide_page == 0:
@@ -141,7 +156,11 @@ class FirstUseView(MeyayaView):
             self._build_controls()
             await interaction.response.edit_message(
                 embed=first_use_embed(
-                    self.bot, self.guild_id, can_continue=self.source is not None, page=page
+                    self.bot,
+                    self.guild_id,
+                    can_continue=self.source is not None,
+                    page=page,
+                    command_name=self.command_name,
                 ),
                 view=self,
             )
@@ -191,8 +210,8 @@ class FirstUseView(MeyayaView):
     async def continue_chat(self, interaction):
         if not await self.interaction_check(interaction):
             return
-        chat = self._chat_target(interaction)
-        if chat is None:
+        chat = self._chat_target(interaction) if self.command_context is None else None
+        if self.command_context is None and chat is None:
             await interaction.response.send_message(
                 "AI chat isn't available here right now. Please mention me again in an enabled chat channel.",
                 ephemeral=True,
@@ -209,17 +228,28 @@ class FirstUseView(MeyayaView):
             self._build_controls()
             await interaction.response.edit_message(
                 embed=meyaya_embed(
-                    "You're ready to chat!",
-                    "Mention me or reply to my messages anytime. `/help` is here when you need it.",
+                    (
+                        "Continuing your command!"
+                        if self.command_context is not None
+                        else "You're ready to chat!"
+                    ),
+                    (
+                        f"Resuming `/{self.command_name}`."
+                        if self.command_context is not None
+                        else "Mention me or reply to my messages anytime. `/help` is here when you need it."
+                    ),
                     icon="🌸",
                 ),
                 view=self,
             )
+        service = getattr(self.bot, "first_use", None)
+        if service is not None:
+            service.remember(self.owner_id)
+        if self.command_context is not None:
+            await self._resume_command(interaction)
+            return
         if self.source is None:
-            service = getattr(self.bot, "first_use", None)
-            if service is not None:
-                service.remember(self.owner_id)
-            await chat.on_message(GuideInputMessage(self.bot, interaction))
+            await chat.on_message(GuideInputMessage(self.bot, interaction), immediate=True)
             return
         try:
             async with asyncio.timeout(5):
@@ -234,12 +264,97 @@ class FirstUseView(MeyayaView):
             return
         # Re-enter the normal listener so current moderation, channel access,
         # blacklists, AI availability and quotas all still apply. No direct LLM call.
-        await chat.on_message(message)
+        context = await self.bot.get_context(message)
+        if context.valid:
+            await self.bot.invoke(context)
+        else:
+            await chat.on_message(message, immediate=True)
+
+    async def _resume_command(self, interaction):
+        original = self.command_context
+        if self.bot.get_command(self.command_name) is not original.command:
+            await interaction.followup.send(
+                "That command has changed. Please run it again.", ephemeral=True
+            )
+            return
+        try:
+            async with asyncio.timeout(5):
+                member = await original.guild.fetch_member(self.owner_id)
+                if original.interaction is None:
+                    message = await original.channel.fetch_message(original.message.id)
+                    if message.author.id != self.owner_id:
+                        return
+                    message.author = member
+                    moderation = self.bot.get_cog("ModerationCog")
+                    if moderation is not None and await moderation.should_block(message):
+                        return
+                    context = await self.bot.get_context(message)
+                    if not context.valid or context.command is not original.command:
+                        await interaction.followup.send(
+                            "Your original command was changed. Please run it again.",
+                            ephemeral=True,
+                        )
+                        return
+                else:
+                    if original.interaction.is_expired():
+                        await interaction.followup.send(
+                            "Your original command has expired. Please run it again.",
+                            ephemeral=True,
+                        )
+                        return
+                    context = original
+                    context.author = member
+                    context.message.author = member
+                    context.interaction.user = member
+                    permissions_for = getattr(context.channel, "permissions_for", None)
+                    if not callable(permissions_for) or context.guild.me is None:
+                        await interaction.followup.send(
+                            "I couldn't refresh channel access. Please run your command again.",
+                            ephemeral=True,
+                        )
+                        return
+                    # Slash permission checks otherwise read the old interaction
+                    # snapshot, which can be stale after the member reads a guide.
+                    context.interaction._permissions = permissions_for(member).value
+                    context.interaction._app_permissions = permissions_for(context.guild.me).value
+                    context.args = (
+                        [context.command.cog, context]
+                        if context.command.cog is not None
+                        else [context]
+                    )
+                    context.interaction._baton = context
+        except (discord.HTTPException, TimeoutError, OSError):
+            await interaction.followup.send(
+                "I couldn't reload your original command or member access. Please run the command again.",
+                ephemeral=True,
+            )
+            return
+        context.command_failed = False
+        if context.interaction is not None:
+            context.interaction.command_failed = False
+        blacklist = getattr(self.bot, "chat_blacklist", None)
+        if blacklist is not None and blacklist.is_command_blocked(context.guild.id, self.owner_id):
+            await interaction.followup.send(
+                "Meyaya commands are restricted for you here.", ephemeral=True
+            )
+            return
+        # Full invocation rechecks permissions, feature switches, cooldowns and
+        # concurrency before executing. No callback-only shortcut or AI fallback.
+        try:
+            await self.bot.invoke(context)
+        except discord.app_commands.AppCommandError as error:
+            context.command_failed = True
+            context.interaction.command_failed = True
+            await self.bot.on_app_command_error(context.interaction, error)
+        if context.interaction is not None and not context.command_failed:
+            self.bot.dispatch(
+                "app_command_completion", context.interaction, context.command.app_command
+            )
 
     async def skip_guide(self, interaction):
         if not await self.interaction_check(interaction):
             return
-        if self.source is not None and self._chat_target(interaction) is not None:
+        if self.command_context is not None or self._chat_target(interaction) is not None:
             await self.continue_chat(interaction)
             return
         async with self._state_lock:
@@ -330,7 +445,6 @@ class GuideInputMessage:
 
     def __init__(self, bot, interaction, *, content=None):
         self._origin = interaction.message
-        self._interaction = interaction
         self._state = interaction._state
         self.id = interaction.id
         # An interaction ID identifies the event, not a fetchable Discord post.
@@ -358,7 +472,9 @@ class GuideInputMessage:
     async def reply(self, content=None, **kwargs):
         kwargs.pop("mention_author", None)
         kwargs["allowed_mentions"] = discord.AllowedMentions.none()
-        return await self._interaction.followup.send(content=content, wait=True, **kwargs)
+        # Application follow-ups become V2 command cards in the shared transport.
+        # A greeting is ordinary chat, so use the normal channel delivery path.
+        return await self.channel.send(content=content, **kwargs)
 
 
 class GuideProfileContext(commands.Context):

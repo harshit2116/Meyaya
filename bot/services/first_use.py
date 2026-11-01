@@ -6,10 +6,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from discord.ext import commands
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from bot.models.first_use import FirstUseGuide
+
+
+class FirstUsePending(commands.CheckFailure):
+    """The guide has acknowledged this invocation; resume it from its button."""
 
 
 @dataclass(frozen=True)

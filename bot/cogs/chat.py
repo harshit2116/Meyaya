@@ -125,6 +125,7 @@ class ChatEntry:
     text: str
     reply_context: ReplyContext | None
     received_at: float = field(default_factory=time.monotonic)
+    immediate: bool = False
 
 
 @dataclass(slots=True)
@@ -174,7 +175,7 @@ class ChatCog(commands.Cog):
 
     @commands.Cog.listener()
     @discord_context("chat")
-    async def on_message(self, message: discord.Message) -> None:
+    async def on_message(self, message: discord.Message, *, immediate=False) -> None:
         if self._closing_chats or message.author.bot:
             return
         # Reserve the exact private-owner prototype trigger, including DMs,
@@ -337,11 +338,11 @@ class ChatCog(commands.Cog):
             )
             return
 
-        entry = ChatEntry(message, user_text, reply_context)
+        entry = ChatEntry(message, user_text, reply_context, immediate=immediate)
         conversation_key = self._related_chat_key(conversation_key, entry)
         await self._enqueue_chat(conversation_key, entry)
 
-    async def _maybe_show_first_use(self, message, *, can_continue=True):
+    async def _maybe_show_first_use(self, message, *, can_continue=True, command_context=None):
         service = getattr(self.bot, "first_use", None)
         if service is None:
             return False
@@ -361,16 +362,21 @@ class ChatCog(commands.Cog):
             self.bot,
             message.author.id,
             chat=self,
-            source=message if can_continue else None,
+            source=message if can_continue and command_context is None else None,
             guild_id=message.guild.id,
+            command_context=command_context,
         )
         try:
             async with asyncio.timeout(8):
                 view.message = await message.reply(
-                    embed=first_use_embed(self.bot, message.guild.id, can_continue=can_continue),
+                    embed=first_use_embed(
+                        self.bot, message.guild.id, can_continue=can_continue,
+                        command_name=command_context.command.qualified_name if command_context is not None else None,
+                    ),
                     view=view,
                     mention_author=False,
                     allowed_mentions=discord.AllowedMentions.none(),
+                    **({"ephemeral": True} if command_context is not None else {}),
                 )
         except (discord.Forbidden, discord.NotFound):
             view.stop()
@@ -493,7 +499,10 @@ class ChatCog(commands.Cog):
         max_wait = getattr(settings, "chat_batch_max_wait_seconds", 2.0)
         while True:
             state.changed.clear()
-            deadline = min(state.first_pending_at + max_wait, state.last_received_at + quiet)
+            deadline = (
+                time.monotonic() if any(entry.immediate for entry in state.entries)
+                else min(state.first_pending_at + max_wait, state.last_received_at + quiet)
+            )
             # Preserve the existing member cooldown while keeping a queued
             # follow-up from immediately failing after a fast previous reply.
             guard = getattr(self.bot, "ai_guard", None)
