@@ -38,12 +38,17 @@ Mention her without a command to chat.
 Try `/awaken`, `/fantasyprofile`, `/guardian`, `/profilecheck`, or `/bossfight`.
 Server managers can use `/serversetup` and change the prefix with `/prefix`.
 
-New members receive a short welcome guide on their first direct AI chat attempt.
-**Continue chat** answers their original message using the normal chat rules;
-the guide itself makes no AI request and spends no chat allowance. It appears
-once per person across servers. `/guide` reopens it, and **All commands** opens
-the private command directory. Existing conversation participants are preserved
-by the migration and will not be interrupted by a new welcome.
+New members receive a two-screen welcome guide on their first direct AI chat
+attempt. The intro offers **Profile check**, **Next**, and **Skip guide**. The
+**Profile check** button opens the member's `/profilecheck` visual review privately,
+with its normal checks and cooldown. The second screen introduces voice chat,
+`/awaken`, dungeons, and multiplayer games.
+**Start chatting** answers their original message using the normal chat rules;
+skipping resumes that message when chat is available. `/guide` reopens the tour,
+where **Send Meyaya hello** can start a fresh conversation. Viewing the guide
+and profile spends no AI chat allowance; starting chat uses the normal allowance.
+The welcome appears once per person across servers. **All commands** opens the
+private command directory. Existing conversation participants are preserved.
 
 ## Voice summaries
 

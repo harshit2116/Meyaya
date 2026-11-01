@@ -16,13 +16,13 @@ from discord.ext import commands
 from bot.app import MeyayaBot
 from bot.services.profile_header import ProfileHeaderRenderer
 from bot.services.profilecheck_render import ProfileCheckRenderer
-from bot.utils.profile_v2 import sections
+from bot.utils.profile_v2 import build_profile_card
 from bot.services.profiles import ProfileService
 from bot.utils.embeds import build_profile_embed
 
 
 class ProfileReviewView(discord.ui.LayoutView):
-    """Hybrid profile: one cached illustration, fresh native data, lazy review."""
+    """One native card with cached artwork, live data, and lazy review."""
 
     def __init__(self, bot, target, summary, visual, review_renderer):
         super().__init__(timeout=180)
@@ -31,8 +31,7 @@ class ProfileReviewView(discord.ui.LayoutView):
         self.review_renderer = review_renderer
         # Retain only compact display data, not downloaded member image bytes.
         self.details = build_profile_embed(target, summary, visual)
-        for section in sections(target, summary, visual):
-            self.add_item(section)
+        card = build_profile_card(target, summary, visual)
         review = discord.ui.Button(
             label="Visual review", emoji="✨", style=discord.ButtonStyle.primary
         )
@@ -41,7 +40,9 @@ class ProfileReviewView(discord.ui.LayoutView):
             label="More details", emoji="📋", style=discord.ButtonStyle.secondary
         )
         details.callback = self.more_details
-        self.add_item(discord.ui.ActionRow(review, details))
+        card.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
+        card.add_item(discord.ui.ActionRow(review, details))
+        self.add_item(card)
 
     async def visual_review(self, interaction):
         await interaction.response.defer(ephemeral=True, thinking=True)

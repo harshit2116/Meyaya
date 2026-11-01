@@ -358,7 +358,11 @@ class ChatCog(commands.Cog):
         if claim.state == "pending":
             return True
         view = FirstUseView(
-            self.bot, message.author.id, chat=self, source=message if can_continue else None
+            self.bot,
+            message.author.id,
+            chat=self,
+            source=message if can_continue else None,
+            guild_id=message.guild.id,
         )
         try:
             async with asyncio.timeout(8):
@@ -806,7 +810,7 @@ class ChatCog(commands.Cog):
                             guild_id=guild_id,
                             user_id=message.author.id,
                             channel_id=message.channel.id,
-                            source_message_id=message.id,
+                            source_message_id=getattr(message, "_meyaya_source_message_id", message.id),
                             source_user_name=message.author.display_name,
                             conversation_summary=self._summarize_exchange(user_text, reply.text),
                         )
@@ -822,7 +826,7 @@ class ChatCog(commands.Cog):
                                 guild_id,
                                 item,
                                 channel_id=message.channel.id,
-                                message_id=message.id,
+                                message_id=getattr(message, "_meyaya_source_message_id", message.id),
                                 user_id=message.author.id,
                             )
                     await session.commit()

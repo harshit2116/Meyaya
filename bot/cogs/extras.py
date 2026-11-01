@@ -25,7 +25,7 @@ class ExtrasCog(commands.Cog):
     @commands.cooldown(1, 5, commands.BucketType.user)
     async def guide(self, ctx):
         guild_id = ctx.guild.id if ctx.guild else None
-        view = FirstUseView(self.bot, ctx.author.id)
+        view = FirstUseView(self.bot, ctx.author.id, guild_id=guild_id)
         view.message = await ctx.send(
             embed=first_use_embed(self.bot, guild_id),
             view=view,

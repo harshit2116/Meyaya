@@ -1,4 +1,4 @@
-"""Native profile sections: no remote images or data fetches during composition."""
+"""One native profile card, composed without fetching images or member data."""
 
 import discord
 
@@ -15,36 +15,35 @@ def meter(value):
     return f'`{"▰"*filled}{"▱"*(5-filled)}` **{value}%**'
 
 
-def sections(target, summary, visual, *, media=True):
+def build_profile_card(target, summary, visual, *, media=True):
+    """Keep artwork, live stats and metadata inside a single V2 container."""
     accent = int(visual.palette[0][1:], 16)
     state = summary.meyaya
-    identity = []
+    parts = []
     if media:
-        identity.append(
+        parts.append(
             discord.ui.MediaGallery(
                 discord.MediaGalleryItem(
                     "attachment://meyaya-profile.png",
-                    description=f"{target.display_name} · Meyaya profile",
+                    description=f"{target.display_name[:80]} · Meyaya profile",
                 )
             )
         )
-    identity.extend(
+    username = getattr(visual, "username", "")
+    identity = (f"## {safe(target.display_name, 80)}\n" if not media else "") + f"<@{target.id}>"
+    if username:
+        identity += f" · @{safe(username, 32)}"
+    if summary.titles:
+        identity += "\n" + " · ".join(safe(title, 60) for title in summary.titles[:3])
+    parts.extend(
         (
+            discord.ui.TextDisplay(identity),
+            discord.ui.Separator(spacing=discord.SeparatorSpacing.small),
             discord.ui.TextDisplay(
-                f"<@{target.id}>"
-                + (
-                    "\n" + " · ".join(safe(title, 100) for title in summary.titles)
-                    if summary.titles
-                    else ""
-                )
-            ),
-            discord.ui.TextDisplay(
-                "### 🌸 Meyaya’s bond\n> "
-                + safe(state.relationship)
-                + (f"\nNickname: **{safe(state.nickname)}**" if state.nickname else "")
-            ),
-            discord.ui.TextDisplay(
-                f"📖 Familiarity  {meter(state.familiarity)}\n"
+                "### 🌸 Meyaya’s bond\n"
+                f"**{safe(state.relationship, 160)}**"
+                + (f"\nShe calls you **{safe(state.nickname, 80)}**" if state.nickname else "")
+                + f"\n\n📖 Familiarity  {meter(state.familiarity)}\n"
                 f"💗 Affection  {meter(state.affection)}\n"
                 f"⚡ Tension  {meter(state.user_annoyance)}"
             ),
@@ -58,32 +57,29 @@ def sections(target, summary, visual, *, media=True):
         "chaotic": "😈",
         "jealous": "💚",
     }.get(state.mood, "🌸")
-    mood = discord.ui.Container(
+    parts.append(
         discord.ui.TextDisplay(
-            f"### 🌸 Meyaya right now\n{mood_icon} **{safe(state.mood.title())}**"
-        ),
-        discord.ui.TextDisplay(
-            f"⚡ Energy  {meter(state.energy)}\n💢 Irritation  {meter(state.global_annoyance)}"
-        ),
-        accent_color=accent,
+            f"### {mood_icon} Meyaya right now\n"
+            f"**{safe(state.mood.title(), 24)}** · Energy **{max(0, min(100, int(state.energy)))}%** · "
+            f"Irritation **{max(0, min(100, int(state.global_annoyance)))}%**"
+        )
     )
     closest = (
         f"<@{summary.most_interacted_member_id}>"
         if summary.most_interacted_member_id
         else "A shared story is still beginning."
     )
-    social = discord.ui.Container(
-        discord.ui.TextDisplay(
-            "### 👥 Social activity\n"
-            f"**{summary.total_interactions:,}** total interactions\n"
-            f"Given **{summary.total_given:,}** · Received **{summary.total_received:,}**"
-        ),
-        discord.ui.Separator(spacing=discord.SeparatorSpacing.small),
-        discord.ui.TextDisplay(
-            f'💗 Favorite interaction: **{safe((summary.favorite_interaction or "None yet").title())}**\n'
-            f"Closest person: {closest}"
-        ),
-        accent_color=accent,
+    parts.extend(
+        (
+            discord.ui.Separator(spacing=discord.SeparatorSpacing.small),
+            discord.ui.TextDisplay(
+                "### 👥 Social activity\n"
+                f"**{summary.total_interactions:,}** total interactions\n"
+                f"Given **{summary.total_given:,}** · Received **{summary.total_received:,}**\n"
+                f'Favorite interaction: **{safe((summary.favorite_interaction or "None yet").title(), 50)}**\n'
+                f"Closest person: {closest}"
+            ),
+        )
     )
     marriage = summary.marriage
     marriage_text = (
@@ -95,22 +91,25 @@ def sections(target, summary, visual, *, media=True):
         )
     )
     joined = f"<t:{int(target.joined_at.timestamp())}:D>" if target.joined_at else "Unknown"
-    details = discord.ui.Container(
-        discord.ui.TextDisplay("### 💍 Marriage\n" + marriage_text),
-        discord.ui.Separator(spacing=discord.SeparatorSpacing.small),
-        discord.ui.TextDisplay(
-            "### Discord\n"
-            f"Joined server: {joined}\nAccount created: <t:{int(target.created_at.timestamp())}:D>"
-        ),
-        accent_color=accent,
+    parts.extend(
+        (
+            discord.ui.TextDisplay("### 💍 Marriage\n" + marriage_text),
+            discord.ui.Separator(spacing=discord.SeparatorSpacing.small),
+            discord.ui.TextDisplay(
+                "### ✦ Discord\n"
+                f"Joined server: {joined}\nAccount created: <t:{int(target.created_at.timestamp())}:D>"
+            ),
+        )
     )
-    style = discord.ui.Container(
-        discord.ui.TextDisplay(
-            "### 🎨 Profile style\n"
-            f"Aura **{visual.palette[0].upper()}** · "
-            f'Decoration **{"Enabled" if visual.has_decoration else "None"}** · '
-            f'Banner **{"Enabled" if visual.has_banner else "None"}**'
-        ),
-        accent_color=accent,
+    parts.extend(
+        (
+            discord.ui.Separator(visible=False, spacing=discord.SeparatorSpacing.small),
+            discord.ui.TextDisplay(
+                "-# 🎨 Profile style\n"
+                f"-# Aura **{visual.palette[0].upper()}** · "
+                f'Decoration **{"Enabled" if visual.has_decoration else "None"}** · '
+                f'Banner **{"Enabled" if visual.has_banner else "None"}**'
+            ),
+        )
     )
-    return [discord.ui.Container(*identity, accent_color=accent), mood, social, details, style]
+    return discord.ui.Container(*parts, accent_color=accent)

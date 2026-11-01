@@ -112,7 +112,7 @@ class RequestLogService:
             user_name=getattr(message.author, "display_name", str(message.author)),
             kind=kind,
             content=(message.content or "[No text supplied]")[:MAX_CONTENT],
-            message_id=message.id,
+            message_id=getattr(message, "_meyaya_source_message_id", message.id),
             response=response[:MAX_CONTENT] if response is not None else None,
         ), name="chat-request-log")
         self._pending.add(task)
