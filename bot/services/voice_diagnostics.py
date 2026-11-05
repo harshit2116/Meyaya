@@ -39,6 +39,8 @@ class VoiceDiagnostics:
                 "playback_frames",
                 "interruptions",
                 "reconnects",
+                "overlapping_utterances",
+                "playback_restarts",
             )
         )
         metadata_text = " ".join(f"{key}={value}" for key, value in metadata.items())

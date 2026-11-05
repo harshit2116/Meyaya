@@ -498,6 +498,8 @@ class GeminiLiveSession:
                 # This callback only updates bounded RAM; no I/O on the audio path.
                 try:
                     for role, field in (("user", "input_transcription"), ("assistant", "output_transcription")):
+                        if role == 'assistant' and getattr(server, 'interrupted', False):
+                            continue
                         text = getattr(getattr(server, field, None), "text", None)
                         if isinstance(text, str) and text:
                             self.on_transcription(role, text)

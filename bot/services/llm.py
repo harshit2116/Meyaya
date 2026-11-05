@@ -297,7 +297,7 @@ class LLMProvider(ABC):
         visible_text = RELATIONSHIP_PATTERN.sub("", visible_text).strip()
         return (
             visible_text,
-            memories[:1],
+            list({(item.category, item.relation): item for item in memories}.values())[:3],
             lore[:1],
             actions[:1],
             commands[:1],

@@ -557,6 +557,7 @@ async function loadRequests(older) {
       const user = discordMessage(item.user_name, item.content);
       user.querySelector(".discord-message-heading").replaceChildren(memberIdentity(item));
       const reply = discordMessage("Meyaya", item.response ?? "Reply not recorded.", true);
+      if (item.outcome) reply.append(element("p", `${item.outcome.replaceAll("_", " ")}${item.latency_ms == null ? "" : ` · ${(item.latency_ms / 1000).toFixed(2)}s`}`, "details"));
       if (item.kind === "auto_chat") user.querySelector(".discord-message-heading").append(element("span", "Automatic reply", "conversation-type auto-reply"));
       entry.append(user, reply); $("request-items").append(entry);
     }
@@ -655,6 +656,11 @@ async function loadOperations() {
       ["Model requests", summary.requests],
       ["Success rate", `${summary.success_rate}%`],
       ["Failures", summary.failures],
+      ["Cancelled model attempts", summary.cancelled ?? 0],
+      ["Chat turns", data.chat_turns?.turns ?? 0],
+      ["Chat p50", data.chat_turns?.p50_ms == null ? "No data" : `${data.chat_turns.p50_ms} ms`],
+      ["Chat p95", data.chat_turns?.p95_ms == null ? "No data" : `${data.chat_turns.p95_ms} ms`],
+      ["Context overflows", data.chat_turns?.outcomes?.context_overflow ?? 0],
       ["Recovered attempts", summary.recovered_attempts],
       ["Average latency", summary.average_latency_ms === null ? "No data" : `${summary.average_latency_ms} ms`],
       ["P95 latency", summary.p95_latency_ms === null ? "No data" : `${summary.p95_latency_ms} ms`],
@@ -947,9 +953,14 @@ async function loadVoiceSummaries(older) {
       const duration = `${Math.floor(item.duration_seconds / 60)}m ${item.duration_seconds % 60}s`;
       const names = item.participants.map(person => person.name || "Member");
       row.append(element("p", `${duration} · Speakers: ${names.join(", ") || "None detected"}`, "details"));
-      const fallback = item.status === "no_speech" ? "No intelligible member speech was available to summarize." : "A summary couldn't be generated for this session.";
+      const fallbacks = {no_speech: "No intelligible member speech was available to summarize.", recording: "Voice conversation is in progress.", queued: "The recap is being prepared.", skipped: "The recap queue was full or shutting down.", interrupted: "The recap was interrupted by a shutdown or restart."};
+      const fallback = fallbacks[item.status] || "A summary couldn't be generated for this session.";
       row.append(element("p", item.summary || fallback, "record-value voice-summary-text"));
       if (item.partial) row.append(element("p", "Limited coverage: some speech was unavailable. This recap covers only the captured portions.", "details"));
+      const coverage = {reconnect:"Reconnection", paused:"Listening paused", music_playback:"Music playback", source_cap:"Source limit", overlapping_speech:"Overlapping speakers", interrupted_playback:"Interrupted bot speech", speech_at_disconnect:"Speech at disconnect", capture_gap:"Capture gap", participant_cap:"Participant limit", disconnect_tail:"Speech during disconnect"};
+      const reasons = (item.coverage_reasons || []).map(reason => coverage[reason]).filter(Boolean);
+      if (reasons.length) row.append(element("p", `Coverage: ${reasons.join(", ")}`, "details"));
+      if (item.end_reason) row.append(element("p", `Session ended: ${item.end_reason.replaceAll("_", " ")}`, "details"));
       $("voice-summary-items").append(row);
     }
     voiceSummaryCursor = data.next_cursor;

@@ -193,6 +193,10 @@ class MeyayaBot(commands.Bot):
     async def setup_hook(self) -> None:
         """Load cogs and synchronize application commands."""
 
+        try:
+            await self.voice_summaries.recover()
+        except (SQLAlchemyError, TimeoutError):
+            logger.warning('Prior voice recap status recovery unavailable')
         await self.chat_blacklist.load()
         if self.settings.dashboard_enabled:
             from bot.web.dashboard import Dashboard

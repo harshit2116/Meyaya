@@ -23,6 +23,8 @@ class VoiceSummary(Base):
     summary: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     partial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    coverage_reasons: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default='[]')
+    end_reason: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

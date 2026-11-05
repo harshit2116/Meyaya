@@ -45,7 +45,7 @@ class RequestLogService:
 
     async def record(
         self, *, event_id, guild_id, channel_id, user_id, user_name, kind, content, message_id=None,
-        response=None
+        response=None, outcome=None, latency_ms=None
     ):
         if guild_id is None or channel_id is None:
             return
@@ -71,11 +71,16 @@ class RequestLogService:
                             content=bounded,
                             message_id=message_id,
                             response=visible_response,
+                            outcome=outcome,
+                            latency_ms=latency_ms,
                         ))
-                    statement = (statement.on_conflict_do_nothing(index_elements=[RequestLog.event_id])
-                                 if response is None else statement.on_conflict_do_update(
-                                     index_elements=[RequestLog.event_id],
-                                     set_={'response': statement.excluded.response}))
+                    updates = {}
+                    if response is not None:
+                        updates['response'] = statement.excluded.response
+                    if outcome is not None:
+                        updates.update(outcome=statement.excluded.outcome, latency_ms=statement.excluded.latency_ms)
+                    statement = (statement.on_conflict_do_update(index_elements=[RequestLog.event_id], set_=updates)
+                                 if updates else statement.on_conflict_do_nothing(index_elements=[RequestLog.event_id]))
                     await session.execute(statement)
                     await session.commit()
         except (SQLAlchemyError, TimeoutError):
@@ -90,11 +95,13 @@ class RequestLogService:
             if elapsed >= 500:
                 logger.info("request_log write_ms=%.0f", elapsed)
 
-    async def record_message(self, message, kind="chat", *, response=None):
+    async def record_message(self, message, kind="chat", *, response=None, outcome=None, latency_ms=None):
         if message.guild is None or message.author.bot:
             return
         if self._closing or kind not in {"chat", "auto_chat"}:
             return
+        if response is not None and outcome is None:
+            outcome = 'delivered'
         if kind == "auto_chat" and response is None:
             return
         if len(self._pending) >= 8:
@@ -114,9 +121,14 @@ class RequestLogService:
             content=(message.content or "[No text supplied]")[:MAX_CONTENT],
             message_id=getattr(message, "_meyaya_source_message_id", message.id),
             response=response[:MAX_CONTENT] if response is not None else None,
+            outcome=outcome,
+            latency_ms=latency_ms,
         ), name="chat-request-log")
         self._pending.add(task)
         task.add_done_callback(self._record_done)
+
+    async def record_outcome(self, message, outcome, latency_ms):
+        await self.record_message(message, outcome=outcome, latency_ms=latency_ms)
 
     async def record_command(self, *, event_id, guild_id, channel_id, user, command, invocation, message_id=None):
         if self._closing or guild_id is None or channel_id is None or len(self._pending) >= 8:
@@ -170,6 +182,8 @@ class RequestLogService:
                 "kind": row.kind,
                 "content": row.content,
                 "response": row.response,
+                "outcome": row.outcome,
+                "latency_ms": row.latency_ms,
                 "created_at": row.created_at.isoformat(),
                 "url": f"https://discord.com/channels/{row.guild_id}/{row.channel_id}"
                 + (f"/{row.message_id}" if row.message_id else ""),

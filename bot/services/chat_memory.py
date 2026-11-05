@@ -15,8 +15,8 @@ from bot.services.conversation_quality import utc_time, time_record
 
 logger = logging.getLogger(__name__)
 
-HISTORY_TTL_SECONDS = 1800  # conversation resets after 30 minutes of silence
-MAX_TURNS = 12  # one turn = one user message + one model reply
+HISTORY_TTL_SECONDS = 86400  # recent exchanges survive an overnight conversation break
+MAX_TURNS = 32  # bounded per member/channel, never shared between speakers
 
 
 class ChatMemoryService:

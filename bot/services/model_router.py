@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 import asyncio
 
-from bot.logging.telemetry import current_model_context, event
+from bot.logging.telemetry import current_model_context, event, record_route_deadline
 from bot.services.llm import ChatMessage, GroundedReply, LLMProvider
 from bot.services.llm import GroundingError
 from bot.services.ai_guard import guarded, AILimitReached
@@ -116,6 +116,7 @@ class ModelRouter(LLMProvider):
                     timeout_seconds=timeout_seconds,
                 )
         except TimeoutError:
+            record_route_deadline()
             event(
                 "llm_route_deadline",
                 timeout_seconds=timeout_seconds if timeout_seconds is not None else 20,

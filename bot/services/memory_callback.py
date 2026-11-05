@@ -35,6 +35,8 @@ def candidates(lines, current_text):
     current = words(current_text)
     ranked = []
     for line in lines:
+        if '[DISPUTED:' in line:
+            continue
         match = FACT.fullmatch(line)
         if not match or float(match[3]) < 0.8 or len(match[4]) > 200 or SENSITIVE.search(line):
             continue

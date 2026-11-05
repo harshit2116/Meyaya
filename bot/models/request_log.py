@@ -1,7 +1,7 @@
 """Short-lived direct chats, delivered automatic exchanges, and command names."""
 
 from datetime import datetime
-from sqlalchemy import BigInteger, DateTime, Index, String, Text, func
+from sqlalchemy import BigInteger, DateTime, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 from bot.database.base import Base
 
@@ -16,6 +16,8 @@ class RequestLog(Base):
     kind: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome: Mapped[str | None] = mapped_column(String(32))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
     message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

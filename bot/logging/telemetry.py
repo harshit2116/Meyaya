@@ -23,12 +23,17 @@ class OperationalTelemetry:
         self.started_at = datetime.now(UTC)
         self._requests: deque[dict] = deque(maxlen=capacity)
         self._commands: deque[dict] = deque(maxlen=capacity)
+        self._chat_turns: deque[dict] = deque(maxlen=capacity)
         self._failure_day = datetime.now(UTC).date()
         self._failure_count = 0
 
     def record(self, payload: dict) -> None:
         from bot.logging.health import health
         health.record(payload)
+        if payload.get('event') == 'chat_turn':
+            self._chat_turns.append({key:payload.get(key) for key in
+                ('timestamp','guild_id','channel_id','turn_id','outcome','latency_ms')})
+            return
         if payload.get('event') == 'command_timing':
             self._commands.append({
                 'timestamp': payload.get('timestamp'), 'guild_id': payload.get('guild_id'),
@@ -93,6 +98,7 @@ class OperationalTelemetry:
                 "requests": len(records),
                 "successes": successes,
                 "failures": failures,
+                "cancelled": sum(item['status'] == 'cancelled' for item in records),
                 "recovered_attempts": sum(item["failed_attempts"] for item in records),
                 "success_rate": round(successes * 100 / len(records), 1) if records else 0,
                 "average_latency_ms": (
@@ -106,7 +112,15 @@ class OperationalTelemetry:
             "models": self._groups(records, "model"),
             "recent": [self._public(item) for item in reversed(records[-30:])],
             "commands": self.command_snapshot(guild_id),
+            "chat_turns": self.chat_snapshot(guild_id),
         }
+
+    def chat_snapshot(self, guild_id=None):
+        from collections import Counter
+        rows = [row for row in self._chat_turns if guild_id is None or row['guild_id'] == guild_id]
+        values = sorted(row['latency_ms'] for row in rows if isinstance(row['latency_ms'], (int,float)))
+        return {'turns':len(rows), 'outcomes':dict(Counter(row['outcome'] for row in rows)),
+                'p50_ms':self._percentile(values,.5), 'p95_ms':self._percentile(values,.95)}
 
     def command_snapshot(self, guild_id=None):
         records = [row for row in self._commands if guild_id is None or row['guild_id'] == guild_id]
@@ -250,10 +264,12 @@ def event(name: str, **fields) -> None:
 
 @contextmanager
 def model_context(
-    feature: str, guild_id: int | None, channel_id: int | None, user_id: int | None = None
+    feature: str, guild_id: int | None, channel_id: int | None, user_id: int | None = None,
+    *, turn_id=None,
 ):
     token = _context.set(
-        {"feature": feature, "guild_id": guild_id, "channel_id": channel_id, "user_id": user_id}
+        {"feature": feature, "guild_id": guild_id, "channel_id": channel_id, "user_id": user_id,
+         'turn_id':str(turn_id) if turn_id is not None else (_context.get() or {}).get('turn_id')}
     )
     diagnostic_token = _diagnostic.set({})
     try:
@@ -271,6 +287,14 @@ def current_model_context() -> dict:
 
 def current_model_diagnostic() -> dict:
     return dict(_diagnostic.get() or {})
+
+
+def record_route_deadline():
+    from bot.services.chat_outcome import outcome
+    outcome('provider_deadline')
+    diagnostic = _diagnostic.get()
+    if diagnostic is not None:
+        diagnostic['fallback_reason'] = 'route_deadline'
 
 
 def record_response(payload: dict) -> None:
@@ -386,6 +410,7 @@ def discord_context(feature: str):
                 getattr(guild, "id", None),
                 getattr(channel, "id", None),
                 user_id,
+                turn_id=getattr(source,'id',None),
             ):
                 return await method(self, *args, **kwargs)
 

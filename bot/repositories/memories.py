@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from hashlib import blake2b
 
-from sqlalchemy import Select, delete, func, select
+from sqlalchemy import Select, case, delete, func, select
+import re
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -207,3 +208,26 @@ class MemoryRepository(Repository):
         record.last_confirmed_at = datetime.now(UTC)
         record.lifecycle_reason = "confirmed"
         await self.session.flush()
+
+    async def recall(self, guild_id, user_id, query='', limit=24):
+        """Find relevant older facts as well as standing presentation preferences."""
+        words = list(dict.fromkeys(re.findall(r'[^\W_]{3,30}', query.casefold())))[:10]
+        stop = {'the','and','you','your','that','this','what','about','remember','please','have','with','does','meyaya'}
+        aliases = {'instrument':('guitar','piano','violin','drums'),
+                   'music':('guitar','piano','singing'), 'job':('work','profession','career'),
+                   'work':('job','programming','coding'), 'birthday':('birth','birthday'),
+                   'hobbies':('hobby','interest'), 'hobby':('hobby','interest')}
+        words = list(dict.fromkeys([word for word in words if word not in stop]
+            + [alias for word in words for alias in aliases.get(word,())]))[:16]
+        relevance = sum((case((BotMemory.value.ilike('%' + word + '%'), 1), else_=0)
+                         + case((BotMemory.relation.ilike('%' + word + '%'), 2), else_=0)
+                         + case((BotMemory.category.ilike('%' + word + '%'), 1), else_=0)
+                         for word in words), start=0)
+        preferred = case((BotMemory.relation.in_(
+            ['preferred_name','chat_capitalization','chat_style']), 1), else_=0)
+        statement = select(BotMemory).where(
+            BotMemory.guild_id == guild_id, BotMemory.user_id == user_id,
+            BotMemory.status.in_([MemoryStatus.ACTIVE, MemoryStatus.CONFLICTED]),
+        ).order_by(preferred.desc(), (relevance if not isinstance(relevance, int) else case((True,0),else_=0)).desc(),
+                   BotMemory.last_confirmed_at.desc(), BotMemory.updated_at.desc(), BotMemory.id.desc()).limit(limit)
+        return list((await self.session.scalars(statement)).all())

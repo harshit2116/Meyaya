@@ -63,6 +63,7 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
         self._utterance_lock = threading.RLock()
         self._speaker_id = None
         self._speaker_last_audio = 0.0
+        self._overlap_noted = False
 
     def wants_opus(self) -> bool:
         return False
@@ -100,6 +101,10 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
                 return
             self._speaker_id = user.id
         if self._speaker_id != user.id:
+            if rms >= SPEECH_RMS_THRESHOLD and not self._overlap_noted:
+                self._overlap_noted = True
+                self.owner.diagnostics.increment('overlapping_utterances')
+                self.owner._loop.call_soon_threadsafe(self.owner._voice_gap, 'overlapping_speech')
             return
         if rms >= SPEECH_RMS_THRESHOLD:
             self._speaker_last_audio = now
@@ -140,6 +145,7 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
             self._pre_roll.clear()
             self._consecutive_speech_frames = 0
             self._speaker_id = None
+            self._overlap_noted = False
             self._state = ResampleState()
 
     def cleanup(self) -> None:
@@ -239,7 +245,7 @@ class VoiceChatSession:
             on_interrupted=self._on_gemini_interrupted,
             on_input_audio_sent=self._on_gemini_input_sent,
             on_reconnected=self._on_gemini_reconnected,
-            on_transcription=self._summary_buffer.add if self._summary_buffer is not None else None,
+            on_transcription=self._capture_voice_text if self._summary_buffer is not None else None,
         )
         await self._gemini.start()
 
@@ -264,6 +270,15 @@ class VoiceChatSession:
         self._log_dave_state()
         self._voice_usage_started = datetime.now(UTC)
         self._voice_usage_clock = time.monotonic()
+        summaries = getattr(self.bot, 'voice_summaries', None)
+        if self._summary_buffer is not None and summaries is not None:
+            try:
+                await summaries.started(session_id=self._voice_usage_id, guild_id=self.guild_id,
+                    channel_id=channel.id, channel_name=channel.name[:100], participants=[],
+                    started_at=self._voice_usage_started, ended_at=self._voice_usage_started,
+                    partial=False, coverage_reasons=[])
+            except (SQLAlchemyError, TimeoutError):
+                logger.warning('Voice session metadata unavailable')
 
     async def _watch_voice_budget(self):
         """Bound session duration, including silent/paused sessions."""
@@ -308,7 +323,9 @@ class VoiceChatSession:
         self._closed = True
         summary_ended_at = datetime.now(UTC)
         if self._summary_buffer is not None and self._user_is_speaking:
-            self._summary_buffer.partial = True
+            self._summary_buffer.gap('speech_at_disconnect')
+        if self._summary_buffer is not None and self.play_source.has_pending_audio():
+            self._summary_buffer.interrupted()
         await self.checkpoint_voice_usage(final=True)
         if self._voice_budget_task and self._voice_budget_task is not asyncio.current_task():
             self._voice_budget_task.cancel()
@@ -371,6 +388,11 @@ class VoiceChatSession:
                     ended_at=summary_ended_at,
                     participants=list(self._summary_participants.values()),
                     partial=buffer.partial,
+                    coverage_reasons=sorted(buffer.coverage_reasons),
+                    end_reason=('duration_limit' if 'duration' in reason else
+                                'empty_channel' if 'empty' in reason else
+                                'shutdown' if 'shutdown' in reason or 'unload' in reason else
+                                'connection_lost' if 'fail' in reason or 'lost' in reason else 'requested_stop'),
                 )
             self._summary_participants.clear()
 
@@ -398,7 +420,7 @@ class VoiceChatSession:
         """Reset local turn state after Gemini replaces a failed WebSocket."""
 
         if self._summary_buffer is not None:
-            self._summary_buffer.add("gap", "")
+            self._summary_buffer.gap('reconnect')
 
         self.diagnostics.increment("reconnects")
         self._user_is_speaking = False
@@ -484,7 +506,7 @@ class VoiceChatSession:
 
     async def set_listening(self, enabled: bool) -> None:
         if not enabled and self._summary_buffer is not None:
-            self._summary_buffer.add("gap", "")
+            self._summary_buffer.gap('paused')
         self.listening_enabled = enabled
         self._sink.end_utterance()
         self._user_is_speaking = False
@@ -510,7 +532,7 @@ class VoiceChatSession:
         )
         self._song_playing = True
         if self._summary_buffer is not None:
-            self._summary_buffer.add("gap", "")
+            self._summary_buffer.gap('music_playback')
         self._sink.end_utterance()
         if self._end_of_utterance_handle is not None:
             self._end_of_utterance_handle.cancel()
@@ -573,7 +595,7 @@ class VoiceChatSession:
                     "name": getattr(member, "display_name", "Member")[:100],
                 }
             else:
-                self._summary_buffer.partial = True
+                self._summary_buffer.gap('participant_cap')
 
         # Discord does not reliably provide silent PCM packets after a person stops
         # speaking.  Schedule the end ourselves so Gemini receives an explicit turn
@@ -597,6 +619,8 @@ class VoiceChatSession:
         # deaf after the first human PCM frame. Keep the continuous AudioSource
         # alive; it naturally emits silence after its queue is cleared.
         if self.play_source.has_pending_audio():
+            if self._summary_buffer is not None:
+                self._summary_buffer.interrupted()
             self.play_source.clear()
             logger.info("[VAD] sustained human speech detected; queued playback cleared")
 
@@ -643,7 +667,21 @@ class VoiceChatSession:
 
     async def _on_gemini_interrupted(self) -> None:
         # Server detected interruption; clear pending playback to align with latest turn.
+        if self._summary_buffer is not None:
+            self._summary_buffer.interrupted()
         self.play_source.clear()
+
+    def _voice_gap(self, reason):
+        if self._summary_buffer is not None:
+            self._summary_buffer.gap(reason)
+
+    def _capture_voice_text(self, role, text):
+        if self._summary_buffer is None:
+            return
+        if self._closed:
+            self._summary_buffer.gap('disconnect_tail')
+            return
+        self._summary_buffer.add(role, text)
 
     async def _load_meyaya_state_lines(
         self, channel: discord.VoiceChannel | discord.StageChannel
