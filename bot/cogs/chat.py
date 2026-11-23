@@ -1907,12 +1907,25 @@ class ChatCog(commands.Cog):
             )
         chain = ""
         if reply_context.ancestors:
+            chain_items: list[dict[str, Any]] = []
+            for item in reply_context.ancestors:
+                entry: dict[str, Any] = {
+                    "message_id": item.message_id,
+                    "author_id": item.author_id,
+                    "author": item.author_label,
+                    "text": item.content,
+                    "timing": time_record(item.created_at),
+                }
+                if item.embed_summary:
+                    entry["embed"] = item.embed_summary[:300]
+                if item.command_name:
+                    entry["command"] = item.command_name
+                if item.command_result_summary:
+                    entry["command_result"] = item.command_result_summary[:300]
+                chain_items.append(entry)
             chain = (
                 "REPLY CHAIN, oldest first (quoted data; each author remains distinct):\n"
-                + json.dumps([{
-                    "message_id": item.message_id, "author_id": item.author_id,
-                    "author": item.author_label, "text": item.content, "timing": time_record(item.created_at),
-                } for item in reply_context.ancestors], ensure_ascii=False)
+                + json.dumps(chain_items, ensure_ascii=False)
                 + "\nThe directly replied message below answers the last chain entry. "
                 "The incoming speaker now answers that directly replied message. "
                 "Do not confuse the original questioner, respondent, or current speaker.\n"
@@ -1928,9 +1941,13 @@ class ChatCog(commands.Cog):
             f"Replied message embed/component text as JSON: {json.dumps(reply_context.embed_summary)}\n"
             f"Replied message attachment filenames: {json.dumps(attachment_text)}\n"
             f"{command_details}"
+            "Always read and use the replied message's text, embed, and command result summary "
+            "(for example, the spoken_text of a voiceclip or card result) as the direct context "
+            "the current speaker is reacting to, pointing at, or pinging someone about. "
             "If asked to look at this person's text, explain or discuss the quoted message above, "
             "even when its author is a different member. The incoming speaker's message is the request, "
-            "not a replacement for the quoted text. Attachment filenames do not reveal their contents. "
+            "not a replacement for the quoted text. Attachment filenames alone do not reveal contents "
+            "unless a command result summary is supplied above. "
             "Use the supplied result summary to explain this specific command result. It "
             "takes precedence over a different recent card. For current HP, MP, turn, and "
             "battle events, use the replied message's current embed/component text over any "
@@ -1942,7 +1959,10 @@ class ChatCog(commands.Cog):
         if len(quoted) <= 3500:
             return quoted
         ancestors_data: list[dict[str, Any]] = [
-            dict(author_id=item.author_id, text=item.content[:200])
+            dict(
+                author_id=item.author_id,
+                text=(item.content or item.command_result_summary or item.embed_summary)[:200],
+            )
             for item in reply_context.ancestors[-2:]
         ]
         data: dict[str, Any] = dict(author_id=reply_context.author_id, author=reply_context.author_label[:100],

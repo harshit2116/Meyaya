@@ -118,7 +118,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
     "Roleplay": ("roleplay",),
     "Memory": ("memories", "nicknames"),
     "Fact Checking": ("checkclaim",),
-    "Voice Chat": ("join", "listen", "voice", "voiceset", "voicecheck", "leave", "voiceclip", "bgm"),
+    "Voice Chat": ("join", "listen", "voice", "voiceset", "voicecheck", "leave", "voiceclip", "sing", "bgm"),
     "Server Admin": (
         "serversetup",
         "serverdashboard",
@@ -514,6 +514,12 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "voiceclip",
         "voiceclip <text>",
         "Have Meyaya send a short spoken audio clip right in chat.",
+        "Voice Chat",
+    ),
+    HelpCommand(
+        "sing",
+        "sing <topic or style | lyrics>",
+        "Have Meyaya sing a short song with AI backing music right in chat.",
         "Voice Chat",
     ),
     HelpCommand(

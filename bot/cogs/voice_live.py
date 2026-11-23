@@ -20,13 +20,16 @@ from bot.services.audio import PcmStreamAudioSource
 from bot.services.chat_blacklist import acknowledge_silently
 from bot.services.gemini_tts import MAX_TTS_CHARS, encode_discord_audio
 from bot.services.lyria_music import LyriaMusicSession
+from bot.services.song_studio import MAX_SONG_LYRICS_CHARS, compose_song
 from bot.services.voice_session import VoiceChatSession
+from bot.utils.command_context import remember_command_result
 from bot.utils.components_v2 import send_native_file
 from bot.utils.embeds import meyaya_embed
 from bot.views.voice_picker import VoicePicker
 
 logger = logging.getLogger(__name__)
 VOICECLIP_COOLDOWN_SECONDS = 15.0
+SING_COOLDOWN_SECONDS = 30.0
 
 
 class VoiceLiveCog(commands.Cog):
@@ -35,6 +38,7 @@ class VoiceLiveCog(commands.Cog):
         self._sessions: dict[int, VoiceChatSession] = {}
         self._bgm_sessions: dict[int, tuple[LyriaMusicSession, discord.VoiceClient | None]] = {}
         self._voiceclip_cooldowns: dict[tuple[int, int], float] = {}
+        self._sing_cooldowns: dict[tuple[int, int], float] = {}
         self._lifecycle_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
         self._voice_overrides: dict[int, str] = {}
         self._empty_since: dict[int, tuple[tuple[VoiceChatSession, int], float]] = {}
@@ -498,10 +502,11 @@ class VoiceLiveCog(commands.Cog):
         if tts is None or not tts.enabled:
             await ctx.send("Voice clips are unavailable right now.", ephemeral=True)
             return
+        voice_name = self._voice_for_guild(ctx.guild.id)
         await ctx.defer()
         wav = await tts.synthesize(
             clean,
-            voice_name=self._voice_for_guild(ctx.guild.id),
+            voice_name=voice_name,
             style=style,
         )
         if not wav:
@@ -517,9 +522,111 @@ class VoiceLiveCog(commands.Cog):
             wav,
             ffmpeg_executable=getattr(self.bot.settings, "ffmpeg_executable", "ffmpeg"),
         )
+        remember_command_result(
+            ctx,
+            spoken_text=clean,
+            style=style or "default",
+            voice=voice_name,
+        )
         await send_native_file(
             ctx,
             file=discord.File(BytesIO(audio_bytes), filename=filename),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="sing",
+        aliases=["song"],
+        description="Have Meyaya sing a short song with AI backing music in chat.",
+    )
+    @app_commands.describe(
+        prompt="Song topic, or exact lyrics (prefix also supports 'style | lyrics').",
+        style="Optional music and singing style (e.g. 'Hindi romantic ballad', 'upbeat anime pop').",
+        lyrics_only="Set True to sing your exact text verbatim instead of writing new lyrics.",
+    )
+    @commands.guild_only()
+    async def sing(
+        self,
+        ctx: commands.Context[Any],
+        *,
+        prompt: str,
+        style: str | None = None,
+        lyrics_only: bool = False,
+    ) -> None:
+        if ctx.guild is None:
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
+            return
+        raw_prompt = prompt.strip()
+        verbatim = lyrics_only or ("\n" in raw_prompt) or ("[" in raw_prompt and "]" in raw_prompt)
+        if not style and "|" in raw_prompt:
+            maybe_style, maybe_lyrics = raw_prompt.split("|", 1)
+            if maybe_style.strip() and maybe_lyrics.strip():
+                style = maybe_style.strip()
+                raw_prompt = maybe_lyrics.strip()
+                verbatim = True
+        if not raw_prompt:
+            await ctx.send("Give me a song topic or lyrics to sing first.", ephemeral=True)
+            return
+        if verbatim and len(raw_prompt) > MAX_SONG_LYRICS_CHARS + 120:
+            await ctx.send(
+                f"Keep song lyrics under {MAX_SONG_LYRICS_CHARS} characters.",
+                ephemeral=True,
+            )
+            return
+
+        key = (ctx.guild.id, ctx.author.id)
+        now = time.monotonic()
+        remaining = SING_COOLDOWN_SECONDS - (
+            now - self._sing_cooldowns.get(key, float("-inf"))
+        )
+        if remaining > 0:
+            await ctx.send(
+                f"Give my voice a breather - try another song in {int(remaining) + 1}s.",
+                ephemeral=True,
+            )
+            return
+
+        build_tts = getattr(self.bot, "build_tts_service", None)
+        tts = build_tts() if callable(build_tts) else None
+        if tts is None or not tts.enabled:
+            await ctx.send("Singing is unavailable right now.", ephemeral=True)
+            return
+
+        voice_name = self._voice_for_guild(ctx.guild.id)
+        key_pool = getattr(getattr(self.bot, "_llm_provider", None), "key_pool", None)
+        await ctx.defer()
+        result = await compose_song(
+            prompt=raw_prompt,
+            style=style,
+            verbatim_lyrics=verbatim,
+            llm=self.bot.build_llm_provider(),
+            tts=tts,
+            api_key=self.bot.settings.gemini_api_key,
+            music_model=getattr(self.bot.settings, "gemini_music_model", "lyria-realtime-exp"),
+            voice_name=voice_name,
+            ffmpeg_executable=getattr(self.bot.settings, "ffmpeg_executable", "ffmpeg"),
+            key_pool=key_pool,
+        )
+        if result is None:
+            await ctx.send(
+                "I couldn't record that song right now. Try again shortly.",
+                ephemeral=True,
+            )
+            return
+
+        if len(self._sing_cooldowns) >= 2048 and key not in self._sing_cooldowns:
+            self._sing_cooldowns.pop(next(iter(self._sing_cooldowns)))
+        self._sing_cooldowns[key] = time.monotonic()
+        remember_command_result(
+            ctx,
+            sung_lyrics=result.lyrics,
+            style=result.style,
+            voice=voice_name,
+            has_backing_track=result.has_backing_track,
+        )
+        await send_native_file(
+            ctx,
+            file=discord.File(BytesIO(result.audio_bytes), filename=result.filename),
             allowed_mentions=discord.AllowedMentions.none(),
         )
 

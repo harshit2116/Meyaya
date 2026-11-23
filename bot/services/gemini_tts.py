@@ -103,10 +103,12 @@ class GeminiTTSService:
         voice_name: str | None = None,
         style: str | None = None,
         timeout_seconds: float = TTS_TIMEOUT_SECONDS,
+        max_chars: int = MAX_TTS_CHARS,
     ) -> bytes | None:
         """Synthesize a short spoken WAV clip; returns None when unavailable."""
 
-        clean = " ".join(text.split()).strip()[:MAX_TTS_CHARS]
+        limit = max(40, min(400, max_chars))
+        clean = " ".join(text.split()).strip()[:limit]
         if not self.enabled or not clean:
             return None
         voice = canonical_voice_name(voice_name or "") or self.default_voice
