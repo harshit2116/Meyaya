@@ -1,6 +1,12 @@
 """Authored clash dialogue selected from combat state, without RNG or mutations."""
 
-REACTIONS = {
+from __future__ import annotations
+
+from typing import Any
+
+DialogueBeat = tuple[str, str, str, str]
+
+REACTIONS: dict[str, tuple[DialogueBeat, ...]] = {
     "Prism Cascade": (
         ("Meyaya", "Five little lights. Try not to blink.", "Veyra", "I only need the space between them."),
         ("Meyaya", "You missed a petal.", "Veyra", "Then I will erase the garden."),
@@ -54,7 +60,9 @@ REACTIONS["Enemy of All · Absolute Erasure"] += (
 )
 
 
-def dialogue_for(state, *, final=False, exchange=False):
+def dialogue_for(
+    state: Any, *, final: bool = False, exchange: bool = False
+) -> DialogueBeat | None:
     if exchange:
         if not state.finisher:
             return ("Meyaya", "Still here, Veyra.", "Veyra", "Then let the world choose.")

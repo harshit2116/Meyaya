@@ -1,9 +1,12 @@
 """Durable one-time guide admission with a small cache for returning members."""
 
+from __future__ import annotations
+
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from discord.ext import commands
@@ -24,17 +27,17 @@ class GuideClaim:
 
 
 class FirstUseService:
-    def __init__(self, session_factory):
+    def __init__(self, session_factory: Any) -> None:
         self.sessions = session_factory
-        self._seen = OrderedDict()
+        self._seen: OrderedDict[int, float] = OrderedDict()
 
-    def remember(self, user_id):
+    def remember(self, user_id: int) -> None:
         self._seen[user_id] = time.monotonic() + 3600
         self._seen.move_to_end(user_id)
         while len(self._seen) > 2048:
             self._seen.popitem(last=False)
 
-    async def claim(self, user_id):
+    async def claim(self, user_id: int) -> GuideClaim:
         if self._seen.get(user_id, 0) > time.monotonic():
             self._seen.move_to_end(user_id)
             return GuideClaim("seen")
@@ -66,7 +69,7 @@ class FirstUseService:
         self.remember(user_id)
         return GuideClaim("seen")
 
-    async def finish(self, user_id, token):
+    async def finish(self, user_id: int, token: str) -> None:
         # Cache first: a slow optional DB acknowledgement must not repeat a guide
         # that Discord has already accepted. The durable admission survives a restart.
         self.remember(user_id)
@@ -81,7 +84,7 @@ class FirstUseService:
             )
             await session.commit()
 
-    async def release(self, user_id, token):
+    async def release(self, user_id: int, token: str) -> None:
         """Retry on a later message only when Discord definitely rejected delivery."""
         async with self.sessions() as session:
             await session.execute(

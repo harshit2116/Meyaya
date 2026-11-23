@@ -1,4 +1,6 @@
 """API-visible profile badges with bundled official artwork. No runtime requests."""
+from __future__ import annotations
+
 from functools import lru_cache
 from pathlib import Path
 from PIL import Image
@@ -15,7 +17,7 @@ BADGE_FILES = {label: Path(__file__).resolve().parents[1] / "assets/profile/badg
                for flag, label in PROFILE_BADGES.items()}
 
 @lru_cache(maxsize=16)
-def badge_icon(label):
+def badge_icon(label: str) -> Image.Image | None:
     path = BADGE_FILES.get(label)
     if path is None:
         return None

@@ -3,14 +3,23 @@
 Presentation only: these helpers never touch combat state or its random stream.
 """
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from functools import lru_cache
 from io import BytesIO
 import math
 from pathlib import Path
+from typing import cast
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from bot.services.card_renderer import font
+from bot.services.card_renderer import font as _raw_font
+from bot.services.fantasy_duel import Battle, Fighter
+
+type _Font = ImageFont.FreeTypeFont | ImageFont.ImageFont
+
+font = cast(Callable[[int], _Font], _raw_font)
 
 AWAKENINGS = (
     (
@@ -70,12 +79,12 @@ CHOREOGRAPHY = {
 }
 
 
-def choreography_for(state, actor):
+def choreography_for(state: Battle, actor: Fighter) -> str:
     lines = CHOREOGRAPHY.get(actor.last_move)
     return lines[(max(1, actor.skills_used) - 1) % len(lines)] if lines else "The two authorities collide."
 
 
-def condition_for(fighter):
+def condition_for(fighter: Fighter) -> str:
     """Qualitative dramatic cues; sovereign HP and MP remain hidden."""
     ratio = fighter.hp / max(1, fighter.max_hp)
     return ("On the last heartbeat" if ratio <= .25 else
@@ -84,7 +93,7 @@ def condition_for(fighter):
 
 
 @lru_cache(maxsize=6)
-def awakening_media(phase, animated):
+def awakening_media(phase: int, animated: bool) -> tuple[bytes, str]:
     """Three reusable, non-flashing sigil sequences, < 15 MiB RGB frame pixels.
 
     No network, model, per-match randomisation or character-art generation.
@@ -95,7 +104,7 @@ def awakening_media(phase, animated):
     width, height = 640, 240
     heading = font(17)
     caption = font(12)
-    frames = []
+    frames: list[Image.Image] = []
     total = 32 if animated else 1
     for index in range(total):
         t = index / (total - 1) if animated else 1
@@ -105,9 +114,14 @@ def awakening_media(phase, animated):
             radius = 48 + phase * 7
             for ring in range(3):
                 r = radius + ring * 10 + math.sin(t * math.tau + ring) * 3
+                ring_colour = (
+                    int(colour[0] / (ring + 1)),
+                    int(colour[1] / (ring + 1)),
+                    int(colour[2] / (ring + 1)),
+                )
                 draw.arc((cx-r, 113-r, cx+r, 113+r), t*160*direction+ring*40,
-                         t*160*direction+ring*40+240, fill=tuple(int(c/(ring+1)) for c in colour), width=2)
-            points = []
+                         t*160*direction+ring*40+240, fill=ring_colour, width=2)
+            points: list[tuple[float, float]] = []
             for petal in range(5 + phase * 2):
                 angle = petal * math.tau / (5 + phase * 2) + t * 1.4 * direction
                 x, y = cx + math.cos(angle)*radius, 113 + math.sin(angle)*radius
@@ -119,7 +133,11 @@ def awakening_media(phase, animated):
                 angle = particle * 2.39996 + phase
                 r = 25 + travel * 76
                 x, y = cx + math.cos(angle)*r, 113 + math.sin(angle)*r
-                shade = tuple(int(c * (1-travel)*.65) for c in colour)
+                shade = (
+                    int(colour[0] * (1 - travel) * 0.65),
+                    int(colour[1] * (1 - travel) * 0.65),
+                    int(colour[2] * (1 - travel) * 0.65),
+                )
                 draw.ellipse((x-1, y-1, x+1, y+1), fill=shade)
             draw.text((cx, 105), "ORIGIN" if direction == 1 else "ERASURE", font=heading, fill=colour, anchor="mm")
         draw.text((320, 17), AWAKENINGS[phase][0], font=heading, fill="#fff0fa", anchor="mt")
@@ -140,14 +158,14 @@ def awakening_media(phase, animated):
     return data, f"clash-awakening-{phase}.{'gif' if animated else 'jpg'}"
 
 
-def victory_animation(path, origin):
+def victory_animation(path: Path, origin: bool) -> bytes:
     """Animate the existing illustrated ending with petals or falling void sparks."""
     with Image.open(path) as source:
         base = ImageOps.fit(source.convert("RGB"), (640, 280))
     # One palette for the entire scene avoids 30 expensive adaptive quantisations
     # and lets the GIF encoder store only the moving particle rectangles.
     palette = base.quantize(colors=128, method=Image.Quantize.FASTOCTREE)
-    frames = []
+    frames: list[Image.Image] = []
     colour = (243, 178, 220) if origin else (255, 97, 126)
     for index in range(30):
         image = base.copy()
@@ -170,7 +188,7 @@ def victory_animation(path, origin):
 
 
 @lru_cache(maxsize=2)
-def dungeon_clash_opening(animated):
+def dungeon_clash_opening(animated: bool) -> tuple[bytes, str]:
     """The story duel begins outside the destroyed prison, with its own artwork."""
     path = Path(__file__).resolve().parents[1] / "assets/fantasy/dungeon/cinematic/final-duel.jpg"
     if animated:

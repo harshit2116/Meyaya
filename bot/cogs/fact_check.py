@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-from bot.logging.telemetry import discord_context, event
-
+import logging
 import re
 import time
-import logging
+from typing import Any, cast
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from bot.app import MeyayaBot
+from bot.logging.telemetry import discord_context
 from bot.services.fact_check import (
     MAX_ARGUMENT_CHARACTERS,
     MAX_ARGUMENT_MESSAGES,
@@ -45,7 +45,7 @@ class FactCheckCog(commands.Cog):
         self._last_check: dict[tuple[int, int], float] = {}
         self._inflight: set[tuple[int, int]] = set()
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="argumenttimeline",
         aliases=["arguementtimeline"],
         description="Build a clear timeline from a Discord argument.",
@@ -59,7 +59,7 @@ class FactCheckCog(commands.Cog):
     @app_commands.default_permissions(manage_messages=True)
     async def argumenttimeline(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         start: str | None = None,
         ending: str | None = None,
     ) -> None:
@@ -91,7 +91,7 @@ class FactCheckCog(commands.Cog):
         except FactCheckInputError as exc:
             await ctx.send(str(exc), ephemeral=ctx.interaction is not None)
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="checkclaim",
         description="Fact-check only one Discord message.",
     )
@@ -99,7 +99,7 @@ class FactCheckCog(commands.Cog):
     @commands.guild_only()
     async def checkclaim(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         message: str | None = None,
     ) -> None:
         """Analyze one replied-to or linked Discord message without surrounding chat."""
@@ -127,9 +127,14 @@ class FactCheckCog(commands.Cog):
             await ctx.send(str(exc), ephemeral=ctx.interaction is not None)
 
     @discord_context("argument_timeline")
-    async def _run_timeline(self, ctx, messages):
+    async def _run_timeline(
+        self,
+        ctx: commands.Context[Any],
+        messages: list[FactCheckMessage],
+    ) -> None:
         from bot.services.argument_timeline import build_timeline
 
+        assert ctx.guild is not None
         key = (ctx.guild.id, ctx.author.id)
         now = time.monotonic()
         if key in self._inflight or now - self._last_check.get(key, float("-inf")) < 60:
@@ -137,13 +142,15 @@ class FactCheckCog(commands.Cog):
             return
         self._inflight.add(key)
         try:
-            report = await build_timeline(self.bot.build_llm_provider(), messages)
+            report = await cast(Any, build_timeline)(self.bot.build_llm_provider(), messages)
             for chunk in split_discord_report(report):
                 await ctx.send(
                     embed=meyaya_embed("Argument Timeline", chunk, icon="🧭"),
                     allowed_mentions=discord.AllowedMentions.none(),
                     ephemeral=ctx.interaction is not None,
                 )
+            if len(self._last_check) >= 2048 and key not in self._last_check:
+                self._last_check.pop(next(iter(self._last_check)))
             self._last_check[key] = time.monotonic()
         except Exception:
             logger.exception("Argument timeline failed")
@@ -155,11 +162,12 @@ class FactCheckCog(commands.Cog):
     @discord_context("fact_check")
     async def _run_check(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         messages: list[FactCheckMessage],
         *,
         single_message: bool,
     ) -> None:
+        assert ctx.guild is not None
         key = (ctx.guild.id, ctx.author.id)
         now = time.monotonic()
         if key in self._inflight:
@@ -208,6 +216,8 @@ class FactCheckCog(commands.Cog):
             )
             return
 
+        if len(self._last_check) >= 2048 and key not in self._last_check:
+            self._last_check.pop(next(iter(self._last_check)))
         self._last_check[key] = time.monotonic()
 
         heading = (
@@ -224,7 +234,7 @@ class FactCheckCog(commands.Cog):
 
     async def _argument_messages(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         start: discord.Message,
         ending: discord.Message | None,
     ) -> list[FactCheckMessage]:
@@ -276,12 +286,13 @@ class FactCheckCog(commands.Cog):
 
     async def _message_from_link(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         raw_link: str,
     ) -> discord.Message:
         parsed = parse_message_link(raw_link)
         if parsed is None:
             raise FactCheckInputError("Use a complete Discord message link.")
+        assert ctx.guild is not None
         guild_id, channel_id, message_id = parsed
         if guild_id != ctx.guild.id or channel_id != ctx.channel.id:
             raise FactCheckInputError("The message must be from this channel and server.")
@@ -293,7 +304,7 @@ class FactCheckCog(commands.Cog):
             ) from exc
 
     @staticmethod
-    async def _replied_message(ctx: commands.Context) -> discord.Message | None:
+    async def _replied_message(ctx: commands.Context[Any]) -> discord.Message | None:
         reference = getattr(ctx.message, "reference", None)
         if reference is None or reference.message_id is None:
             return None
@@ -320,7 +331,7 @@ class FactCheckCog(commands.Cog):
         )
 
     @staticmethod
-    def _supported_channel(ctx: commands.Context) -> bool:
+    def _supported_channel(ctx: commands.Context[Any]) -> bool:
         return ctx.guild is not None and isinstance(
             ctx.channel, (discord.TextChannel, discord.Thread, discord.VoiceChannel, discord.StageChannel)
         )
@@ -332,7 +343,7 @@ def parse_message_link(raw_link: str) -> tuple[int, int, int] | None:
     match = MESSAGE_LINK.fullmatch(raw_link.strip().strip("<>"))
     if match is None:
         return None
-    return tuple(int(match.group(name)) for name in ("guild", "channel", "message"))
+    return (int(match.group("guild")), int(match.group("channel")), int(match.group("message")))
 
 
 def split_discord_report(text: str, limit: int = MAX_DISCORD_CHUNK) -> list[str]:

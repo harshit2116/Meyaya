@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import discord
 from discord import app_commands
@@ -13,7 +14,6 @@ from bot.app import MeyayaBot
 from bot.models.memory import MemoryStatus
 from bot.models.meyaya_state import MeyayaUserState
 from bot.repositories.memories import MemoryRepository
-from bot.services.memory import MemoryOutcome, MemoryService
 from bot.utils.embeds import meyaya_embed
 from bot.utils.member_names import MemberNames
 
@@ -27,7 +27,7 @@ class MemoryCog(commands.Cog):
         self.bot = bot
         self.member_names = MemberNames(bot)
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="memories",
         description="See what Meyaya remembers about you or another member.",
         with_app_command=True,
@@ -35,7 +35,7 @@ class MemoryCog(commands.Cog):
     @app_commands.describe(member="Member to inspect; Manage Server is required for others.")
     async def memories(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         member: discord.Member | None = None,
     ) -> None:
         """List categorized permanent memories without exposing other members."""
@@ -92,7 +92,7 @@ class MemoryCog(commands.Cog):
         )
         await self._send_memory_list(ctx, embed)
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="nicknames",
         description="See the nicknames Meyaya has given members in this server.",
         with_app_command=True,
@@ -102,28 +102,27 @@ class MemoryCog(commands.Cog):
     @app_commands.describe(member="Show only the nickname Meyaya gave this member.")
     async def nicknames(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         member: discord.Member | None = None,
     ) -> None:
-        """Show the stable nicknames Meyaya has assigned in this server."""
-
+        if ctx.guild is None:
+            return
         if ctx.interaction is not None:
             await ctx.defer(ephemeral=True)
 
-        filters = [
+        stmt = select(MeyayaUserState).where(
             MeyayaUserState.guild_id == ctx.guild.id,
             MeyayaUserState.nickname.is_not(None),
             MeyayaUserState.nickname != "",
-        ]
+        )
         if member is not None:
-            filters.append(MeyayaUserState.user_id == member.id)
+            stmt = stmt.where(MeyayaUserState.user_id == member.id)
         async with self.bot.db_session() as session:
             records = (
                 await session.scalars(
-                    select(MeyayaUserState)
-                    .where(*filters)
-                    .order_by(MeyayaUserState.familiarity.desc(), MeyayaUserState.updated_at.desc())
-                    .limit(50)
+                    stmt.order_by(
+                        MeyayaUserState.familiarity.desc(), MeyayaUserState.updated_at.desc()
+                    ).limit(50)
                 )
             ).all()
 
@@ -138,7 +137,7 @@ class MemoryCog(commands.Cog):
             ) for record in records
         ))
         lines = []
-        for record, guild_member in zip(records, members):
+        for record, guild_member in zip(records, members, strict=True):
             display_name = guild_member.display_name if guild_member else "Unavailable member"
             safe_name = discord.utils.escape_markdown(display_name)
             safe_nickname = discord.utils.escape_markdown(record.nickname or "")
@@ -158,19 +157,25 @@ class MemoryCog(commands.Cog):
 
     @staticmethod
     async def _send(
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         content: str | None = None,
         *,
         embed: discord.Embed | None = None,
     ) -> None:
+        if embed is not None:
+            await ctx.send(
+                content=content,
+                embed=embed,
+                ephemeral=ctx.interaction is not None,
+            )
+            return
         await ctx.send(
             content=content,
-            embed=embed,
             ephemeral=ctx.interaction is not None,
         )
 
     @staticmethod
-    async def _send_memory_list(ctx: commands.Context, embed: discord.Embed) -> None:
+    async def _send_memory_list(ctx: commands.Context[Any], embed: discord.Embed) -> None:
         """Keep personal facts private for both slash and written commands."""
 
         if ctx.interaction is not None:
@@ -185,6 +190,4 @@ class MemoryCog(commands.Cog):
 
 
 async def setup(bot: MeyayaBot) -> None:
-    """Install the Memory System v2 commands."""
-
     await bot.add_cog(MemoryCog(bot))

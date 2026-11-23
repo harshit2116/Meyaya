@@ -1,5 +1,8 @@
 """Short, fail-soft budgets for optional read-only chat context."""
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Awaitable, Callable
 import logging
 import time
 
@@ -10,11 +13,11 @@ logger = logging.getLogger(__name__)
 
 
 class OptionalContext:
-    def __init__(self, timeout=2.0, cooldown=15.0):
+    def __init__(self, timeout: float = 2.0, cooldown: float = 15.0) -> None:
         self.timeout, self.cooldown = timeout, cooldown
-        self._retry_at = {}
+        self._retry_at: dict[str, float] = {}
 
-    async def read(self, source, factory):
+    async def read[T](self, source: str, factory: Callable[[], Awaitable[list[T]]]) -> list[T]:
         if time.monotonic() < self._retry_at.get(source, 0):
             return []
         try:

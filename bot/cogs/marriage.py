@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -23,26 +25,30 @@ class MarriageCog(commands.Cog):
         self.member_names = MemberNames(bot)
         self.pending = PendingProposalRegistry()
 
-    @commands.hybrid_command(name="marry", description="Propose marriage to another member.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="marry", description="Propose marriage to another member."
+    )
     @app_commands.describe(user="Member you want to propose to")
-    async def marry(self, ctx: commands.Context, user: discord.Member) -> None:
+    async def marry(self, ctx: commands.Context[Any], user: discord.Member) -> None:
         if ctx.interaction is not None:
             await ctx.defer()
         content, embed, view = await self._build_proposal(ctx.author, user)
         message = await ctx.send(
             content=content,
-            embed=embed,
+            embed=embed or discord.utils.MISSING,
             view=view or discord.utils.MISSING,
             allowed_mentions=discord.AllowedMentions(users=True),
         )
         if view is not None:
             view.message = message
 
-    @commands.hybrid_command(name="marriage", description="Show a member's marriage status.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="marriage", description="Show a member's marriage status."
+    )
     @app_commands.describe(member="Member to inspect; defaults to you")
     async def marriage(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         member: discord.Member | None = None,
     ) -> None:
         target = member or ctx.author
@@ -83,12 +89,12 @@ class MarriageCog(commands.Cog):
         embed.set_thumbnail(url=str(target.display_avatar.url))
         await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="renewvows",
         description="Write a new vow to your current spouse.",
     )
     @app_commands.describe(vow="Your vow, up to 500 characters")
-    async def renewvows(self, ctx: commands.Context, *, vow: str) -> None:
+    async def renewvows(self, ctx: commands.Context[Any], *, vow: str) -> None:
         clean_vow = " ".join(vow.split())[:MAX_VOW_LENGTH]
         if not clean_vow:
             await ctx.send("Write a vow first.")
@@ -114,11 +120,11 @@ class MarriageCog(commands.Cog):
         embed.set_thumbnail(url=str(ctx.author.display_avatar.url))
         await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="divorce",
         description="Request a confirmed divorce from your current spouse.",
     )
-    async def divorce(self, ctx: commands.Context) -> None:
+    async def divorce(self, ctx: commands.Context[Any]) -> None:
         async with self.bot.db_session() as session:
             summary = await self.bot.build_marriage_service(session).get_summary(ctx.author.id)
         if summary is None:

@@ -1,7 +1,10 @@
 """Store verified Top.gg votes and grant one durable reward per vote."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -29,7 +32,7 @@ class InvalidVote(ValueError):
     """Invalid authenticated payload; never include provider data in the message."""
 
 
-def event_time(value) -> datetime:
+def event_time(value: object) -> datetime:
     if not isinstance(value, str) or len(value) > 64:
         raise InvalidVote("Invalid vote time")
     try:
@@ -50,7 +53,7 @@ class VerifiedVote:
 
 
 class TopggVoteService:
-    def __init__(self, session_factory):
+    def __init__(self, session_factory: Any) -> None:
         self.sessions = session_factory
 
     async def record(self, vote: VerifiedVote) -> bool:
@@ -89,7 +92,7 @@ class TopggVoteService:
             await session.commit()
         return claimed is not None
 
-    async def pending_notifications(self, *, limit=10):
+    async def pending_notifications(self, *, limit: int = 10) -> list[VerifiedVote]:
         now = datetime.now(UTC)
         async with self.sessions() as session:
             rows = (
@@ -111,7 +114,9 @@ class TopggVoteService:
             ).all()
         return [VerifiedVote(*row) for row in rows]
 
-    async def acquire_poll(self, project_id: str, owner: str, *, now=None):
+    async def acquire_poll(
+        self, project_id: str, owner: str, *, now: datetime | None = None
+    ) -> PollCheckpoint | None:
         now = now or datetime.now(UTC)
         async with self.sessions() as session:
             await session.execute(
@@ -140,7 +145,7 @@ class TopggVoteService:
             await session.commit()
         return checkpoint
 
-    async def store_poll_page(self, project_id: str, owner: str, page):
+    async def store_poll_page(self, project_id: str, owner: str, page: Any) -> int:
         now = datetime.now(UTC)
         async with self.sessions() as session:
             state = await session.scalar(
@@ -185,7 +190,7 @@ class TopggVoteService:
             await session.commit()
         return len(inserted)
 
-    async def release_poll(self, project_id: str, owner: str):
+    async def release_poll(self, project_id: str, owner: str) -> None:
         async with self.sessions() as session:
             await session.execute(
                 update(TopggPollState)
@@ -197,7 +202,7 @@ class TopggVoteService:
             )
             await session.commit()
 
-    async def reset_poll_cursor(self, project_id: str, owner: str):
+    async def reset_poll_cursor(self, project_id: str, owner: str) -> None:
         now = datetime.now(UTC)
         async with self.sessions() as session:
             await session.execute(
@@ -210,7 +215,7 @@ class TopggVoteService:
             )
             await session.commit()
 
-    async def status(self, user_id: int):
+    async def status(self, user_id: int) -> dict[str, Any]:
         now = datetime.now(UTC)
         async with self.sessions() as session:
             row = (
@@ -233,7 +238,7 @@ class TopggVoteService:
         return {"remaining": remaining, "expires_at": row.expires_at if row else None}
 
     @staticmethod
-    async def reserve(session, user_id: int, now: datetime) -> str | None:
+    async def reserve(session: Any, user_id: int, now: datetime) -> str | None:
         # Lock the earliest expiring grant. Concurrent requests serialize on the
         # row, and the UPDATE condition is checked again after acquiring its lock.
         candidate = (
@@ -249,18 +254,21 @@ class TopggVoteService:
             .with_for_update()
             .scalar_subquery()
         )
-        return await session.scalar(
-            update(TopggVote)
-            .where(
-                TopggVote.vote_id == candidate,
-                TopggVote.used < TopggVote.credits,
-            )
-            .values(used=TopggVote.used + 1)
-            .returning(TopggVote.vote_id)
+        return cast(
+            str | None,
+            await session.scalar(
+                update(TopggVote)
+                .where(
+                    TopggVote.vote_id == candidate,
+                    TopggVote.used < TopggVote.credits,
+                )
+                .values(used=TopggVote.used + 1)
+                .returning(TopggVote.vote_id)
+            ),
         )
 
     @staticmethod
-    async def refund(session, vote_id: str) -> None:
+    async def refund(session: Any, vote_id: str) -> None:
         # An old in-flight generation must never refund a newer vote.
         await session.execute(
             update(TopggVote)

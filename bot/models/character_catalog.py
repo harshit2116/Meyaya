@@ -1,6 +1,7 @@
 """Gameplay-only summon roster and durable safety controls."""
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -30,7 +31,7 @@ class CatalogCharacter(Base):
     rarity_stars: Mapped[int] = mapped_column(Integer)
     summon_weight: Mapped[int] = mapped_column(Integer, default=100)
     class_name: Mapped[str] = mapped_column(String(80), default="Wanderer")
-    traits: Mapped[list] = mapped_column(JSON, default=list)
+    traits: Mapped[list[Any]] = mapped_column(JSON, default=list)
     passive: Mapped[str] = mapped_column(String(250), default="")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     disabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

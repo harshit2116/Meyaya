@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 import asyncio
-from contextlib import suppress
+from collections.abc import AsyncIterator, Iterable
+from contextlib import asynccontextmanager, suppress
 import logging
 import time
+from typing import Any, cast
 
 import aiohttp
 import discord
@@ -104,11 +105,11 @@ class MeyayaBot(commands.Bot):
             chunk_guilds_at_startup=settings.discord_chunk_on_startup,
         )
         self.settings = settings
-        self.meyaya_application_emojis = ()
+        self.meyaya_application_emojis: tuple[Any, ...] = ()
         self.started_at = time.monotonic()
         self._guild_prefixes: dict[int, str] = {}
         self._guild_autoresponders: dict[int, bool] = {}
-        self._guild_disabled_features = {}
+        self._guild_disabled_features: dict[int, frozenset[str]] = {}
         self.add_check(self._feature_command_check)
         self.add_check(self._first_use_command_check)
         self._guild_chat_channels: dict[int, int | None] | None = None
@@ -119,23 +120,24 @@ class MeyayaBot(commands.Bot):
         self.votes = TopggVoteService(self.session_factory)
         self.first_use = FirstUseService(self.session_factory)
         self.voice_summaries = VoiceSummaryService(self.session_factory)
-        self.topgg_api = None
+        self.topgg_api: Any = None
         self.request_log = RequestLogService(self.session_factory)
         self.chat_blacklist = ChatBlacklistService(self.session_factory)
         self.ai_guard = AIGuard(self.session_factory, settings)
-        self._request_log_maintenance = None
-        self._dashboard_settings_refresh = None
-        self.dashboard = None
+        self._request_log_maintenance: asyncio.Task[None] | None = None
+        self._dashboard_settings_refresh: asyncio.Task[None] | None = None
+        self.dashboard: Any = None
         self.redis: Redis | None = None
         self.http_session: aiohttp.ClientSession | None = None
         self._klipy_service: KlipyService | None = None
         self._chat_memory_service: ChatMemoryService | None = None
         self._llm_provider: LLMProvider | None = None
         self._profile_aesthetic_service: ProfileAestheticService | None = None
-        self.tree.on_error = self.on_app_command_error
-        self.tree.interaction_check = self._blacklist_interaction_check
+        tree_obj: Any = self.tree
+        tree_obj.on_error = self.on_app_command_error
+        tree_obj.interaction_check = self._blacklist_interaction_check
 
-    async def _blacklist_interaction_check(self, interaction):
+    async def _blacklist_interaction_check(self, interaction: discord.Interaction) -> bool:
         if getattr(self.chat_blacklist, 'is_command_blocked', self.chat_blacklist.is_blocked)(interaction.guild_id, interaction.user.id):
             await interaction.response.defer(ephemeral=True)
             await interaction.delete_original_response()
@@ -144,30 +146,31 @@ class MeyayaBot(commands.Bot):
         if feature and not self.feature_enabled(interaction.guild_id, feature):
             await interaction.response.send_message(str(FeatureDisabled(feature)), ephemeral=True)
             return False
-        if getattr(getattr(interaction, "command", None), "wrapped", None) is not None:
+        wrapped_command = getattr(getattr(interaction, "command", None), "wrapped", None)
+        if wrapped_command is not None:
             # Pause slash commands before HybridAppCommand.prepare acquires or
             # releases command concurrency. The saved context keeps its options.
             context = await self.get_context(interaction)
-            context.command = interaction.command.wrapped
+            context.command = wrapped_command
             try:
                 await self._first_use_command_check(context)
             except FirstUsePending:
                 return False
         return True
 
-    def feature_enabled(self, guild_id, feature):
+    def feature_enabled(self, guild_id: int | None, feature: str) -> bool:
         return feature not in getattr(self, '_guild_disabled_features', {}).get(guild_id, ())
 
-    def cache_guild_features(self, guild_id, disabled):
+    def cache_guild_features(self, guild_id: int, disabled: Iterable[str]) -> None:
         self._guild_disabled_features[guild_id] = frozenset(disabled)
 
-    async def _feature_command_check(self, ctx):
+    async def _feature_command_check(self, ctx: commands.Context[Any]) -> bool:
         feature = command_feature(getattr(ctx.command, 'qualified_name', None))
         if feature and not self.feature_enabled(getattr(ctx.guild, 'id', None), feature):
             raise FeatureDisabled(feature)
         return True
 
-    async def _first_use_command_check(self, ctx):
+    async def _first_use_command_check(self, ctx: commands.Context[Any]) -> bool:
         command = ctx.command
         entry = COMMANDS_BY_NAME.get(command.qualified_name.split(" ", 1)[0]) if command else None
         # Help and an explicitly requested tour stay directly accessible.
@@ -177,13 +180,13 @@ class MeyayaBot(commands.Bot):
                 or (entry is not None and entry.category == "Server Admin")
                 or type(getattr(command, "cog", None)).__name__ in {"AdminCog", "ModerationCog"}):
             return True
-        chat = self.get_cog("ChatCog")
+        chat: Any = self.get_cog("ChatCog")
         if chat is not None and await chat._maybe_show_first_use(ctx, command_context=ctx):
             raise FirstUsePending()
         return True
 
     @asynccontextmanager
-    async def db_session(self) -> AsyncSession:
+    async def db_session(self) -> AsyncIterator[AsyncSession]:
         """Provide a managed async database session to commands and services."""
 
         with timing_stage('database_ms'):
@@ -201,7 +204,7 @@ class MeyayaBot(commands.Bot):
         if self.settings.dashboard_enabled:
             from bot.web.dashboard import Dashboard
 
-            self.dashboard = Dashboard(self)
+            self.dashboard = cast(Any, Dashboard)(self)
             await self.dashboard.start()
         self.redis = build_redis_client(
             self.settings.redis_url, verify_tls=self.settings.redis_tls_verify
@@ -345,12 +348,21 @@ class MeyayaBot(commands.Bot):
                             finally:
                                 await self.engine.dispose()
 
-    async def on_command_error(self, ctx: commands.Context, error: commands.CommandError) -> None:
+    async def on_command_error(self, ctx: commands.Context[Any], error: commands.CommandError) -> None:
         """Return friendly written-command errors and log only unexpected failures."""
 
         if isinstance(error, commands.CommandNotFound):
             return
-        original = getattr(error, "original", error)
+        original: BaseException = error
+        while isinstance(
+            original,
+            (
+                commands.HybridCommandError,
+                commands.CommandInvokeError,
+                discord.app_commands.CommandInvokeError,
+            ),
+        ):
+            original = original.original
         if isinstance(original, FirstUsePending):
             return
         if isinstance(original, ImageBusy):
@@ -370,6 +382,8 @@ class MeyayaBot(commands.Bot):
             message = str(original)
         elif isinstance(original, commands.CheckFailure):
             message = "You cannot use that command here."
+        elif type(original) is commands.CommandError and str(original):
+            message = str(original)
         elif isinstance(original, SQLAlchemyError):
             error_id = health.capture(original, command=getattr(ctx.command, 'qualified_name', 'unknown'),
                                       guild_id=getattr(ctx.guild, 'id', None), invocation='slash' if ctx.interaction else 'prefix')
@@ -418,14 +432,11 @@ class MeyayaBot(commands.Bot):
             error_id = health.capture(original, command=getattr(interaction.command, 'qualified_name', 'unknown'),
                                       guild_id=interaction.guild_id, channel_id=interaction.channel_id, invocation='slash')
             message = f"🌸 Something broke on my side.\nError ID: `{error_id}`"
-        payload = {
-            "embed": meyaya_embed("Tiny Hiccup", message, tone="danger", icon="💭"),
-            "ephemeral": True,
-        }
+        embed = meyaya_embed("Tiny Hiccup", message, tone="danger", icon="💭")
         if interaction.response.is_done():
-            await interaction.followup.send(**payload)
+            await interaction.followup.send(embed=embed, ephemeral=True)
         else:
-            await interaction.response.send_message(**payload)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
     def build_klipy_service(self) -> KlipyService | None:
         """Return the shared Klipy service once runtime clients are ready."""
@@ -449,7 +460,13 @@ class MeyayaBot(commands.Bot):
             self._profile_aesthetic_service = ProfileAestheticService(self)
         return self._profile_aesthetic_service
 
-    async def generate_chat(self, guild_id, *args, quota_user_id=None, **kwargs):
+    async def generate_chat(
+        self,
+        guild_id: int | None,
+        *args: Any,
+        quota_user_id: int | None = None,
+        **kwargs: Any,
+    ) -> Any:
         """Reserve before generation and refund failures or silence responses."""
         if guild_id is None:
             raise ChatLimitReached("Meyaya chat commands are only available inside a server.")
@@ -467,7 +484,10 @@ class MeyayaBot(commands.Bot):
             logger.info("chat_quota reserve_ms=%.0f", reserve_ms)
         charged = False
         try:
-            result = await self._llm_provider.generate(*args, **kwargs)
+            provider = self._llm_provider
+            if provider is None:
+                return None
+            result = await provider.generate(*args, **kwargs)
             charged = (
                 result is not None and bool(result.text.strip()) and not is_silence(result.text)
             )
@@ -480,31 +500,34 @@ class MeyayaBot(commands.Bot):
                 except (SQLAlchemyError, TimeoutError):
                     logger.warning('Chat allowance refund unavailable; review usage counters')
 
-    async def get_context(self, origin, /, *, cls=TimedContext):
+    async def get_context(
+        self, origin: Any, /, *, cls: type[Any] = TimedContext
+    ) -> Any:
         return await super().get_context(origin, cls=cls)
 
-    async def on_command_completion(self, ctx):
+    async def on_command_completion(self, ctx: commands.Context[Any]) -> None:
         # Numeric timings only: never log arguments or message contents.
         elapsed = (discord.utils.utcnow() - ctx.message.created_at).total_seconds()
+        command_name = ctx.command.qualified_name if ctx.command is not None else "unknown"
         if elapsed >= 2:
-            logger.info("slow_command command=%s message_to_completion_ms=%.0f", ctx.command.qualified_name, elapsed * 1000)
+            logger.info("slow_command command=%s message_to_completion_ms=%.0f", command_name, elapsed * 1000)
         # Hybrid commands also emit app-command completion; count them only there.
         if ctx.guild is not None and ctx.interaction is None:
-            await self._count_command(ctx.guild.id, ctx.command.qualified_name)
+            await self._count_command(ctx.guild.id, command_name)
             await self.request_log.record_command(event_id=ctx.message.id, guild_id=ctx.guild.id,
-                channel_id=ctx.channel.id, user=ctx.author, command=ctx.command.qualified_name,
+                channel_id=ctx.channel.id, user=ctx.author, command=command_name,
                 invocation='prefix', message_id=ctx.message.id)
 
-    async def on_command(self, ctx):
+    async def on_command(self, ctx: commands.Context[Any]) -> None:
         # Review logs are AI-chat only; command counts are recorded on completion.
         return
 
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message) -> None:
         if getattr(self.chat_blacklist, 'is_command_blocked', self.chat_blacklist.is_blocked)(
             message.guild.id if message.guild else None, message.author.id
         ):
             return
-        moderation = self.get_cog("ModerationCog")
+        moderation: Any = self.get_cog("ModerationCog")
         checked_at = time.monotonic()
         if moderation and await moderation.should_block(message):
             return
@@ -512,24 +535,26 @@ class MeyayaBot(commands.Bot):
         if delay >= 1:
             logger.info("slow_message_gate moderation_ms=%.0f", delay * 1000)
         # Temporary owner-only uwu veyra visual test; no command registration.
-        admin = self.get_cog("AdminCog")
+        admin: Any = self.get_cog("AdminCog")
         if admin and await admin.handle_veyra_glitch_test(message):
             return
         await self.process_commands(message)
 
-    async def on_interaction(self, interaction):
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
         from bot.utils.game_interactions import reply_to_expired_game
 
         await reply_to_expired_game(self, interaction)
 
-    async def on_app_command_completion(self, interaction, command):
+    async def on_app_command_completion(
+        self, interaction: discord.Interaction, command: Any
+    ) -> None:
         if interaction.guild_id is not None:
             await self._count_command(interaction.guild_id, command.qualified_name)
             await self.request_log.record_command(event_id=interaction.id, guild_id=interaction.guild_id,
                 channel_id=interaction.channel_id, user=interaction.user, command=command.qualified_name,
                 invocation='slash')
 
-    async def _count_command(self, guild_id, command_name):
+    async def _count_command(self, guild_id: int, command_name: str) -> None:
         try:
             async with asyncio.timeout(3):
                 await self.usage.command_completed(guild_id, command_name)
@@ -582,14 +607,9 @@ class MeyayaBot(commands.Bot):
 
         try:
             async with self.db_session() as session:
-                channels = await GuildSettingsRepository(
+                channels, prefixes, responders, features = await GuildSettingsRepository(
                     session
-                ).list_chat_channels()
-                prefixes = await GuildSettingsRepository(session).list_prefixes()
-                responders = await GuildSettingsRepository(
-                    session
-                ).list_autoresponders()
-                features = await GuildSettingsRepository(session).list_disabled_features()
+                ).list_runtime_settings()
             self._guild_chat_channels = channels
             self._guild_prefixes = prefixes
             self._guild_autoresponders = responders
@@ -597,7 +617,7 @@ class MeyayaBot(commands.Bot):
         except SQLAlchemyError:
             logger.warning("Could not reload server settings; keeping last known configuration")
 
-    async def _refresh_dashboard_settings(self):
+    async def _refresh_dashboard_settings(self) -> None:
         from bot.utils.host_metrics import HostMetrics
         metrics = HostMetrics()
         metrics.record(0)
@@ -611,9 +631,11 @@ class MeyayaBot(commands.Bot):
             except SQLAlchemyError:
                 logger.warning("Could not refresh owner dashboard settings; retrying next minute")
 
-    async def _remember_guild_identity(self, guild, *, membership=True) -> None:
+    async def _remember_guild_identity(self, guild: discord.Guild, *, membership: bool = True) -> None:
         from bot.services.guild_identity import remember_identity
-        owner = guild.owner or self.get_user(guild.owner_id)
+        owner: discord.Member | discord.User | None = guild.owner or (
+            self.get_user(guild.owner_id) if guild.owner_id is not None else None
+        )
         if owner is None and guild.owner_id:
             try:
                 owner = await self.fetch_user(guild.owner_id)
@@ -627,7 +649,7 @@ class MeyayaBot(commands.Bot):
         except SQLAlchemyError:
             logger.warning("Could not save server identity for guild=%s", guild.id)
 
-    async def on_guild_update(self, before, after) -> None:
+    async def on_guild_update(self, before: discord.Guild, after: discord.Guild) -> None:
         await self._remember_guild_identity(after)
 
     async def on_ready(self) -> None:
@@ -638,23 +660,23 @@ class MeyayaBot(commands.Bot):
 
         for guild in self.guilds:
             await self._remember_guild_identity(guild)
-        await apply_all_guild_name_styles(self)
+        await cast(Any, apply_all_guild_name_styles)(self)
 
-    async def on_guild_available(self, guild) -> None:
+    async def on_guild_available(self, guild: discord.Guild) -> None:
         await self._remember_guild_identity(guild)
         if self.is_ready():
             from bot.services.bot_profile_style import apply_guild_name_style
 
-            await apply_guild_name_style(self, guild)
+            await cast(Any, apply_guild_name_style)(self, guild)
 
-    async def on_guild_join(self, guild) -> None:
+    async def on_guild_join(self, guild: discord.Guild) -> None:
         await self._remember_guild_identity(guild)
         if self.is_ready():
             from bot.services.bot_profile_style import apply_guild_name_style
 
-            await apply_guild_name_style(self, guild)
+            await cast(Any, apply_guild_name_style)(self, guild)
 
-    async def on_guild_remove(self, guild) -> None:
+    async def on_guild_remove(self, guild: discord.Guild) -> None:
         await self._remember_guild_identity(guild, membership=False)
         getattr(self, "_guild_name_style_attempted", set()).discard(guild.id)
 

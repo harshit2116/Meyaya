@@ -9,6 +9,7 @@ import re
 import time
 from dataclasses import dataclass
 from contextvars import ContextVar
+from typing import Any
 
 import aiohttp
 
@@ -22,10 +23,6 @@ from bot.services.llm import (
     GroundedReply,
     GroundingError,
     GroundingRateLimitError,
-    MemoryAction,
-    MemoryDirective,
-    NaturalCommand,
-    LLMReply as GeminiReply,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,10 +35,10 @@ MAX_REPLY_WORDS = 220  # safety net only, keeps us well under Discord's 2000 cha
 RETRYABLE_STATUS_CODES = {502, 503, 504}
 MAX_REQUEST_ATTEMPTS = 2
 PROVIDER_COOLDOWN_SECONDS = 30
-_failure = ContextVar('gemini_credential_failure', default=None)
+_failure: ContextVar[tuple[str, Any] | None] = ContextVar('gemini_credential_failure', default=None)
 
 
-def current_gemini_failure():
+def current_gemini_failure() -> tuple[str, Any] | None:
     """Task-local safe outcome for credential failover, never prompt/provider text."""
     return _failure.get()
 
@@ -75,9 +72,9 @@ class GeminiService(LLMProvider):
         self.thinking_level = thinking_level
         self.default_timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT_SECONDS)
         self.availability = availability if availability is not None else GeminiAvailability()
-        self.quota = None
+        self.quota: Any = None
 
-    async def _attempt_slot(self):
+    async def _attempt_slot(self) -> bool:
         if self.availability.retry_at > time.monotonic():
             request_failure('provider_cooldown')
             return False
@@ -91,7 +88,7 @@ class GeminiService(LLMProvider):
                 return False
         return True
 
-    async def _rate_backoff(self, details):
+    async def _rate_backoff(self, details: dict[str, Any]) -> None:
         seconds = details.get('retry_after_seconds') or 60
         if details.get('quota_scope', 'unknown') == 'unknown':
             seconds = max(60, seconds)
@@ -100,13 +97,13 @@ class GeminiService(LLMProvider):
         if self.quota is not None:
             await self.quota.block(seconds)
 
-    def _transient_failure(self):
+    def _transient_failure(self) -> None:
         state = self.availability
         state.failures += 1
         if state.failures >= 2:
             state.retry_at = time.monotonic() + PROVIDER_COOLDOWN_SECONDS
 
-    async def _error_details(self, response):
+    async def _error_details(self, response: Any) -> dict[str, Any]:
         # Never log arbitrary provider text: it can echo prompts or credentials.
         # Only emit known status values and locally classified message categories.
         try:
@@ -138,8 +135,10 @@ class GeminiService(LLMProvider):
                 if phrase in message:
                     category = label
                     break
-            result = {"provider_status": status if isinstance(status, str) and status in statuses else "UNKNOWN",
-                      "error_category": category}
+            result: dict[str, Any] = {
+                "provider_status": status if isinstance(status, str) and status in statuses else "UNKNOWN",
+                "error_category": category,
+            }
             retry = self._retry_after_seconds(getattr(response, 'headers', {}).get('Retry-After'))
             scope = 'unknown'
             for detail in error.get('details', []) if isinstance(error.get('details'), list) else []:
@@ -172,7 +171,7 @@ class GeminiService(LLMProvider):
         history: list[ChatMessage] | None = None,
         *,
         max_output_tokens: int | None = None,
-        timeout_seconds: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> str | None:
         _failure.set(None)
         state = self.availability
@@ -202,8 +201,13 @@ class GeminiService(LLMProvider):
                 state.probing = False
 
     async def _generate_text(
-        self, system_instruction, user_message, history=None, *,
-        max_output_tokens=None, timeout_seconds=None,
+        self,
+        system_instruction: str,
+        user_message: str,
+        history: list[ChatMessage] | None = None,
+        *,
+        max_output_tokens: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> str | None:
         """Ask Gemini for a reply, optionally continuing a prior conversation."""
 
@@ -241,7 +245,7 @@ class GeminiService(LLMProvider):
             if timeout_seconds is not None
             else self.default_timeout
         )
-        data: dict | None = None
+        data: dict[str, Any] | None = None
         for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
             if not await self._attempt_slot():
                 return None
@@ -330,7 +334,7 @@ class GeminiService(LLMProvider):
         user_message: str,
         *,
         max_output_tokens: int = 1800,
-        timeout_seconds: int = 45,
+        timeout_seconds: float = 45,
     ) -> GroundedReply:
         """Generate source-annotated text, with a compatible endpoint fallback."""
         _failure.set(None)
@@ -418,12 +422,12 @@ class GeminiService(LLMProvider):
     async def _post_grounded_request(
         self,
         url: str,
-        payload: dict,
+        payload: dict[str, Any],
         headers: dict[str, str],
-        timeout: aiohttp.ClientTimeout,
+        request_timeout: aiohttp.ClientTimeout,
         *,
         endpoint_name: str,
-    ) -> tuple[dict | None, int | None, int | None]:
+    ) -> tuple[dict[str, Any] | None, int | None, int | None]:
         """Post one grounded request and retain safe quota diagnostics."""
 
         for attempt in range(1, MAX_REQUEST_ATTEMPTS + 1):
@@ -434,7 +438,7 @@ class GeminiService(LLMProvider):
                     url,
                     json=payload,
                     headers=headers,
-                    timeout=timeout,
+                    timeout=request_timeout,
                 ) as response:
                     retry_after = self._retry_after_seconds(response.headers.get("Retry-After"))
                     if response.status >= 400:
@@ -505,10 +509,10 @@ class GeminiService(LLMProvider):
         return compact[:500] or "no response body"
 
     @staticmethod
-    def _extract_grounded_reply(payload: dict) -> GroundedReply | None:
+    def _extract_grounded_reply(payload: dict[str, Any]) -> GroundedReply | None:
         """Read current and legacy Interactions API text annotation shapes."""
 
-        output_blocks: list[dict] = []
+        output_blocks: list[dict[str, Any]] = []
         steps = payload.get("steps")
         if isinstance(steps, list):
             for step in steps:
@@ -562,7 +566,9 @@ class GeminiService(LLMProvider):
         return GroundedReply(text=combined, citations=tuple(citations))
 
     @classmethod
-    def _extract_generate_content_grounded_reply(cls, payload: dict) -> GroundedReply | None:
+    def _extract_generate_content_grounded_reply(
+        cls, payload: dict[str, Any]
+    ) -> GroundedReply | None:
         """Read text and Google Search citations from GenerateContent."""
 
         text = cls._extract_text(payload)
@@ -620,7 +626,7 @@ class GeminiService(LLMProvider):
             for chunk in chunks:
                 web = chunk.get("web") if isinstance(chunk, dict) else None
                 url = web.get("uri") if isinstance(web, dict) else None
-                if isinstance(url, str) and url.startswith(("https://", "http://")):
+                if isinstance(web, dict) and isinstance(url, str) and url.startswith(("https://", "http://")):
                     citations.append(
                         GroundedCitation(
                             title=str(web.get("title") or "Source")[:120],
@@ -632,7 +638,7 @@ class GeminiService(LLMProvider):
         return GroundedReply(text=text, citations=tuple(citations))
 
     @staticmethod
-    def _extract_text(payload: dict) -> str | None:
+    def _extract_text(payload: dict[str, Any]) -> str | None:
         try:
             candidates = payload["candidates"]
             parts = candidates[0]["content"]["parts"]

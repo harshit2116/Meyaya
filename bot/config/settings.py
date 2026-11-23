@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     topgg_project_id: str = Field(default="891928922138710016", pattern=r"^[1-9][0-9]{0,18}$", alias="TOPGG_PROJECT_ID")
 
     @model_validator(mode="after")
-    def validate_topgg(self):
+    def validate_topgg(self) -> Settings:
         if self.topgg_enabled and not self.topgg_api_token.strip():
             raise ValueError("TOPGG_ENABLED requires a Top.gg v1 API token with read access")
         return self
@@ -122,11 +122,13 @@ class Settings(BaseSettings):
 
         if value in {None, ""}:
             return None
-        return int(value)
+        if isinstance(value, (int, str)):
+            return int(value)
+        raise ValueError("GUILD_ID and COURT_CHANNEL_ID must be integers")
 
     @field_validator("gemini_model_limits")
     @classmethod
-    def validate_model_limits(cls, value):
+    def validate_model_limits(cls, value: dict[str, dict[str, int]]) -> dict[str, dict[str, int]]:
         if len(value) > 20:
             raise ValueError("GEMINI_MODEL_LIMITS supports at most 20 models")
         for model, limits in value.items():
@@ -166,4 +168,4 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return a cached settings object."""
 
-    return Settings()
+    return Settings()  # type: ignore[call-arg]

@@ -1,9 +1,12 @@
 """Conservative text rules and a shared, persistent server-local access gate."""
 
+from __future__ import annotations
+
 import re
 import unicodedata
 import time
 from collections import OrderedDict
+from typing import Any, cast
 from bot.services.chat_boundaries import direct_hostility, model_hostility_eligible
 from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert
@@ -35,7 +38,7 @@ def explicit_request(text: str) -> bool:
     )
 
 
-async def acknowledge_silently(ctx):
+async def acknowledge_silently(ctx: Any) -> None:
     """Avoid Discord's interaction-failed banner without sending a response."""
     if ctx.interaction is not None:
         if not ctx.interaction.response.is_done():
@@ -44,15 +47,15 @@ async def acknowledge_silently(ctx):
 
 
 class ChatBlacklistService:
-    def __init__(self, sessions):
+    def __init__(self, sessions: Any) -> None:
         self.sessions = sessions
-        self.blocked = frozenset()
+        self.blocked: frozenset[tuple[int, int]] = frozenset()
         self.ready = False
-        self.ai_only = frozenset()
-        self._rudeness = OrderedDict()
-        self._pending_rudeness = set()
+        self.ai_only: frozenset[tuple[int, int]] = frozenset()
+        self._rudeness: OrderedDict[tuple[int, int], list[tuple[float, int]]] = OrderedDict()
+        self._pending_rudeness: set[tuple[int, int]] = set()
 
-    async def load(self):
+    async def load(self) -> None:
         async with self.sessions() as session:
             rows = (
                 await session.execute(
@@ -65,21 +68,32 @@ class ChatBlacklistService:
         self.ai_only = frozenset((row[0], row[1]) for row in rows if len(row) > 2 and row[2] == 'ai_rudeness')
         self.ready = True
 
-    def is_blocked(self, guild_id, user_id):
+    def is_blocked(self, guild_id: int | None, user_id: int) -> bool:
         return guild_id is not None and (not self.ready or (guild_id, user_id) in self.blocked or (guild_id, user_id) in self._pending_rudeness)
 
-    def is_command_blocked(self, guild_id, user_id):
+    def is_command_blocked(self, guild_id: int | None, user_id: int) -> bool:
+        if guild_id is None:
+            return False
         key = (guild_id, user_id)
         return self.is_blocked(guild_id, user_id) and key not in self.ai_only and key not in self._pending_rudeness
 
-    async def note_rudeness(self, guild_id, user_id, text, *, message_id, directed=False, signal=None):
+    async def note_rudeness(
+        self,
+        guild_id: int,
+        user_id: int,
+        text: str,
+        *,
+        message_id: int,
+        directed: bool = False,
+        signal: str | None = None,
+    ) -> bool:
         if self.is_blocked(guild_id, user_id):
             return True
-        hostile = direct_hostility(text, directed=directed)
+        hostile = bool(cast(Any, direct_hostility)(text, directed=directed))
         # A model signal extends language coverage, but only for a directly
         # addressed new message. Quotes and requests to interpret text do not count.
         if not hostile and signal == 'rude':
-            hostile = model_hostility_eligible(text, directed=directed)
+            hostile = bool(cast(Any, model_hostility_eligible)(text, directed=directed))
         if not hostile:
             return False
         now = time.monotonic()
@@ -102,9 +116,18 @@ class ChatBlacklistService:
             self._pending_rudeness.discard(key)
         return True
 
-    async def set(self, guild_id, user_id, *, active, reason, source="manual", actor_id=None):
+    async def set(
+        self,
+        guild_id: int,
+        user_id: int,
+        *,
+        active: bool,
+        reason: str,
+        source: str = "manual",
+        actor_id: int | None = None,
+    ) -> None:
         async with self.sessions() as session:
-            values = dict(
+            values: dict[str, Any] = dict(
                 guild_id=guild_id,
                 user_id=user_id,
                 active=active,
@@ -126,7 +149,7 @@ class ChatBlacklistService:
         if not active:
             self._rudeness.pop(key, None)
 
-    async def inspect(self, guild_id, user_id, text):
+    async def inspect(self, guild_id: int | None, user_id: int, text: str) -> bool:
         if self.is_blocked(guild_id, user_id):
             return True
         if guild_id is not None and explicit_request(text):

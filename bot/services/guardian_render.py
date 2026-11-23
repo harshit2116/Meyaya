@@ -1,16 +1,48 @@
 """Local illustrated fantasy creatures and a monster-battle arena."""
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from typing import Protocol, cast
+
 from PIL import Image, ImageDraw, ImageOps
-from bot.services.fantasy_duel_renderer import fit
-from bot.services.fantasy_render import rgb, blend
-from bot.services.fantasy_guardian import ART_SPECIES, GUARDIAN_PERSONALITIES
+from bot.services.fantasy_duel_renderer import fit as _raw_fit
+from bot.services.fantasy_render import blend as _raw_blend
+from bot.services.fantasy_render import rgb as _raw_rgb
+from bot.services.fantasy_guardian import (
+    ART_SPECIES,
+    GUARDIAN_PERSONALITIES,
+    Guardian,
+    GuardianBattle,
+)
+
+
+class _FitFn(Protocol):
+    def __call__(
+        self,
+        draw: ImageDraw.ImageDraw,
+        center: tuple[int, int],
+        text: object,
+        size: int,
+        *,
+        color: str = ...,
+        width: int = ...,
+    ) -> None: ...
+
+
+fit = cast(_FitFn, _raw_fit)
+rgb = cast(Callable[[str], tuple[int, int, int]], _raw_rgb)
+blend = cast(
+    Callable[[tuple[int, int, int], tuple[int, int, int], float], tuple[int, int, int]],
+    _raw_blend,
+)
 
 
 @lru_cache(maxsize=len(ART_SPECIES))
-def _illustration(species):
+def _illustration(species: str) -> Image.Image:
     if species not in ART_SPECIES:
         raise ValueError("Unknown guardian species")
     path = Path(__file__).resolve().parents[1] / "assets" / "guardians" / f"{species}.png"
@@ -24,7 +56,7 @@ def _illustration(species):
     return art
 
 
-def creature(guardian, size=280, *, back=False):
+def creature(guardian: Guardian, size: int = 280, *, back: bool = False) -> Image.Image:
     # The arena mirrors the local portrait to face the other creature.
     # Copy before resizing: cached masters are never mutated.
     try:
@@ -62,7 +94,7 @@ def creature(guardian, size=280, *, back=False):
     return image
 
 
-def _fallback_creature(guardian, size=280, *, back=False):
+def _fallback_creature(guardian: Guardian, size: int = 280, *, back: bool = False) -> Image.Image:
     image = Image.new("RGBA", (360, 360))
     d = ImageDraw.Draw(image)
     c = rgb(guardian.color)
@@ -145,7 +177,7 @@ def _fallback_creature(guardian, size=280, *, back=False):
     return image.resize((size, size), Image.Resampling.LANCZOS)
 
 
-def png(image):
+def png(image: Image.Image) -> bytes:
     out = BytesIO()
     image.save(out, "PNG")
     data = out.getvalue()
@@ -154,7 +186,7 @@ def png(image):
     return data
 
 
-def guardian_card(g, owner, *, preview=False):
+def guardian_card(g: Guardian, owner: str, *, preview: bool = False) -> bytes:
     image = Image.new("RGB", (1000, 660), "#151626")
     d = ImageDraw.Draw(image)
     for y in range(660):
@@ -200,13 +232,13 @@ def guardian_card(g, owner, *, preview=False):
     return png(image)
 
 
-def battle_card(battle):
+def battle_card(battle: GuardianBattle) -> bytes:
     image = Image.new("RGB", (1000, 660))
     d = ImageDraw.Draw(image)
     for y in range(660):
         d.line((0, y, 1000, y), fill=blend((40, 51, 79), (131, 165, 144), min(1, y / 480)))
     fit(d, (500, 35), f"MEYAYA / GUARDIAN ARENA · MOVE {battle.moves}", 22, width=900)
-    for i, (f, position) in enumerate(zip(battle.fighters, ((95, 250), (620, 75)))):
+    for i, (f, position) in enumerate(zip(battle.fighters, ((95, 250), (620, 75)), strict=False)):
         x, y = position
         d.ellipse((x - 5, y + 240, x + 290, y + 280), fill="#607c76", outline="#a5c4a5", width=3)
         art = creature(f.guardian, 285, back=i == 0)

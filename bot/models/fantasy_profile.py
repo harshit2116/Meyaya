@@ -1,6 +1,7 @@
 """Global, permanent fantasy identity; guild progression may live separately."""
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import BigInteger, CheckConstraint, DateTime, Integer, JSON, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -54,7 +55,7 @@ class FantasyProfile(Base):
     intelligence: Mapped[int] = mapped_column(Integer, nullable=False)
     vitality: Mapped[int] = mapped_column(Integer, nullable=False)
     luck: Mapped[int] = mapped_column(Integer, nullable=False)
-    base_stats: Mapped[dict] = mapped_column(JSON, nullable=False)
+    base_stats: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     weapon_id: Mapped[str] = mapped_column(String(120), nullable=False)
     weapon_name: Mapped[str] = mapped_column(String(100), nullable=False)
     weapon_family: Mapped[str] = mapped_column(String(30), nullable=False)

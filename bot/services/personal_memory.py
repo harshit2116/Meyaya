@@ -1,4 +1,7 @@
 """Conservative explicit self-statements; no quotes, guesses or ambient harvesting."""
+from __future__ import annotations
+
+from collections.abc import Iterable
 import re
 
 from bot.services.llm import MemoryAction, MemoryDirective
@@ -9,8 +12,7 @@ _UNSAFE = re.compile(
     r'credit card|phone number|forget|do not remember|don.t (?:save|remember|store))\b', re.IGNORECASE)
 
 
-def explicit_memories(text):
-    """Extract at most three unambiguous, ordinary preferences of this speaker."""
+def explicit_memories(text: str | None) -> list[MemoryDirective]:
     clean = re.sub(r'<@!?\d+>', '', text or '').strip()
     if not clean or len(clean) > 2000 or _UNSAFE.search(clean):
         return []
@@ -21,8 +23,8 @@ def explicit_memories(text):
         return []
     if '?' in clean and not re.search(r'\bcall me\b',clean,re.IGNORECASE):
         return []
-    found = {}
-    def add(category, key, value, replace=False):
+    found: dict[tuple[str, str], MemoryDirective] = {}
+    def add(category: str, key: str, value: str, replace: bool = False) -> None:
         value = value.strip(' .,!?')
         if 1 <= len(value) <= 120:
             found[(category, key)] = MemoryDirective(
@@ -60,7 +62,7 @@ def explicit_memories(text):
     return list(found.values())[:3]
 
 
-def preference_context(lines, current_text=''):
+def preference_context(lines: Iterable[str], current_text: str = '') -> str:
     """Standing preferences control presentation, not identity or permissions."""
     selected = [line[:300] for line in lines if re.match(
         r'^\[(?:identity|preference):self:(?:preferred_name|chat_capitalization|chat_style);',line)][:3]

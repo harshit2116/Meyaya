@@ -1,18 +1,28 @@
 """Player-centred duel cut-ins, composed locally from the real Discord avatar."""
+from __future__ import annotations
+
 from io import BytesIO
+from typing import Any
+
 import discord
 from PIL import Image, ImageDraw, ImageOps
 
-from bot.services.fantasy_render import portrait
 from bot.services.fantasy_duel_renderer import fit
+from bot.services.fantasy_render import portrait
 from bot.services.meyaya_boss_renderer import template
 
 
-def safe(value):
+def safe(value: object) -> str:
     return discord.utils.escape_markdown(discord.utils.escape_mentions(str(value)))[:200]
 
 
-def render_duel_cut_in(boss_key, avatar, player_name, pose, cinematic=False):
+def render_duel_cut_in(
+    boss_key: str,
+    avatar: bytes,
+    player_name: str,
+    pose: str,
+    cinematic: bool = False,
+) -> bytes:
     """No live HP or damage in artwork. Caller caches per encounter, never globally."""
     scene = "opening" if pose == "opening" else "victory" if pose == "defeat" else "battle"
     if cinematic and pose == "boss":
@@ -79,7 +89,16 @@ def render_duel_cut_in(boss_key, avatar, player_name, pose, cinematic=False):
     return output.getvalue()
 
 
-def duel_layout(engine, presentation, *, media=None, guardian="", final=False, intro=False, history_note=""):
+def duel_layout(
+    engine: Any,
+    presentation: Any,
+    *,
+    media: str | None = None,
+    guardian: str = "",
+    final: bool = False,
+    intro: bool = False,
+    history_note: str = "",
+) -> discord.ui.LayoutView:
     state, player, boss = engine.state, engine.player, engine.boss
     stage = presentation.stage_for(engine)
     phase, _, color = presentation.STAGES[stage]
@@ -87,7 +106,7 @@ def duel_layout(engine, presentation, *, media=None, guardian="", final=False, i
     title = "THE CHALLENGE" if intro else f"{safe(actor.name)} · {safe(actor.last_move)}" if actor else "THE DUEL"
     if final:
         title = "YOU DEFIED THE IMPOSSIBLE" if state.winner_id == player.user_id else "THE AUTHORITY REMAINS" if state.winner_id == boss.user_id else "NEITHER SOUL YIELDS"
-    items = [discord.ui.TextDisplay(
+    items: list[discord.ui.Item[Any]] = [discord.ui.TextDisplay(
         f"-# PATRON DUEL / {phase}\n# {title}\n"
         f"**{safe(player.name)}** ⚔ **{safe(boss.name)}**\n"
         f"-# Move {state.moves} · Round {state.round} · Automatic combat")]

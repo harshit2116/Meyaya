@@ -1,12 +1,16 @@
 """Local editorial daily-fortune card; no generated art or additional API calls."""
+from __future__ import annotations
+
 from datetime import date
 from functools import lru_cache
 from io import BytesIO
 import math
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageOps
 from bot.services.aura_archive import _serif, _text
 from bot.services.card_renderer import font
+from bot.services.celestial import CardResult
 
 SIZE = (1400, 1120)
 GOLD = '#efd096'
@@ -21,18 +25,18 @@ LUCK_COLORS = {'rose gold':'#d896a1','lavender':'#b19ad6','sky blue':'#93c9e8',
                'crimson':'#c6546b','teal':'#65bdb8','amber':'#dfb56c','lilac':'#c1a6dc'}
 
 
-def _spark(draw, x, y, radius, color=GOLD):
+def _spark(draw: ImageDraw.ImageDraw, x: float, y: float, radius: float, color: str = GOLD) -> None:
     draw.polygon([(x,y-radius),(x+radius*.27,y-radius*.27),(x+radius,y),
                   (x+radius*.27,y+radius*.27),(x,y+radius),(x-radius*.27,y+radius*.27),
                   (x-radius,y),(x-radius*.27,y-radius*.27)],fill=color)
 
 
 @lru_cache(maxsize=8)
-def _icon(kind):
+def _icon(kind: str) -> Image.Image:
     image=Image.new('RGBA',(288,288))
     d=ImageDraw.Draw(image)
-    def ellipse(box,**kw): d.ellipse(tuple(round(v*3) for v in box),**kw)
-    def line(points,width=2): d.line([(int(x*3),int(y*3)) for x,y in points],fill=GOLD,width=width*3,joint='curve')
+    def ellipse(box: tuple[float, float, float, float], **kw: Any) -> None:
+        d.ellipse((round(box[0]*3),round(box[1]*3),round(box[2]*3),round(box[3]*3)),**kw)
     if kind=='moon':
         ellipse((9,10,77,78),fill=GOLD)
         ellipse((35,1,86,64),fill=(0,0,0,0))
@@ -46,11 +50,11 @@ def _icon(kind):
     elif kind=='theme':
         for angle in range(4):
             a=angle*math.pi/2
-            x,y=144+math.sin(a)*53,144+math.cos(a)*53
-            d.ellipse((x-23,y-38,x+23,y+38),fill=GOLD) if angle%2==0 else d.ellipse((x-38,y-23,x+38,y+23),fill=GOLD)
+            px,py=144+math.sin(a)*53,144+math.cos(a)*53
+            d.ellipse((px-23,py-38,px+23,py+38),fill=GOLD) if angle%2==0 else d.ellipse((px-38,py-23,px+38,py+23),fill=GOLD)
         d.ellipse((127,127,161,161),fill='#30253e')
     elif kind=='omen':
-        points=[]
+        points: list[tuple[float, float]]=[]
         for i in range(16):
             a=i*math.pi/8
             radius=(113 if i%4==0 else 77) if i%2==0 else 23
@@ -65,11 +69,11 @@ def _icon(kind):
     return image.resize((72,72),Image.Resampling.LANCZOS)
 
 
-def _panel(draw, box):
+def _panel(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
     draw.rounded_rectangle(box,radius=18,fill='#272138',outline='#605073',width=2)
 
 
-def _flowers(image, box, mirror=False):
+def _flowers(image: Image.Image, box: tuple[int, int, int, int], mirror: bool = False) -> None:
     """Clipped, reusable-in-the-base floral silhouettes kept away from copy."""
     w,h=box[2]-box[0],box[3]-box[1]
     layer=Image.new('RGBA',(w,h));d=ImageDraw.Draw(layer)
@@ -91,7 +95,7 @@ def _flowers(image, box, mirror=False):
 
 
 @lru_cache(maxsize=1)
-def _base():
+def _base() -> Image.Image:
     # One member-free static layer. Copy before drawing dates, names or portraits.
     gradient=Image.new('RGB',(1,280))
     gradient.putdata([(19+int(5*math.sin(y/280*math.pi)),17+int(3*math.sin(y/280*math.pi)),
@@ -114,7 +118,7 @@ def _base():
 
 
 @lru_cache(maxsize=1)
-def _hero_mask():
+def _hero_mask() -> Image.Image:
     width,height=HERO[2]-HERO[0],HERO[3]-HERO[1]
     mask=Image.new('L',(width,height));d=ImageDraw.Draw(mask)
     d.rounded_rectangle((0,0,width-1,height-1),radius=22,fill=255)
@@ -124,7 +128,7 @@ def _hero_mask():
     return ImageChops.multiply(mask,fade.resize((width,height)))
 
 
-def _avatar(image, data):
+def _avatar(image: Image.Image, data: bytes) -> None:
     if not data or len(data)>6*1024*1024:return
     try:
         with Image.open(BytesIO(data)) as source:
@@ -140,7 +144,7 @@ def _avatar(image, data):
     except (OSError,ValueError):pass
 
 
-def _meter(luck):
+def _meter(luck: int) -> Image.Image:
     # Every ellipse uses the same square coordinates. Supersampling preserves
     # round edges; no independent horizontal or vertical scaling is applied.
     scale=3;size=METER_SIZE
@@ -153,7 +157,7 @@ def _meter(luck):
     return art.resize((size,size),Image.Resampling.LANCZOS)
 
 
-def render_fortune(result, name, avatar=b''):
+def render_fortune(result: CardResult, name: str, avatar: bytes = b'') -> bytes:
     fields=dict(result.fields)
     image=_base().copy();_avatar(image,avatar)
     oracle=fields.get('Question oracle')

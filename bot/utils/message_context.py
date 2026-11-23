@@ -1,13 +1,16 @@
 """Read bounded, public text from received Discord Components V2 messages."""
 
+from __future__ import annotations
+
 import re
+from typing import Any
 from discord.components import Component
 
 _EMOJI_RUN = re.compile(r"(?P<emoji><a?:[A-Za-z0-9_]+:[0-9]+>)(?P=emoji)*")
 
 
-def compact_component_text(text):
-    def compact(match):
+def compact_component_text(text: str) -> str:
+    def compact(match: re.Match[str]) -> str:
         emoji = match["emoji"]
         name = emoji.split(":")[1]
         count = len(match[0]) // len(emoji)
@@ -15,15 +18,14 @@ def compact_component_text(text):
     return " ".join(_EMOJI_RUN.sub(compact, text).split())
 
 
-def component_message_text(components, *, limit=1200):
-    """Walk wire components, excluding URLs, custom IDs, and spoiler media."""
+def component_message_text(components: Any, *, limit: int = 1200) -> str:
     if not isinstance(components, (list, tuple)) or limit <= 0:
         return ""
-    parts = []
+    parts: list[str] = []
     remaining = limit
     visited = 0
 
-    def append(text):
+    def append(text: Any) -> None:
         nonlocal remaining
         if not isinstance(text, str) or remaining <= 0:
             return
@@ -35,7 +37,7 @@ def component_message_text(components, *, limit=1200):
         parts.append(text)
         remaining -= len(text) + 1
 
-    def walk(component, depth=0):
+    def walk(component: Any, depth: int = 0) -> None:
         nonlocal visited
         if visited >= 100 or depth > 8 or remaining <= 0:
             return

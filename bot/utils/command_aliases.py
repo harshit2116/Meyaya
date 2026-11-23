@@ -1,5 +1,9 @@
 """Stable, explicit shortcuts for written commands; slash names stay canonical."""
 
+from __future__ import annotations
+
+from typing import Any
+
 SHORT_COMMANDS = {
     "feedback": "fb", "serversetup": "ss", "serverdashboard": "sd",
     "profilecheck": "pc", "aura": "au", "duostyle": "ds", "callingcard": "cc",
@@ -32,9 +36,8 @@ ALIAS_COMMANDS = {alias: name for name, alias in SHORT_COMMANDS.items()}
 ALIAS_COMMANDS['bestie'] = 'bestiescore'
 
 
-def install_command_aliases(bot):
-    """Register aliases on the same command, sharing checks and cooldowns."""
-    additions = []
+def install_command_aliases(bot: Any) -> None:
+    additions: list[tuple[Any, str]] = []
     for name, alias in SHORT_COMMANDS.items():
         command = bot.get_command(name)
         if command is None:
@@ -52,7 +55,7 @@ def install_command_aliases(bot):
         bot.add_command(command)
 
 
-def command_aliases(name, bot=None):
+def command_aliases(name: str, bot: Any = None) -> tuple[str, ...]:
     if bot is not None:
         registered = bot.get_command(name)
         return tuple(getattr(registered, "aliases", ()))

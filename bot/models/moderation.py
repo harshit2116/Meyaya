@@ -1,5 +1,7 @@
 """Persistent moderation switches and permission snapshots."""
 
+from typing import Any
+
 from sqlalchemy import BigInteger, Boolean, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from bot.database.base import Base
@@ -20,4 +22,4 @@ class ChannelLock(Base):
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     single: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     raid: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
-    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)

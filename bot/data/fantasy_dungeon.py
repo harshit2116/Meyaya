@@ -1,5 +1,8 @@
 """The Tenfold Descent: one authored campaign, two allegiance commentaries."""
 
+from __future__ import annotations
+
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,29 +51,36 @@ class World:
     clue: str
     art_direction: str
 
-    def asset(self, name="world"):
+    def asset(self, name: str = "world") -> Path:
         return ASSET_ROOT / self.key / f"{name}.jpg"
 
     @property
-    def color(self):
+    def color(self) -> int:
         return WORLD_COLORS[self.number - 1]
 
-    def commentary(self, alignment):
+    def commentary(self, alignment: str) -> str:
         return self.narrative("erasure" if alignment == "veyra" else "origin", alignment)
 
-    def narrative(self, field, alignment):
-        return getattr(self, field).format(patron="Meyaya")
+    def narrative(self, field: str, alignment: str) -> str:
+        return str(getattr(self, field)).format(patron="Meyaya")
 
-    def xp(self, encounter):
+    def xp(self, encounter: int) -> int:
         return 160 + 40 * self.number if encounter == 3 else 40 + 12 * self.number
 
 
-def enemy(name, discipline, affinity, behavior, design):
+def enemy(name: str, discipline: str, affinity: str, behavior: str, design: str) -> Enemy:
     return Enemy(name, discipline, affinity, behavior,
                  ("Strike", "Affinity Pulse", "Ward"), design)
 
 
-def boss(name, discipline, affinity, behavior, abilities, design):
+def boss(
+    name: str,
+    discipline: str,
+    affinity: str,
+    behavior: str,
+    abilities: Iterable[str],
+    design: str,
+) -> Enemy:
     return Enemy(name, discipline, affinity, behavior, tuple(abilities), design)
 
 
@@ -233,14 +243,14 @@ from bot.data.fantasy_memory_world import CORE
 SEAL_SCENES = tuple((s.title, s.dialogue, s.asset) for s in CORE)
 
 
-def seal_scenes(alignment):
+def seal_scenes(alignment: str) -> tuple[tuple[str, str, str], ...]:
     return SEAL_SCENES
 
 
 
-def world_for(number):
+def world_for(number: int) -> World:
     return WORLDS[number - 1]
 
 
-def campaign_asset(relative):
+def campaign_asset(relative: str) -> Path:
     return ASSET_ROOT / f"{relative}.jpg"

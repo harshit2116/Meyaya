@@ -1,67 +1,87 @@
 """Soft, colour-matched environments for the illustrated awakening cores."""
 
+from __future__ import annotations
+
 from io import BytesIO
 import math
 from random import Random
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter
 
-from bot.data.fantasy import AFFINITIES
+from bot.data.fantasy import AFFINITIES, Affinity
 from bot.services.card_renderer import font
 from bot.services.fantasy_awaken_art import affinity_sprite
+
+type RGB = tuple[int, int, int]
 
 SIZE = (560, 280)
 
 
-def crystal_colors(art, theme):
+def _hex_rgb(code: str) -> RGB:
+    raw = bytes.fromhex(code[1:])
+    return (raw[0], raw[1], raw[2])
+
+
+def crystal_colors(art: Image.Image | None, theme: Affinity) -> tuple[RGB, RGB]:
     if art is None:
-        return tuple(bytes.fromhex(theme.color[1:])), (180, 167, 220)
+        return _hex_rgb(theme.color), (180, 167, 220)
     # Ignore the transparent canvas and neutral metal; sample the actual magic.
     sample = Image.new("RGB", art.size)
     sample.paste(art, (0, 0), art)
-    colors = sample.quantize(colors=24).convert("RGB").getcolors(art.width * art.height)
-    colors = [
-        (count, color)
-        for count, color in colors
-        if max(color) > 85 and max(color) - min(color) > 35
-    ]
+    raw_colors = sample.quantize(colors=24).convert("RGB").getcolors(art.width * art.height) or []
+    colors: list[tuple[int, RGB]] = []
+    for count, color in raw_colors:
+        if isinstance(color, tuple) and len(color) == 3:
+            rgb: RGB = (int(color[0]), int(color[1]), int(color[2]))
+            if max(rgb) > 85 and max(rgb) - min(rgb) > 35:
+                colors.append((count, rgb))
     colors.sort(key=lambda item: item[0] * (max(item[1]) - min(item[1])), reverse=True)
     if not colors:
-        return tuple(bytes.fromhex(theme.color[1:])), (180, 167, 220)
+        return _hex_rgb(theme.color), (180, 167, 220)
     primary = colors[0][1]
     secondary = next(
-        (color for _, color in colors[1:] if sum(abs(a - b) for a, b in zip(primary, color)) > 100),
+        (color for _, color in colors[1:] if sum(abs(a - b) for a, b in zip(primary, color, strict=True)) > 100),
         primary,
     )
     return primary, secondary
 
 
-def atmosphere(primary, secondary):
+def atmosphere(primary: RGB, secondary: RGB) -> Image.Image:
     # Smooth sampled light rather than a flat themed panel or a visible halo disc.
     small = Image.new("RGB", (140, 70))
-    pixels = []
+    pixels: list[RGB] = []
     for y in range(70):
         for x in range(140):
             core = math.exp(-(((x - 70) / 34) ** 2 + ((y - 27) / 23) ** 2))
             veil = math.exp(-(((x - 88) / 48) ** 2 + ((y - 30) / 16) ** 2))
             pixels.append(
-                tuple(
-                    round(5 + p * (0.025 + core * 0.105) + s * veil * 0.025)
-                    for p, s in zip(primary, secondary)
+                (
+                    round(5 + primary[0] * (0.025 + core * 0.105) + secondary[0] * veil * 0.025),
+                    round(5 + primary[1] * (0.025 + core * 0.105) + secondary[1] * veil * 0.025),
+                    round(5 + primary[2] * (0.025 + core * 0.105) + secondary[2] * veil * 0.025),
                 )
             )
     small.putdata(pixels)
     return small.resize(SIZE, Image.Resampling.BICUBIC)
 
 
-def render_affinity_ritual(profile):
+def render_affinity_ritual(profile: Any) -> bytes:
     key = profile.affinity_id
     theme = AFFINITIES.get(key, AFFINITIES["arcane"])
     art = affinity_sprite(key)
     primary, secondary = crystal_colors(art, theme)
     base = atmosphere(primary, secondary).convert("RGBA")
-    caption = tuple(round(c * 0.40 + 235 * 0.60) for c in primary)
-    trim = tuple(round(c * 0.20 + 16) for c in secondary)
+    caption: RGB = (
+        round(primary[0] * 0.40 + 235 * 0.60),
+        round(primary[1] * 0.40 + 235 * 0.60),
+        round(primary[2] * 0.40 + 235 * 0.60),
+    )
+    trim: RGB = (
+        round(secondary[0] * 0.20 + 16),
+        round(secondary[1] * 0.20 + 16),
+        round(secondary[2] * 0.20 + 16),
+    )
     draw = ImageDraw.Draw(base)
     # Quiet corners and a small caption divider leave the crystal in focus.
     for x, direction in ((18, 1), (541, -1)):
@@ -72,7 +92,7 @@ def render_affinity_ritual(profile):
         (280, 254),
         "A DORMANT SIGNATURE ANSWERS",
         font=font(11),
-        fill=tuple(round(c * 0.55) for c in caption),
+        fill=(round(caption[0] * 0.55), round(caption[1] * 0.55), round(caption[2] * 0.55)),
         anchor="mm",
     )
     draw.line((223, 215, 337, 215), fill=trim)
@@ -96,18 +116,18 @@ def render_affinity_ritual(profile):
         )
         for index in range(10)
     ]
-    images = []
+    images: list[Image.Image] = []
     for index in range(24):
         phase = math.tau * index / 24
         frame = base.copy()
         layer = Image.new("RGBA", SIZE)
         draw = ImageDraw.Draw(layer)
-        for x, y, offset, radius in orbs:
-            horizontal = x + math.sin(phase + offset) * 9
-            vertical = y + math.cos(phase + offset) * 12
+        for ox, oy, offset, radius in orbs:
+            horizontal = ox + math.sin(phase + offset) * 9
+            orb_y = oy + math.cos(phase + offset) * 12
             # Constant brightness: only background position moves.
             draw.ellipse(
-                (horizontal - radius, vertical - radius, horizontal + radius, vertical + radius),
+                (horizontal - radius, orb_y - radius, horizontal + radius, orb_y + radius),
                 fill=(*primary, 45),
                 outline=(*primary, 70),
                 width=1,

@@ -1,19 +1,22 @@
 """Convert Discord mention markup into inert labels for rendered cards."""
 
+from __future__ import annotations
+
 import re
+from typing import Any
 
 MENTION = re.compile(r"<(@!?|@&|#)(\d+)>")
 
 
-def display_mentions(ctx, text: str) -> str:
+def display_mentions(ctx: Any, text: str) -> str:
     guild = getattr(ctx, "guild", None)
     message = getattr(ctx, "message", None)
 
-    def lookup(obj, method, user_id):
+    def lookup(obj: Any, method: str, user_id: int) -> Any:
         getter = getattr(obj, method, None)
         return getter(user_id) if getter else None
 
-    def replace(match):
+    def replace(match: re.Match[str]) -> str:
         kind, identifier = match.group(1), int(match.group(2))
         if kind == "#":
             channel = lookup(guild, "get_channel_or_thread", identifier) or lookup(guild, "get_channel", identifier)

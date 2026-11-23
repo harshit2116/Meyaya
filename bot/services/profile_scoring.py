@@ -1,7 +1,11 @@
 """Deterministic profile weighting, priorities and recommendation templates."""
 
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +31,17 @@ WEIGHT_PRESETS = {
 }
 
 
-def detect_profile_elements(visual):
+def detect_profile_elements(visual: Any) -> dict[str, bool]:
     return {
         "banner": bool(visual.banner or visual.banner_available or
                        (visual.accent_color is not None and not visual.banner_available)),
         "decoration": bool(visual.decoration or visual.has_decoration),
-        "nameplate": visual.has_nameplate,
-        "animated_avatar": visual.animated_avatar,
+        "nameplate": bool(visual.has_nameplate),
+        "animated_avatar": bool(visual.animated_avatar),
     }
 
 
-def select_weight_preset(visual):
+def select_weight_preset(visual: Any) -> str:
     elements = detect_profile_elements(visual)
     if elements["banner"]:
         if elements["decoration"] and elements["nameplate"]:
@@ -54,34 +58,40 @@ def select_weight_preset(visual):
     return "animated_avatar_only" if elements["animated_avatar"] else "avatar_only"
 
 
-def category_available(visual, field):
+def category_available(visual: Any, field: str) -> bool:
     return not (field in ("styling_score", "harmony_score") and visual.comparison_available is False)
 
 
-def profilecheck_points(visual, weights=None):
+def profilecheck_points(
+    visual: Any, weights: Mapping[str, int] | None = None
+) -> tuple[tuple[str, str, int, float], ...]:
     weights = WEIGHT_PRESETS[select_weight_preset(visual)] if weights is None else weights
     if set(weights) != {key for key, _, _ in CATEGORIES} or any(weight < 0 for weight in weights.values()) or sum(weights.values()) != 100:
         raise ValueError("Profile weights must cover all categories and sum to 100")
-    return tuple((field, name, weights[key], (max(0, min(100, getattr(visual, field))) * weights[key] / 100) if category_available(visual, field) else 0)
+    return tuple((field, name, weights[key], (max(0, min(100, getattr(visual, field))) * weights[key] / 100) if category_available(visual, field) else 0.0)
                  for key, field, name in CATEGORIES)
 
 
-def calculate_weighted_final_score(visual, weights=None):
+def calculate_weighted_final_score(visual: Any, weights: Mapping[str, int] | None = None) -> int:
     return max(0, min(100, round(sum(points for _, _, _, points in profilecheck_points(visual, weights)))))
 
 
-def calculate_weighted_losses(visual, weights=None):
+def calculate_weighted_losses(
+    visual: Any, weights: Mapping[str, int] | None = None
+) -> tuple[tuple[str, str, float], ...]:
     # Sort before dividing by 100; ties retain the fixed category order.
     rows = profilecheck_points(visual, weights)
     order = sorted(range(len(rows)), key=lambda i: rows[i][2] * (100 - max(0, min(100, getattr(visual, rows[i][0])))), reverse=True)
     return tuple((rows[i][0], rows[i][1], rows[i][2] * (100 - max(0, min(100, getattr(visual, rows[i][0])))) / 100) for i in order)
 
 
-def select_improvement_priority(visual, weights=None):
+def select_improvement_priority(
+    visual: Any, weights: Mapping[str, int] | None = None
+) -> tuple[str, str, int]:
     # Recommendations follow the lowest visible score, independently of weight.
     field, name = min(((field, name) for _, field, name in CATEGORIES if category_available(visual, field)),
                       key=lambda item: max(0, min(100, getattr(visual, item[0]))))
-    return field, name, max(0, min(100, getattr(visual, field)))
+    return field, name, int(max(0, min(100, getattr(visual, field))))
 
 
 IMPROVEMENT_MESSAGES = {
@@ -108,11 +118,11 @@ IMPROVEMENT_MESSAGES = {
 }
 
 
-def get_score_band(score):
+def get_score_band(score: int) -> str:
     return "low" if score < 60 else "medium" if score < 80 else "high"
 
 
-def get_available_profile_items(visual):
+def get_available_profile_items(visual: Any) -> list[str]:
     """Reuse detected equipment; don't claim effects/frames the API can't detect."""
     detected = detect_profile_elements(visual)
     items = []
@@ -127,16 +137,16 @@ def get_available_profile_items(visual):
     return items
 
 
-def _join_items(items):
+def _join_items(items: Sequence[str]) -> str:
     return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def get_best_profile_item_for_advice(items):
+def get_best_profile_item_for_advice(items: Sequence[str]) -> str | None:
     # Prefer assets actually measured for colour matching; nameplates are metadata.
     return next((item for item in ("Banner", "Avatar Decoration", "Profile color", "Nameplate") if item in items), None)
 
 
-def build_improvement_message(field, score, items):
+def build_improvement_message(field: str, score: int, items: Sequence[str]) -> str:
     level = get_score_band(score)
     item = get_best_profile_item_for_advice(items)
     if field in ("styling_score", "harmony_score") and item is None:
@@ -146,18 +156,18 @@ def build_improvement_message(field, score, items):
     return "Best upgrade: " + message
 
 
-def build_missing_comparison_message(visual):
+def build_missing_comparison_message(visual: Any) -> str:
     if not get_available_profile_items(visual):
         return "You only have a PFP right now, so there is no Banner or Avatar Decoration to compare it with."
     return "There are not enough profile items to compare yet."
 
 
-def build_improvement_summary(visual):
+def build_improvement_summary(visual: Any) -> str:
     critique = getattr(visual, "critique", None)
     if critique is not None:
         if not critique.measured:
             return "Not enough image data for specific advice."
-        return critique.findings[0].title if critique.findings else "No strong issue was measured."
+        return str(critique.findings[0].title) if critique.findings else "No strong issue was measured."
     _, name, score = select_improvement_priority(visual)
     if score == 100:
         return "Every available category is 100/100."
@@ -166,13 +176,13 @@ def build_improvement_summary(visual):
     return f"{name} needs the most work - {score}/100."
 
 
-def get_rule_based_recommendation(visual):
+def get_rule_based_recommendation(visual: Any) -> str:
     critique = getattr(visual, "critique", None)
     if critique is not None:
         if critique.findings:
             issue = critique.findings[0]
-            return "Best upgrade: " + issue.reason + " " + issue.action
-        return "Best upgrade: " + critique.fallback
+            return "Best upgrade: " + str(issue.reason) + " " + str(issue.action)
+        return "Best upgrade: " + str(critique.fallback)
     field, _, score = select_improvement_priority(visual)
     items = get_available_profile_items(visual)
     if score == 100:
@@ -195,8 +205,8 @@ def get_rule_based_recommendation(visual):
     return build_improvement_message(field, score, items)
 
 
-def finalize_profile_score(visual):
-    reviewed = replace(visual, overall_score=calculate_weighted_final_score(visual))
+def finalize_profile_score[T](visual: T) -> T:
+    reviewed: Any = replace(visual, overall_score=calculate_weighted_final_score(visual))  # type: ignore[type-var]
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug("Profile preset: %s", select_weight_preset(reviewed))
         for field, name, weight, points in profilecheck_points(reviewed):
@@ -204,4 +214,4 @@ def finalize_profile_score(visual):
                          getattr(reviewed, field), weight, points, weight - points)
         logger.debug("Final score: %s; Main improvement: %s", reviewed.overall_score,
                      select_improvement_priority(reviewed)[1])
-    return reviewed
+    return reviewed  # type: ignore[no-any-return]

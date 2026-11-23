@@ -1,10 +1,14 @@
 """Bounded credential rotation without changing models, prompts or feature rules."""
-from dataclasses import dataclass, field
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 import time
+from typing import Any, cast
 
 from bot.logging.telemetry import event
-from bot.services.llm import LLMProvider, GroundingError
+from bot.services.llm import ChatMessage, GroundedReply, GroundingError, LLMProvider
 
 
 @dataclass(slots=True)
@@ -17,13 +21,13 @@ class KeySlot:
 class GeminiKeyPool:
     """Event-loop-local least-busy rotation; never expose credential values."""
 
-    def __init__(self, keys):
+    def __init__(self, keys: Iterable[str]) -> None:
         self.slots = [KeySlot(key) for key in dict.fromkeys(key.strip() for key in keys if key.strip())]
         self.cursor = 0
 
-    def acquire(self, eligible=None):
-        candidates = range(len(self.slots)) if eligible is None else eligible
-        candidates = [i for i in candidates if self.slots[i].retry_at <= time.monotonic()
+    def acquire(self, eligible: Iterable[int] | None = None) -> int | None:
+        pool = range(len(self.slots)) if eligible is None else eligible
+        candidates = [i for i in pool if self.slots[i].retry_at <= time.monotonic()
                       and not (self.slots[i].retry_at and self.slots[i].active)]
         if not candidates:
             return None
@@ -33,18 +37,18 @@ class GeminiKeyPool:
         self.slots[index].active += 1
         return index
 
-    def release(self, index):
+    def release(self, index: int) -> None:
         self.slots[index].active = max(0, self.slots[index].active - 1)
 
-    def block(self, index, seconds=300):
+    def block(self, index: int, seconds: float = 300) -> None:
         self.slots[index].retry_at = max(self.slots[index].retry_at, time.monotonic() + seconds)
 
-    def success(self, index):
+    def success(self, index: int) -> None:
         # Do not erase a newer concurrent rejection of this same credential.
         if self.slots[index].retry_at <= time.monotonic():
             self.slots[index].retry_at = 0
 
-    def snapshot(self):
+    def snapshot(self) -> dict[str, int]:
         return {'configured': len(self.slots),
                 'ready': sum(slot.retry_at <= time.monotonic() for slot in self.slots),
                 'active': sum(slot.active for slot in self.slots)}
@@ -53,10 +57,10 @@ class GeminiKeyPool:
 class PooledQuotaView:
     """Read-only health aggregation; admission remains with each project's quota."""
 
-    def __init__(self, services):
-        self.quotas = list({id(service.quota): service.quota for service in services}.values())
+    def __init__(self, services: Sequence[Any]) -> None:
+        self.quotas: list[Any] = list({id(service.quota): service.quota for service in services}.values())
 
-    async def snapshot(self):
+    async def snapshot(self) -> dict[str, Any]:
         snapshots = await asyncio.gather(*(quota.snapshot() for quota in self.quotas))
         used = sum(item['daily_used'] for item in snapshots)
         limit = sum(item['daily_limit'] or 0 for item in snapshots)
@@ -74,20 +78,20 @@ class GeminiPooledService(LLMProvider):
 
     provider_name = 'gemini'
 
-    def __init__(self, services, key_pool):
+    def __init__(self, services: Sequence[Any], key_pool: GeminiKeyPool) -> None:
         self.services, self.key_pool = services, key_pool
-        self.model = services[0].model
-        self.thinking_level = services[0].thinking_level
-        self.thinking_budget = services[0].thinking_budget
+        self.model: str = services[0].model
+        self.thinking_level: str | None = services[0].thinking_level
+        self.thinking_budget: int | None = services[0].thinking_budget
         self.quota = PooledQuotaView(services)
 
     @property
-    def availability(self):
+    def availability(self) -> Any:
         # Preserve the existing health interface without letting one key mark
         # the whole model unavailable when a different credential is healthy.
         return min((service.availability for service in self.services), key=lambda state: state.retry_at)
 
-    def _eligible(self, tried):
+    def _eligible(self, tried: set[int]) -> list[int]:
         from bot.services.model_quota import quota_day
         day = quota_day()[0]
         now = time.monotonic()
@@ -99,13 +103,20 @@ class GeminiPooledService(LLMProvider):
                 and not (service.quota.rpd and service.quota.day == day
                          and service.quota.daily >= service.quota.rpd)]
 
-    async def _run(self, operation, system_instruction, user_message, **kwargs):
+    async def _run(
+        self,
+        operation: str,
+        system_instruction: str,
+        user_message: str,
+        **kwargs: Any,
+    ) -> Any:
         from bot.services.gemini import current_gemini_failure
+        get_failure: Any = current_gemini_failure
         budget = kwargs.pop('timeout_seconds', None)
         budget = budget if budget is not None else (45 if operation == 'grounded_generate' else 20)
         deadline = time.monotonic() + budget
-        tried = set()
-        last_error = None
+        tried: set[int] = set()
+        last_error: GroundingError | None = None
         while len(tried) < len(self.services):
             eligible = self._eligible(tried)
             index = self.key_pool.acquire(eligible)
@@ -118,7 +129,7 @@ class GeminiPooledService(LLMProvider):
             if slice_seconds <= 0:
                 self.key_pool.release(index)
                 break
-            failure = None
+            failure: Any = None
             try:
                 async with asyncio.timeout(slice_seconds):
                     result = await getattr(service, operation)(system_instruction, user_message,
@@ -126,13 +137,13 @@ class GeminiPooledService(LLMProvider):
                 if result is not None:
                     self.key_pool.success(index)
                     return result
-                failure = current_gemini_failure()
+                failure = get_failure()
             except TimeoutError:
                 service.availability.retry_at = time.monotonic() + 30
                 failure = ('transport', 'timeout')
             except GroundingError as error:
                 last_error = error
-                failure = current_gemini_failure()
+                failure = get_failure()
             finally:
                 self.key_pool.release(index)
             if failure is None:
@@ -154,12 +165,42 @@ class GeminiPooledService(LLMProvider):
             raise GroundingError('Source-backed responses are temporarily unavailable.')
         return None
 
-    async def generate_text(self, system_instruction, user_message, history=None, *,
-                            max_output_tokens=None, timeout_seconds=None):
-        return await self._run('generate_text', system_instruction, user_message, history=history,
-            max_output_tokens=max_output_tokens, timeout_seconds=timeout_seconds)
+    async def generate_text(
+        self,
+        system_instruction: str,
+        user_message: str,
+        history: list[ChatMessage] | None = None,
+        *,
+        max_output_tokens: int | None = None,
+        timeout_seconds: float | None = None,
+    ) -> str | None:
+        return cast(
+            str | None,
+            await self._run(
+                'generate_text',
+                system_instruction,
+                user_message,
+                history=history,
+                max_output_tokens=max_output_tokens,
+                timeout_seconds=timeout_seconds,
+            ),
+        )
 
-    async def grounded_generate(self, system_instruction, user_message, *,
-                                max_output_tokens=1800, timeout_seconds=45):
-        return await self._run('grounded_generate', system_instruction, user_message,
-            max_output_tokens=max_output_tokens, timeout_seconds=timeout_seconds)
+    async def grounded_generate(
+        self,
+        system_instruction: str,
+        user_message: str,
+        *,
+        max_output_tokens: int = 1800,
+        timeout_seconds: float = 45,
+    ) -> GroundedReply:
+        return cast(
+            GroundedReply,
+            await self._run(
+                'grounded_generate',
+                system_instruction,
+                user_message,
+                max_output_tokens=max_output_tokens,
+                timeout_seconds=timeout_seconds,
+            ),
+        )

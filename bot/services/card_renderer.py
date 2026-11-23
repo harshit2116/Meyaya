@@ -1,14 +1,21 @@
 """Five compact, distinct local layouts; no model or network dependencies."""
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from functools import lru_cache
-from hashlib import sha256
 from io import BytesIO
-from pathlib import Path
-from random import Random
 import math
+from pathlib import Path
+from typing import Any, cast
+
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-from bot.services.celestial import definitions
+
+from bot.services.celestial import CardResult, definitions
 from bot.services.fantasy_guardian import COMMON_SPECIES
+
+type CardFont = ImageFont.FreeTypeFont | ImageFont.ImageFont
+type Box = tuple[int, int, int, int]
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets" / "celestial"
 SIZES = {
@@ -18,21 +25,21 @@ SIZES = {
     "summon": (1000, 740),
     "guardian": (1000, 620),
 }
-GUARDIANS = {entry[0]: entry[1] for entry in COMMON_SPECIES}
+GUARDIANS: dict[str, str] = {entry[0]: entry[1] for entry in COMMON_SPECIES}
 
 
 @lru_cache(maxsize=24)
-def font(size):
+def font(size: int) -> CardFont:
     for path in ("C:/Windows/Fonts/arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
         if Path(path).exists():
             return ImageFont.truetype(path, size)
     return ImageFont.load_default(size=size)
 
 
-def lines(draw, value, size, width):
+def lines(draw: ImageDraw.ImageDraw, value: object, size: int, width: int) -> list[str]:
     # Binary-search each line's endpoint instead of shaping every growing
     # prefix. Preserve word boundaries and split long unbroken names safely.
-    result = []
+    result: list[str] = []
     chosen_font = font(size)
     for paragraph in str(value).split("\n"):
         if not paragraph:
@@ -55,7 +62,14 @@ def lines(draw, value, size, width):
     return result
 
 
-def label(draw, box, value, size=26, color="#eee8dc", minimum=16):
+def label(
+    draw: ImageDraw.ImageDraw,
+    box: Box,
+    value: object,
+    size: int = 26,
+    color: str = "#eee8dc",
+    minimum: int = 16,
+) -> None:
     x, y, w, h = box
     wrapped = lines(draw, value, size, w)
     while size > minimum and len(wrapped) * (size + 6) > h:
@@ -70,7 +84,7 @@ def label(draw, box, value, size=26, color="#eee8dc", minimum=16):
         y += size + 6
 
 
-def load_art(path):
+def load_art(path: Path) -> Image.Image | None:
     try:
         with Image.open(path) as art:
             return art.convert("RGBA")
@@ -78,7 +92,7 @@ def load_art(path):
         return None
 
 
-def paste(image, art, box, cover=False):
+def paste(image: Image.Image, art: Image.Image, box: Box, cover: bool = False) -> None:
     x, y, w, h = box
     art = ImageOps.fit(art, (w, h)) if cover else ImageOps.contain(art, (w, h))
     image.paste(
@@ -88,7 +102,7 @@ def paste(image, art, box, cover=False):
     )
 
 
-def base(kind, color, accent):
+def base(kind: str, color: str, accent: str) -> tuple[Image.Image, ImageDraw.ImageDraw]:
     # This layer has no user content. Never hand the cached image to a caller
     # that will draw on it. One entry is at most 1080*900*3 bytes (~2.8 MiB).
     image = _base_image(kind, color, accent).copy()
@@ -96,7 +110,7 @@ def base(kind, color, accent):
 
 
 @lru_cache(maxsize=1)
-def _base_image(kind, color, accent):
+def _base_image(kind: str, color: str, accent: str) -> Image.Image:
     image = Image.new("RGB", SIZES[kind], color)
     background = load_art(ASSETS / "backgrounds/violet.png") if kind != "fortune" else None
     if background is not None:
@@ -108,7 +122,14 @@ def _base_image(kind, color, accent):
     return image
 
 
-def header(image, draw, result, name, accent, avatar):
+def header(
+    image: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    result: CardResult,
+    name: str,
+    accent: str,
+    avatar: bytes,
+) -> None:
     label(draw, (36, 30, 800, 30), result.kind.upper() + "  /  " + result.day, 19, accent)
     label(draw, (36, 68, 800, 42), name, 30)
     if avatar:
@@ -128,14 +149,23 @@ def header(image, draw, result, name, accent, avatar):
             pass
 
 
-def tile(draw, box, title, value, accent, fill="#222339", size=26, text_color="#eee8dc"):
+def tile(
+    draw: ImageDraw.ImageDraw,
+    box: Box,
+    title: str,
+    value: object,
+    accent: str,
+    fill: str = "#222339",
+    size: int = 26,
+    text_color: str = "#eee8dc",
+) -> None:
     x, y, w, h = box
     draw.rounded_rectangle((x, y, x + w, y + h), radius=12, fill=fill)
     label(draw, (x + 16, y + 12, w - 32, 25), title.upper(), 16, accent)
     label(draw, (x + 16, y + 43, w - 32, h - 51), value, size, text_color)
 
 
-def render_mostlikely(scenario, winner_name):
+def render_mostlikely(scenario: str, winner_name: str) -> bytes:
     """A lightweight wide party card; all rendering stays in the image worker."""
     image = Image.new("RGB", (720, 320), "#191321")
     draw = ImageDraw.Draw(image)
@@ -149,7 +179,7 @@ def render_mostlikely(scenario, winner_name):
     return output.getvalue()
 
 
-def tarot(image, d, r):
+def tarot(image: Image.Image, d: ImageDraw.ImageDraw, r: CardResult) -> None:
     accent = "#dbbd7a"
     label(d, (36, 123, 990, 45), "THREE THREADS OF YOUR STORY", 32, accent)
     names = [c[0] for c in definitions()["tarot"]]
@@ -169,7 +199,7 @@ def tarot(image, d, r):
         label(d, (x + 18, 765, 284, 83), meaning, 22, "#59442e")
 
 
-def fortune(image, d, r):
+def fortune(image: Image.Image, d: ImageDraw.ImageDraw, r: CardResult) -> None:
     f = dict(r.fields)
     ink, muted, gold = "#f6eee6", "#bdb0ce", "#e8c893"
     # A dark editorial reading: one hero, three compact tokens, two clear takeaways.
@@ -198,7 +228,7 @@ def fortune(image, d, r):
     label(d, (60, 851, 880, 23), "MEYAYA  /  YOUR DAILY FORTUNE", 13, gold, minimum=13)
 
 
-def fate(image, d, r):
+def fate(image: Image.Image, d: ImageDraw.ImageDraw, r: CardResult) -> None:
     f = dict(r.fields)
     accent = "#c5b1ff"
     gold = "#e3c77d"
@@ -227,7 +257,7 @@ def fate(image, d, r):
     tile(d, (620, 644, 326, 82), "Omen", f["Omen"], gold, fill="#30294c", size=18)
 
 
-def summon(image, d, r):
+def summon(image: Image.Image, d: ImageDraw.ImageDraw, r: CardResult) -> None:
     f = dict(r.fields)
     accent = {"3 stars": "#98d7c5", "4 stars": "#c5a8fc", "5 stars": "#f0cc75"}[f["Rarity"]]
     character = definitions()["characters"][r.title]
@@ -255,7 +285,7 @@ def summon(image, d, r):
     label(d, (50, 665, 340, 27), f["Affinity"].upper() + " / ORIGINAL HERO", 17, accent)
     tile(d, (430, 190, 532, 80), "Class", f["Role"], accent)
     stats = f["Power / Guard / Spirit"].split(" / ")
-    for i, (key, value) in enumerate(zip(("Power", "Guard", "Spirit"), stats)):
+    for i, (key, value) in enumerate(zip(("Power", "Guard", "Spirit"), stats, strict=False)):
         x = 430 + i * 181
         tile(d, (x, 284, 170, 97), key, value, accent, size=29)
         d.rounded_rectangle((x + 16, 366, x + 154, 370), radius=2, fill="#42465b")
@@ -269,7 +299,7 @@ def summon(image, d, r):
     tile(d, (430, 612, 532, 92), "Drawback", f["Shadow"], accent, size=23)
 
 
-def guardian(image, d, r):
+def guardian(image: Image.Image, d: ImageDraw.ImageDraw, r: CardResult) -> None:
     f = dict(r.fields)
     accent = "#94e1cd"
     label(d, (36, 124, 925, 58), r.title, 40, accent)
@@ -293,15 +323,20 @@ def guardian(image, d, r):
     )
 
 
-def render_card(result, name, avatar=b""):
+def render_card(result: CardResult, name: str, avatar: bytes = b"") -> bytes:
     if result.kind == "fate":
         from bot.services.fate_card import render_fate
+
         return render_fate(result, name, avatar)
     if result.kind == "tarot":
         from bot.services.tarot_card import render_tarot
-        return render_tarot(result, name, avatar)
+
+        return cast(Callable[[CardResult, str, bytes], bytes], cast(Any, render_tarot))(
+            result, name, avatar
+        )
     if result.kind == "fortune":
         from bot.services.fortune_card import render_fortune
+
         return render_fortune(result, name, avatar)
     colors = {
         "tarot": ("#221a30", "#dbbd7a"),
@@ -312,9 +347,14 @@ def render_card(result, name, avatar=b""):
     }
     image, d = base(result.kind, *colors[result.kind])
     header(image, d, result, name, colors[result.kind][1], avatar)
-    {"tarot": tarot, "fortune": fortune, "fate": fate, "summon": summon, "guardian": guardian}[
-        result.kind
-    ](image, d, result)
+    renderers: dict[str, Callable[[Image.Image, ImageDraw.ImageDraw, CardResult], None]] = {
+        "tarot": tarot,
+        "fortune": fortune,
+        "fate": fate,
+        "summon": summon,
+        "guardian": guardian,
+    }
+    renderers[result.kind](image, d, result)
     output = BytesIO()
     image.save(output, format="PNG", compress_level=3)
     return output.getvalue()

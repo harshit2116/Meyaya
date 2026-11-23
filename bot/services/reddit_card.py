@@ -1,10 +1,20 @@
 """Local Reddit thread parody with bounded text and reusable vector icons."""
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from typing import cast
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-from bot.services.card_renderer import font, lines
+from bot.services.card_renderer import font as _raw_font
+from bot.services.card_renderer import lines as _raw_lines
+
+type _Font = ImageFont.FreeTypeFont | ImageFont.ImageFont
+
+font = cast(Callable[[int], _Font], _raw_font)
+lines = cast(Callable[[ImageDraw.ImageDraw, object, int, int], list[str]], _raw_lines)
 
 BACKGROUND = "#0e1113"
 INK = "#eef1f3"
@@ -13,20 +23,28 @@ PILL = "#222b30"
 ORANGE = "#ff5918"
 
 
-def subreddit_name(server):
+def subreddit_name(server: object) -> str:
     name = "".join(c for c in str(server) if c.isalnum() or c == "_")[:60]
     return "r/Ask" + (name or "Server")
 
 
 @lru_cache(maxsize=8)
-def _bold(size):
+def _bold(size: int) -> _Font:
     for path in ("C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
         if Path(path).exists():
             return ImageFont.truetype(path, size)
     return font(size)
 
 
-def _portrait(image, draw, data, x, y, size, initials):
+def _portrait(
+    image: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    data: bytes,
+    x: int,
+    y: int,
+    size: int,
+    initials: str,
+) -> None:
     draw.ellipse((x, y, x + size, y + size), fill=PILL)
     draw.text((x + size / 2, y + size / 2), initials, font=font(32), fill=INK, anchor="mm")
     if not data or len(data) > 1024 * 1024:
@@ -45,11 +63,11 @@ def _portrait(image, draw, data, x, y, size, initials):
 
 
 @lru_cache(maxsize=24)
-def _icon(kind, color=INK, size=38):
+def _icon(kind: str, color: str = INK, size: int = 38) -> Image.Image:
     # Draw once at 3x resolution for clean outlines without external assets.
     mask = Image.new("RGBA", (144, 144))
     d = ImageDraw.Draw(mask)
-    def line(points, width=3):
+    def line(points: Sequence[tuple[float, float]], width: int = 3) -> None:
         d.line([(int(x * 3), int(y * 3)) for x, y in points], fill=color, width=width * 3, joint="curve")
     if kind in ("up", "down", "voted"):
         points = [(6, 23), (24, 4), (42, 23), (31, 23), (31, 44), (17, 44), (17, 23), (6, 23)]
@@ -74,23 +92,30 @@ def _icon(kind, color=INK, size=38):
     return mask.resize((size, size), Image.Resampling.LANCZOS)
 
 
-def _stamp(image, kind, x, y, color=INK, size=38):
+def _stamp(
+    image: Image.Image,
+    kind: str,
+    x: int,
+    y: int,
+    color: str = INK,
+    size: int = 38,
+) -> None:
     art = _icon(kind, color, size)
     image.paste(art, (x, y), art)
 
 
-def _count(value):
+def _count(value: int) -> str:
     value = max(0, min(999999, int(value)))
     return f"{value / 1000:.1f}K" if value >= 1000 else str(value)
 
 
-def _fit(draw, text, face, width):
+def _fit(draw: ImageDraw.ImageDraw, text: str, face: _Font, width: int) -> str:
     while text and draw.textlength(text, font=face) > width:
         text = text[:-1]
     return text
 
 
-def _actions(image, draw, x, y, votes):
+def _actions(image: Image.Image, draw: ImageDraw.ImageDraw, x: int, y: int, votes: int) -> None:
     _stamp(image, "voted", x, y, ORANGE)
     draw.text((x+61, y+3), _count(votes), font=font(30), fill=INK)
     _stamp(image, "down", x+163, y)
@@ -100,17 +125,29 @@ def _actions(image, draw, x, y, votes):
     _stamp(image, "dots", x+862, y, size=34)
 
 
-def render_reddit(server, username, post, comment="", author_avatar=b"", meyaya_avatar=b"",
-                  votes=3200, replies=1900, *, op_comment="", server_icon=b"",
-                  comment_votes=1200, op_votes=642):
-    username = " ".join(str(username).split())[:50] or "member"
-    post = " ".join(str(post).split())[:300]
-    comment = " ".join(str(comment).split())[:400]
-    op_comment = " ".join(str(op_comment).split())[:400] if comment else ""
+def render_reddit(
+    server: object,
+    username: object,
+    post: object,
+    comment: object = "",
+    author_avatar: bytes = b"",
+    meyaya_avatar: bytes = b"",
+    votes: int = 3200,
+    replies: int = 1900,
+    *,
+    op_comment: object = "",
+    server_icon: bytes = b"",
+    comment_votes: int = 1200,
+    op_votes: int = 642,
+) -> bytes:
+    username_text = " ".join(str(username).split())[:50] or "member"
+    post_text = " ".join(str(post).split())[:300]
+    comment_text = " ".join(str(comment).split())[:400]
+    op_comment_text = " ".join(str(op_comment).split())[:400] if comment_text else ""
     measure = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    post_rows = lines(measure, post, 46, 1180)
-    comment_rows = lines(measure, comment, 38, 1040) if comment else []
-    op_rows = lines(measure, op_comment, 38, 1000) if op_comment else []
+    post_rows = lines(measure, post_text, 46, 1180)
+    comment_rows = lines(measure, comment_text, 38, 1040) if comment_text else []
+    op_rows = lines(measure, op_comment_text, 38, 1000) if op_comment_text else []
     pills_y = 194 + len(post_rows)*57 + 43
     divider_y = pills_y + 118
     comment_y = divider_y + 92
@@ -123,15 +160,17 @@ def render_reddit(server, username, post, comment="", author_avatar=b"", meyaya_
     draw.rounded_rectangle((20, 26, 1280, height-26), radius=20, outline="#344149", width=1)
     _portrait(image, draw, server_icon, 56, 54, 108, str(server).strip()[:1].upper() or "S")
     draw.text((193, 64), _fit(draw, subreddit_name(server), _bold(44), 970), font=_bold(44), fill=INK)
-    draw.text((200, 123), f"u/{username}  ·  just now", font=font(31), fill=MUTED)
+    draw.text((200, 123), f"u/{username_text}  ·  just now", font=font(31), fill=MUTED)
     _stamp(image, "dots", 1184, 65, MUTED, 40)
     # Match bold Reddit headlines while measuring wrapping at the same size.
     y = 194
     # Reserve a little extra width for bold glyphs before drawing.
     for row in post_rows:
-        face = _bold(46)
+        headline_size = 46
+        face = _bold(headline_size)
         while draw.textlength(row, font=face) > 1180:
-            face = _bold(face.size-1)
+            headline_size -= 1
+            face = _bold(headline_size)
         draw.text((58, y), row, font=face, fill=INK)
         y += 57
     for left, right in ((58,329), (350,555), (576,784)):
@@ -141,11 +180,11 @@ def render_reddit(server, username, post, comment="", author_avatar=b"", meyaya_
     draw.line((239,pills_y+23,239,pills_y+55), fill="#64737d", width=2)
     _stamp(image,"down",266,pills_y+18)
     _stamp(image,"chat",381,pills_y+18)
-    draw.text((442,pills_y+20),_count(replies) if comment else "0",font=font(32),fill=INK)
+    draw.text((442,pills_y+20),_count(replies) if comment_text else "0",font=font(32),fill=INK)
     _stamp(image,"share",609,pills_y+18)
     draw.text((668,pills_y+20),"Share",font=font(32),fill=INK)
     draw.line((58,divider_y,1241,divider_y),fill="#344149",width=2)
-    if comment:
+    if comment_text:
         draw.text((58,divider_y+25),"Top comment",font=font(34),fill=MUTED)
         draw.line((289,divider_y+42,300,divider_y+53,310,divider_y+42),fill=MUTED,width=3)
         _portrait(image,draw,meyaya_avatar,58,comment_y,94,"M")
@@ -158,9 +197,9 @@ def render_reddit(server, username, post, comment="", author_avatar=b"", meyaya_
             draw.text((178,comment_y+76+index*51),row,font=font(38),fill=INK)
         draw.line((104,comment_y+116,104,actions_y+76),fill="#50616b",width=2)
         _actions(image,draw,178,actions_y,comment_votes)
-    if op_comment:
+    if op_comment_text:
         _portrait(image,draw,author_avatar,98,op_y,90,"U")
-        handle = _fit(draw,"u/"+username,_bold(34),650)
+        handle = _fit(draw,"u/"+username_text,_bold(34),650)
         draw.text((218,op_y+15),handle,font=_bold(34),fill=INK)
         badge_x = 218 + int(draw.textlength(handle,font=_bold(34))) + 20
         draw.text((badge_x,op_y+20),"OP",font=_bold(26),fill="#6da9ff")

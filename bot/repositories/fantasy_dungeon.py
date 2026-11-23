@@ -1,6 +1,10 @@
 """Lock the canonical profile before the run in every mutating transaction."""
 
-from sqlalchemy import select
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy import Select, select
 from sqlalchemy.orm import aliased
 
 from bot.models.fantasy_dungeon import FantasyDungeonRun, ACTIVE_PHASES
@@ -11,9 +15,9 @@ from bot.repositories.base import Repository
 
 class FantasyDungeonRepository(Repository):
     @staticmethod
-    def soul_statement(user_id, *, lock=False):
-        """Read the soul and its optional run in a single database round trip."""
-        profile, run = FantasyProfile, FantasyDungeonRun
+    def soul_statement(user_id: int, *, lock: bool = False) -> Select[Any]:
+        profile: Any = FantasyProfile
+        run: Any = FantasyDungeonRun
         if lock:
             # Materialize the canonical profile lock before reading/locking the
             # run, matching every other fantasy mutation's lock order. The run
@@ -30,19 +34,40 @@ class FantasyDungeonRepository(Repository):
         return (select(profile, run).outerjoin(run, run.user_id == profile.user_id)
                 .where(profile.user_id == user_id))
 
-    async def soul(self, user_id, *, lock=False):
+    async def soul(
+        self, user_id: int, *, lock: bool = False
+    ) -> tuple[FantasyProfile | None, FantasyDungeonRun | None]:
         with dungeon_connection_reuse():
             result = await self.session.execute(self.soul_statement(user_id, lock=lock))
         row = result.one_or_none()
         return (row[0], row[1]) if row is not None else (None, None)
 
-    async def get(self, user_id, *, lock=False):
+    async def get(self, user_id: int, *, lock: bool = False) -> FantasyDungeonRun | None:
         query = select(FantasyDungeonRun).where(FantasyDungeonRun.user_id == user_id)
         if lock:
             query = query.with_for_update()
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def active(self, user_id):
-        run = await self.get(user_id)
-        return run is not None and run.phase in ACTIVE_PHASES
+    async def active(self, user_id: int) -> bool:
+        phase = (
+            await self.session.execute(
+                select(FantasyDungeonRun.phase).where(FantasyDungeonRun.user_id == user_id)
+            )
+        ).scalar_one_or_none()
+        return phase in ACTIVE_PHASES
+
+    async def any_active(self, user_ids: tuple[int, ...] | list[int]) -> bool:
+        if not user_ids:
+            return False
+        hit = (
+            await self.session.execute(
+                select(FantasyDungeonRun.user_id)
+                .where(
+                    FantasyDungeonRun.user_id.in_(user_ids),
+                    FantasyDungeonRun.phase.in_(ACTIVE_PHASES),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return hit is not None

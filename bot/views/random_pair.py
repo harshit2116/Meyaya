@@ -1,8 +1,12 @@
 """Reusable random-pair controls for ship and friendship cards."""
+
+from __future__ import annotations
+
 import asyncio
 import logging
 import time
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import discord
@@ -16,25 +20,25 @@ logger = logging.getLogger(__name__)
 
 
 class RandomPairView(MeyayaView):
-    def __init__(self, cog, guild_id, kind):
+    def __init__(self, cog: Any, guild_id: int | None, kind: str) -> None:
         super().__init__(timeout=900)
-        self.cog = cog
-        self.bot = cog.bot
+        self.cog: Any = cog
+        self.bot: Any = cog.bot
         self.guild_id = guild_id
         self.kind = kind
         self.token = uuid4().hex
-        self.message = None
+        self.message: discord.Message | None = None
         self._lock = asyncio.Lock()
         self._last_click = -float('inf')
         self.random_pair.custom_id = f'meyaya:pair:{self.token}:random'
         self.random_pair.disabled = guild_id is None
         cog.pair_views.add(self)
 
-    def stop(self):
+    def stop(self) -> None:
         self.cog.pair_views.discard(self)
         super().stop()
 
-    async def interaction_check(self, interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if self.is_finished() or interaction.guild is None or interaction.guild.id != self.guild_id:
             await interaction.response.send_message('Open a fresh `/ship` or `/bestiescore` in this server.', ephemeral=True)
             return False
@@ -51,7 +55,9 @@ class RandomPairView(MeyayaView):
         return True
 
     @discord.ui.button(label='Random pair', emoji='🎲', style=discord.ButtonStyle.secondary)
-    async def random_pair(self, interaction, button):
+    async def random_pair(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         # Do not queue clicks: a burst should produce one render and one edit.
         if self._lock.locked() or time.monotonic() - self._last_click < 2:
             await interaction.response.send_message('Give this pair a moment before rolling again.', ephemeral=True)
@@ -59,7 +65,7 @@ class RandomPairView(MeyayaView):
         async with self._lock:
             self._last_click = time.monotonic()
             await interaction.response.defer()
-            file = None
+            file: discord.File | None = None
             previous = (self._card_content, list(self._card_embeds), list(self._card_media))
             try:
                 ctx = SimpleNamespace(guild=interaction.guild, channel=interaction.channel,
@@ -73,8 +79,15 @@ class RandomPairView(MeyayaView):
                     embed=embed, attachments=[file] if file is not None else [],
                     view=self, allowed_mentions=discord.AllowedMentions.none())
                 self.message = message
-                remember_output_message(self.bot, interaction.channel.id, message.id,
-                    self.kind, interaction.user, getattr(ctx, '_meyaya_result_summary', ''))
+                if interaction.channel is not None:
+                    remember_output_message(
+                        self.bot,
+                        interaction.channel.id,
+                        message.id,
+                        self.kind,
+                        interaction.user,
+                        getattr(ctx, '_meyaya_result_summary', ''),
+                    )
             except (commands.CommandError, ImageBusy) as error:
                 await interaction.followup.send(str(error), ephemeral=True)
             except Exception:
@@ -85,7 +98,7 @@ class RandomPairView(MeyayaView):
                 if file is not None:
                     file.close()
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         self.random_pair.disabled = True
         self.cog.pair_views.discard(self)
         if self.message is not None:

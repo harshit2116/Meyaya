@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import discord
 import asyncio
-import math
-from bot.services.help_art import gallery, help_files
 import inspect
+import math
 import re
+from typing import Any, cast
+
+import discord
+from bot.services.help_art import gallery, help_files
 
 from bot.data.help_catalog import (
     CATEGORY_DESCRIPTIONS,
@@ -30,7 +32,7 @@ def build_help_embed(
     command_prefix: str = "uwu",
     category: str | None = None,
     command_name: str | None = None,
-    bot=None,
+    bot: Any = None,
 ) -> discord.Embed:
     """Render the overview, one category, or one exact command."""
 
@@ -110,7 +112,8 @@ def build_help_embed(
             example = " ".join(example.split())
         embed.add_field(name="Example", value=f"`{command_prefix} {example}`", inline=False)
         registered = bot.get_command(command.name) if bot else None
-        permissions, restrictions = set(), set()
+        permissions: set[str] = set()
+        restrictions: set[str] = set()
         if registered:
             slash = bot.tree.get_command(command.name) if hasattr(bot, "tree") else None
             if slash is not None and hasattr(slash, "parameters"):
@@ -176,7 +179,7 @@ def build_help_embed(
             + f"\n> {command.description}"
             for command in commands_in_category(category)
         ]
-        embed.description += "\n\n" + "\n\n".join(lines)
+        embed.description = (embed.description or "") + "\n\n" + "\n\n".join(lines)
         return embed
 
     embed = meyaya_embed(
@@ -234,111 +237,190 @@ DIRECTORY_SUMMARIES = {
 }
 
 
-def _resolve(name, bot):
-    lookup=(name or "").strip().casefold().removeprefix("/")
-    registered=bot.get_command(lookup) if bot else None
-    canonical=ALIAS_COMMANDS.get(lookup,lookup)
-    if lookup not in COMMANDS_BY_NAME and getattr(registered,"name",None) in COMMANDS_BY_NAME:
-        canonical=registered.name
+def _resolve(name: str | None, bot: Any) -> str | None:
+    lookup = (name or "").strip().casefold().removeprefix("/")
+    registered = bot.get_command(lookup) if bot else None
+    canonical = ALIAS_COMMANDS.get(lookup, lookup)
+    registered_name = getattr(registered, "name", None)
+    if (
+        lookup not in COMMANDS_BY_NAME
+        and isinstance(registered_name, str)
+        and registered_name in COMMANDS_BY_NAME
+    ):
+        canonical = registered_name
     return canonical if canonical in COMMANDS_BY_NAME else None
 
 
-def can_attach_help_art(channel, guild):
-    if guild is None or channel is None or getattr(guild,"me",None) is None:
+def can_attach_help_art(channel: Any, guild: Any) -> bool:
+    if guild is None or channel is None or getattr(guild, "me", None) is None:
         return True
-    return channel.permissions_for(guild.me).attach_files
+    return bool(channel.permissions_for(guild.me).attach_files)
 
 
-class HelpCategorySelect(discord.ui.Select):
-    def __init__(self,parent):
-        self.help_view=parent
-        options=[discord.SelectOption(label="Command directory",value="__overview__",emoji="🌸",
-                    description="Browse every command across four compact pages.",default=parent.category is None)]
-        options.extend(discord.SelectOption(label=f"{category} · {len(commands_in_category(category))}",
-            value=category,description=CATEGORY_DESCRIPTIONS[category][:100],
-            emoji=CATEGORY_EMOJIS[category],default=parent.category==category) for category in CATEGORY_ORDER)
-        super().__init__(placeholder="Explore a command category",options=options)
+class HelpCategorySelect(discord.ui.Select[Any]):
+    def __init__(self, parent: HelpView) -> None:
+        self.help_view = parent
+        options = [
+            discord.SelectOption(
+                label="Command directory",
+                value="__overview__",
+                emoji="🌸",
+                description="Browse every command across four compact pages.",
+                default=parent.category is None,
+            )
+        ]
+        options.extend(
+            discord.SelectOption(
+                label=f"{category} · {len(commands_in_category(category))}",
+                value=category,
+                description=CATEGORY_DESCRIPTIONS[category][:100],
+                emoji=CATEGORY_EMOJIS[category],
+                default=parent.category == category,
+            )
+            for category in CATEGORY_ORDER
+        )
+        super().__init__(placeholder="Explore a command category", options=options)
 
-    async def callback(self,interaction):
-        await self.help_view.navigate(interaction,category=self.values[0])
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.help_view.navigate(interaction, category=self.values[0])
 
 
-class HelpCommandSelect(discord.ui.Select):
-    def __init__(self,parent):
-        self.help_view=parent
-        options=[discord.SelectOption(label=f"/{command.name}",value=command.name,
-                    description=command.description[:100],default=parent.command_name==command.name)
-                 for command in commands_in_category(parent.category)]
-        super().__init__(placeholder="Open a command's usage, example and permissions",options=options)
+class HelpCommandSelect(discord.ui.Select[Any]):
+    def __init__(self, parent: HelpView) -> None:
+        self.help_view = parent
+        category = parent.category
+        options = [
+            discord.SelectOption(
+                label=f"/{command.name}",
+                value=command.name,
+                description=command.description[:100],
+                default=parent.command_name == command.name,
+            )
+            for command in (commands_in_category(category) if category is not None else ())
+        ]
+        super().__init__(
+            placeholder="Open a command's usage, example and permissions", options=options
+        )
 
-    async def callback(self,interaction):
-        await self.help_view.navigate(interaction,command=self.values[0])
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.help_view.navigate(interaction, command=self.values[0])
 
 
-class HelpButton(discord.ui.Button):
-    def __init__(self,parent,label,action,*,disabled=False,style=discord.ButtonStyle.secondary):
-        self.help_view=parent
-        self.action=action
-        super().__init__(label=label,style=style,disabled=disabled)
+class HelpButton(discord.ui.Button[Any]):
+    def __init__(
+        self,
+        parent: HelpView,
+        label: str,
+        action: str,
+        *,
+        disabled: bool = False,
+        style: discord.ButtonStyle = discord.ButtonStyle.secondary,
+    ) -> None:
+        self.help_view = parent
+        self.action = action
+        super().__init__(label=label, style=style, disabled=disabled)
 
-    async def callback(self,interaction):
-        await self.help_view.navigate(interaction,action=self.action)
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await self.help_view.navigate(interaction, action=self.action)
 
 
 class HelpView(discord.ui.LayoutView):
     """Compact native command directory. One banner upload; text-only navigation."""
-    def __init__(self,*,owner_id,bot_mention,command_prefix="uwu",bot=None,command_name=None,illustrated=True):
+
+    def __init__(
+        self,
+        *,
+        owner_id: int,
+        bot_mention: str,
+        command_prefix: str = "uwu",
+        bot: Any = None,
+        command_name: str | None = None,
+        illustrated: bool = True,
+    ) -> None:
         super().__init__(timeout=300)
-        self.owner_id=owner_id
-        self.illustrated=illustrated
-        self.bot_mention=bot_mention
-        self.command_prefix=command_prefix
-        self.bot=bot
-        self.category=None
-        self.command_name=None
-        self.page=0
-        self.directory_page=0
-        self.message=None
-        self.unknown=None
-        self._navigation=asyncio.Lock()
+        self.owner_id = owner_id
+        self.illustrated = illustrated
+        self.bot_mention = bot_mention
+        self.command_prefix = command_prefix
+        self.bot: Any = bot
+        self.category: str | None = None
+        self.command_name: str | None = None
+        self.page = 0
+        self.directory_page = 0
+        self.message: discord.Message | None = None
+        self.unknown: str | None = None
+        self._navigation = asyncio.Lock()
         if command_name:
-            category=next((c for c in CATEGORY_ORDER if c.casefold()==command_name.casefold()),None)
-            if command_name.casefold() in {"voice chat","voices","vc"}:category="Voice Chat"
-            self.command_name=_resolve(command_name,bot)
-            if self.command_name:self.category=COMMANDS_BY_NAME[self.command_name].category
-            elif category:self.category=category
-            else:self.unknown=command_name[:80]
+            category = next(
+                (c for c in CATEGORY_ORDER if c.casefold() == command_name.casefold()), None
+            )
+            if command_name.casefold() in {"voice chat", "voices", "vc"}:
+                category = "Voice Chat"
+            self.command_name = _resolve(command_name, bot)
+            if self.command_name:
+                self.category = COMMANDS_BY_NAME[self.command_name].category
+            elif category:
+                self.category = category
+            else:
+                self.unknown = command_name[:80]
         self.refresh_items()
 
-    def files(self):
-        return help_files() if self.illustrated else []
+    def files(self) -> list[discord.File]:
+        return list(cast(Any, help_files)()) if self.illustrated else []
 
-    def _image(self,name):
-        return gallery(name) if self.illustrated else None
+    def _image(self, name: str) -> Any:
+        return cast(Any, gallery)(name) if self.illustrated else None
 
     @property
-    def page_count(self):
-        return max(1,math.ceil(len(commands_in_category(self.category))/PAGE_SIZE)) if self.category else 1
+    def page_count(self) -> int:
+        return (
+            max(1, math.ceil(len(commands_in_category(self.category)) / PAGE_SIZE))
+            if self.category
+            else 1
+        )
 
-    def _container(self,*items,color=0xDE91B4):
-        self.add_item(discord.ui.Container(*(item for item in items if item is not None),accent_color=color))
+    def _container(self, *items: Any, color: int = 0xDE91B4) -> None:
+        self.add_item(
+            discord.ui.Container(*(item for item in items if item is not None), accent_color=color)
+        )
 
-    def _overview(self):
+    def _overview(self) -> None:
         title, categories = DIRECTORY_PAGES[self.directory_page]
-        parts = [self._image("directory"), discord.ui.TextDisplay(
-            f"## 🌸 Meyaya's command directory\n"
-            f"**{len(COMMANDS)} commands · {len(CATEGORY_ORDER)} categories** · "
-            "Choose a tab below, or jump straight to a category.")]
+        parts: list[Any] = [
+            self._image("directory"),
+            discord.ui.TextDisplay(
+                f"## 🌸 Meyaya's command directory\n"
+                f"**{len(COMMANDS)} commands · {len(CATEGORY_ORDER)} categories** · "
+                "Choose a tab below, or jump straight to a category."
+            ),
+        ]
         if self.unknown:
             safe = discord.utils.escape_mentions(discord.utils.escape_markdown(self.unknown))
-            parts.append(discord.ui.TextDisplay(f"I couldn't find **{safe}**. Try a command or category below."))
-        parts.append(discord.ui.TextDisplay(
-            f"**Chat naturally** · Mention {self.bot_mention}. She follows conversations and remembers shared moments.\n"
-            f"**Commands** · `/profile` or `{self.command_prefix} profile` · **Details** · `/help command:profilecheck`"))
+            parts.append(
+                discord.ui.TextDisplay(
+                    f"I couldn't find **{safe}**. Try a command or category below."
+                )
+            )
+        parts.append(
+            discord.ui.TextDisplay(
+                f"**Chat naturally** · Mention {self.bot_mention}. She follows conversations and remembers shared moments.\n"
+                f"**Commands** · `/profile` or `{self.command_prefix} profile` · **Details** · `/help command:profilecheck`"
+            )
+        )
         self._container(*parts)
-        tabs = [HelpButton(self, label, f"directory:{index}",
-                 style=discord.ButtonStyle.primary if index == self.directory_page else discord.ButtonStyle.secondary)
-                for index, (label, _) in enumerate(DIRECTORY_PAGES)]
+        tabs = [
+            HelpButton(
+                self,
+                label,
+                f"directory:{index}",
+                style=(
+                    discord.ButtonStyle.primary
+                    if index == self.directory_page
+                    else discord.ButtonStyle.secondary
+                ),
+            )
+            for index, (label, _) in enumerate(DIRECTORY_PAGES)
+        ]
         self.add_item(discord.ui.ActionRow(*tabs))
         self.add_item(discord.ui.ActionRow(HelpCategorySelect(self)))
         for category in categories:
@@ -346,114 +428,207 @@ class HelpView(discord.ui.LayoutView):
             if category == "Social Reactions":
                 lines = [" · ".join(f"`/{entry.name}`" for entry in entries)]
             else:
-                lines = [f"`/{entry.name}` · {DIRECTORY_SUMMARIES.get(entry.name, entry.description)}" for entry in entries]
-            self._container(discord.ui.TextDisplay(
-                f"### {CATEGORY_EMOJIS[category]} {category} · {len(entries)}\n"
-                + (CATEGORY_DESCRIPTIONS[category] + "\n" if category == "Social Reactions" else "")
-                + "\n".join(lines)))
-        self.add_item(discord.ui.TextDisplay(
-            f"-# {title} · {self.directory_page+1}/{len(DIRECTORY_PAGES)} · "
-            "Choose a category above for usage, examples, and permissions."))
+                lines = [
+                    f"`/{entry.name}` · {DIRECTORY_SUMMARIES.get(entry.name, entry.description)}"
+                    for entry in entries
+                ]
+            self._container(
+                discord.ui.TextDisplay(
+                    f"### {CATEGORY_EMOJIS[category]} {category} · {len(entries)}\n"
+                    + (CATEGORY_DESCRIPTIONS[category] + "\n" if category == "Social Reactions" else "")
+                    + "\n".join(lines)
+                )
+            )
+        self.add_item(
+            discord.ui.TextDisplay(
+                f"-# {title} · {self.directory_page+1}/{len(DIRECTORY_PAGES)} · "
+                "Choose a category above for usage, examples, and permissions."
+            )
+        )
 
-    def _category_page(self):
-        commands=commands_in_category(self.category)
-        self.page=max(0,min(self.page,self.page_count-1))
-        start=self.page*PAGE_SIZE
-        entries=commands[start:start+PAGE_SIZE]
-        parts=[discord.ui.TextDisplay(
-            f"## {CATEGORY_EMOJIS[self.category]} {self.category}\n{CATEGORY_DESCRIPTIONS[self.category]}")]
+    def _category_page(self) -> None:
+        if self.category is None:
+            return
+        commands = commands_in_category(self.category)
+        self.page = max(0, min(self.page, self.page_count - 1))
+        start = self.page * PAGE_SIZE
+        entries = commands[start : start + PAGE_SIZE]
+        parts: list[Any] = [
+            discord.ui.TextDisplay(
+                f"## {CATEGORY_EMOJIS[self.category]} {self.category}\n{CATEGORY_DESCRIPTIONS[self.category]}"
+            )
+        ]
         for command in entries:
-            aliases=command_aliases(command.name,self.bot)
-            shortcut=(" · Short form: "+" / ".join(f"`{self.command_prefix} {alias}`" for alias in aliases)) if aliases else ""
+            aliases = command_aliases(command.name, self.bot)
+            shortcut = (
+                " · Short form: " + " / ".join(f"`{self.command_prefix} {alias}`" for alias in aliases)
+                if aliases
+                else ""
+            )
             # Ship's random shortcut is prefix-only. Keep slash member usage precise.
-            usage=command.usage.split(" | ship random")[0]
-            parts.append(discord.ui.TextDisplay(
-                f"### /{command.name}\n{command.description}\n"
-                f"-# `{self.command_prefix} {usage}`{shortcut}"))
-        parts.append(discord.ui.TextDisplay(
-            f"-# Page {self.page+1}/{self.page_count} · {start+1}–{start+len(entries)} of {len(commands)} commands. "
-            "Choose a command above for examples and permissions."))
+            usage = command.usage.split(" | ship random")[0]
+            parts.append(
+                discord.ui.TextDisplay(
+                    f"### /{command.name}\n{command.description}\n"
+                    f"-# `{self.command_prefix} {usage}`{shortcut}"
+                )
+            )
+        parts.append(
+            discord.ui.TextDisplay(
+                f"-# Page {self.page+1}/{self.page_count} · {start+1}–{start+len(entries)} of {len(commands)} commands. "
+                "Choose a command above for examples and permissions."
+            )
+        )
         self._container(*parts)
 
-    def _command_page(self):
-        embed=build_help_embed(bot_mention=self.bot_mention,command_prefix=self.command_prefix,
-                              command_name=self.command_name,bot=self.bot)
-        parts=[discord.ui.TextDisplay(
-            f"## {CATEGORY_EMOJIS[self.category]} /{self.command_name}\n{embed.description}")]
+    def _command_page(self) -> None:
+        if self.category is None:
+            return
+        embed = build_help_embed(
+            bot_mention=self.bot_mention,
+            command_prefix=self.command_prefix,
+            command_name=self.command_name,
+            bot=self.bot,
+        )
+        parts: list[Any] = [
+            discord.ui.TextDisplay(
+                f"## {CATEGORY_EMOJIS[self.category]} /{self.command_name}\n{embed.description}"
+            )
+        ]
         for field in embed.fields:
-            if field.name=="Category":continue
+            if field.name == "Category":
+                continue
             parts.append(discord.ui.TextDisplay(f"### {field.name}\n{field.value}"))
         if self.command_name in {"ship", "bestiescore"}:
             shortcut = "ship" if self.command_name == "ship" else "bestie"
-            parts.append(discord.ui.TextDisplay(
-                f"### A surprise pairing\n`{self.command_prefix} {shortcut} random` chooses two different human members. "
-                "Anyone can use the Random pair button below a result to try another pair. Buttons stay active for 15 minutes after the last click."))
-        parts.append(discord.ui.TextDisplay(f"-# {self.category} · Choose another command, or return to the category."))
+            parts.append(
+                discord.ui.TextDisplay(
+                    f"### A surprise pairing\n`{self.command_prefix} {shortcut} random` chooses two different human members. "
+                    "Anyone can use the Random pair button below a result to try another pair. Buttons stay active for 15 minutes after the last click."
+                )
+            )
+        parts.append(
+            discord.ui.TextDisplay(
+                f"-# {self.category} · Choose another command, or return to the category."
+            )
+        )
         self._container(*parts)
 
-    def refresh_items(self):
+    def refresh_items(self) -> None:
         self.clear_items()
         if self.category:
             self.add_item(discord.ui.ActionRow(HelpCategorySelect(self)))
             self.add_item(discord.ui.ActionRow(HelpCommandSelect(self)))
-            if self.command_name:self._command_page()
-            else:self._category_page()
-        else:self._overview()
-        if self.command_name:
-            buttons=[HelpButton(self,"← Back to category","back"),HelpButton(self,"All commands","home")]
-        elif self.category:
-            buttons=[]
-            if self.page_count>1:
-                buttons.extend([HelpButton(self,"← Previous","previous",disabled=self.page==0),
-                                HelpButton(self,"Next →","next",disabled=self.page>=self.page_count-1)])
-            buttons.append(HelpButton(self,"All commands","home"))
+            if self.command_name:
+                self._command_page()
+            else:
+                self._category_page()
         else:
-            buttons=[]
-        buttons.append(discord.ui.Button(label="Support server",style=discord.ButtonStyle.link,url=SUPPORT_INVITE))
+            self._overview()
+        buttons: list[discord.ui.Button[Any]]
+        if self.command_name:
+            buttons = [
+                HelpButton(self, "← Back to category", "back"),
+                HelpButton(self, "All commands", "home"),
+            ]
+        elif self.category:
+            buttons = []
+            if self.page_count > 1:
+                buttons.extend(
+                    [
+                        HelpButton(self, "← Previous", "previous", disabled=self.page == 0),
+                        HelpButton(
+                            self, "Next →", "next", disabled=self.page >= self.page_count - 1
+                        ),
+                    ]
+                )
+            buttons.append(HelpButton(self, "All commands", "home"))
+        else:
+            buttons = []
+        buttons.append(
+            discord.ui.Button(
+                label="Support server", style=discord.ButtonStyle.link, url=SUPPORT_INVITE
+            )
+        )
         self.add_item(discord.ui.ActionRow(*buttons))
 
-    async def navigate(self,interaction,*,category=None,command=None,action=None):
+    async def navigate(
+        self,
+        interaction: discord.Interaction,
+        *,
+        category: str | None = None,
+        command: str | None = None,
+        action: str | None = None,
+    ) -> None:
         async with self._navigation:
             if self.is_finished():
-                await interaction.response.send_message("This guide has closed. Open a fresh one with `/help`.",ephemeral=True)
+                await interaction.response.send_message(
+                    "This guide has closed. Open a fresh one with `/help`.", ephemeral=True
+                )
                 return
             if category is not None:
-                if category!="__overview__" and category not in CATEGORY_ORDER:
-                    await interaction.response.send_message("That category isn't available. Open `/help` to browse.",ephemeral=True)
+                if category != "__overview__" and category not in CATEGORY_ORDER:
+                    await interaction.response.send_message(
+                        "That category isn't available. Open `/help` to browse.", ephemeral=True
+                    )
                     return
-                self.category=None if category=="__overview__" else category
-                self.command_name=None;self.page=0;self.unknown=None
+                self.category = None if category == "__overview__" else category
+                self.command_name = None
+                self.page = 0
+                self.unknown = None
             elif command:
-                self.command_name=_resolve(command,self.bot)
-                if self.command_name:self.category=COMMANDS_BY_NAME[self.command_name].category
+                self.command_name = _resolve(command, self.bot)
+                if self.command_name:
+                    self.category = COMMANDS_BY_NAME[self.command_name].category
             elif action and action.startswith("directory:"):
                 try:
-                    index=int(action.split(":",1)[1])
+                    index = int(action.split(":", 1)[1])
                 except ValueError:
-                    index=0
-                self.directory_page=max(0,min(len(DIRECTORY_PAGES)-1,index))
-                self.category=None;self.command_name=None;self.page=0;self.unknown=None
-            elif action=="home":
-                self.category=None;self.command_name=None;self.page=0;self.unknown=None
-            elif action=="back":self.command_name=None
-            elif action=="previous":self.page=max(0,self.page-1)
-            elif action=="next":self.page=min(self.page_count-1,self.page+1)
+                    index = 0
+                self.directory_page = max(0, min(len(DIRECTORY_PAGES) - 1, index))
+                self.category = None
+                self.command_name = None
+                self.page = 0
+                self.unknown = None
+            elif action == "home":
+                self.category = None
+                self.command_name = None
+                self.page = 0
+                self.unknown = None
+            elif action == "back":
+                self.command_name = None
+            elif action == "previous":
+                self.page = max(0, self.page - 1)
+            elif action == "next":
+                self.page = min(self.page_count - 1, self.page + 1)
             elif action in CATEGORY_ORDER:
-                self.category=action;self.command_name=None;self.page=0;self.unknown=None
+                self.category = action
+                self.command_name = None
+                self.page = 0
+                self.unknown = None
             self.refresh_items()
             # The compact banner was attached at initial send.
             # Keep those attachments; only component JSON changes on navigation.
-            await interaction.response.edit_message(view=self,allowed_mentions=discord.AllowedMentions.none())
+            await interaction.response.edit_message(
+                view=self, allowed_mentions=discord.AllowedMentions.none()
+            )
 
-    async def interaction_check(self,interaction):
-        if interaction.user.id==self.owner_id:return True
-        await interaction.response.send_message("Open your own help guide with `/help`.",ephemeral=True)
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id == self.owner_id:
+            return True
+        await interaction.response.send_message(
+            "Open your own help guide with `/help`.", ephemeral=True
+        )
         return False
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         for item in self.walk_children():
-            if isinstance(item,discord.ui.Select) or isinstance(item,discord.ui.Button) and item.url is None:
-                item.disabled=True
+            if isinstance(item, discord.ui.Select) or (
+                isinstance(item, discord.ui.Button) and item.url is None
+            ):
+                item.disabled = True
         if self.message is not None:
-            try:await self.message.edit(view=self)
-            except discord.HTTPException:pass
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass

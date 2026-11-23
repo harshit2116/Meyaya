@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import discord
 from bot.utils.components_v2 import MeyayaView
 
@@ -11,8 +13,6 @@ from bot.utils.embeds import build_interaction_embed
 
 
 class InteractionResponseView(MeyayaView):
-    """Button view attached to interaction embeds."""
-
     def __init__(
         self,
         *,
@@ -27,14 +27,15 @@ class InteractionResponseView(MeyayaView):
         self.actor_id = actor_id
         self.target_id = target_id
         if definition.button_label:
-            button = discord.ui.Button(
+            button: discord.ui.Button[Any] = discord.ui.Button(
                 label=definition.button_label, style=discord.ButtonStyle.primary
             )
 
             async def back_callback(interaction: discord.Interaction) -> None:
                 await self._send_back(interaction)
 
-            button.callback = back_callback
+            button_obj: Any = button
+            button_obj.callback = back_callback
             self.add_item(button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:

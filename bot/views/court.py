@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 import discord
 from bot.utils.components_v2 import MeyayaView
@@ -103,7 +104,7 @@ async def _send_next_stage(
         pass
     message = await old_message.channel.send(
         embed=build_court_embed(case),
-        view=view,
+        view=cast(Any, view),
         allowed_mentions=discord.AllowedMentions.none(),
     )
     if view is not None and hasattr(view, "message"):
@@ -133,7 +134,7 @@ class CourtStatementModal(discord.ui.Modal):
         self.statement_type = statement_type
         self.public_message = public_message
         self.judge_callback = judge_callback
-        self.statement = discord.ui.TextInput(
+        self.statement: discord.ui.TextInput[Any] = discord.ui.TextInput(
             label="Your statement",
             style=discord.TextStyle.paragraph,
             min_length=1,
@@ -214,7 +215,7 @@ class CourtInvitationView(MeyayaView):
         self.message: discord.Message | None = None
 
     @discord.ui.button(label="Accept case", emoji="⚖️", style=discord.ButtonStyle.success)
-    async def accept(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def accept(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         try:
             async with court_case_lock(self.case_id):
                 async with self.bot.db_session() as session:
@@ -233,7 +234,7 @@ class CourtInvitationView(MeyayaView):
             await _send_next_stage(interaction.message, case, collection)
 
     @discord.ui.button(label="Decline", style=discord.ButtonStyle.danger)
-    async def decline(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def decline(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         try:
             async with court_case_lock(self.case_id):
                 async with self.bot.db_session() as session:
@@ -248,7 +249,7 @@ class CourtInvitationView(MeyayaView):
 
     @discord.ui.button(label="Register as witness", emoji="📝", style=discord.ButtonStyle.secondary)
     async def register_witness(
-        self, interaction: discord.Interaction, _: discord.ui.Button
+        self, interaction: discord.Interaction, _: discord.ui.Button[Any]
     ) -> None:
         try:
             async with court_case_lock(self.case_id):
@@ -277,7 +278,8 @@ class CourtInvitationView(MeyayaView):
         except CourtError:
             return
         for child in self.children:
-            child.disabled = True
+            if isinstance(child, (discord.ui.Button, discord.ui.Select)):
+                child.disabled = True
         if self.message is not None:
             try:
                 await self.message.edit(embed=build_court_embed(case), view=self)
@@ -310,19 +312,19 @@ class CourtCollectionView(MeyayaView):
         )
 
     @discord.ui.button(label="Plaintiff statement", style=discord.ButtonStyle.primary)
-    async def plaintiff(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def plaintiff(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         await self._open_modal(interaction, "plaintiff")
 
     @discord.ui.button(label="Defendant statement", style=discord.ButtonStyle.primary)
-    async def defendant(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def defendant(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         await self._open_modal(interaction, "defendant")
 
     @discord.ui.button(label="Witness statement", style=discord.ButtonStyle.secondary)
-    async def witness(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def witness(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         await self._open_modal(interaction, "witness")
 
     @discord.ui.button(label="Lock and judge", emoji="🔒", style=discord.ButtonStyle.success)
-    async def judge(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def judge(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         if interaction.message is None:
             await interaction.response.send_message(
                 "The court message is unavailable.", ephemeral=True
@@ -338,7 +340,8 @@ class CourtCollectionView(MeyayaView):
         except CourtError:
             return
         for child in self.children:
-            child.disabled = True
+            if isinstance(child, (discord.ui.Button, discord.ui.Select)):
+                child.disabled = True
         if self.message is not None:
             try:
                 await self.message.edit(embed=build_court_embed(case), view=self)
@@ -357,7 +360,7 @@ class CourtClarificationView(MeyayaView):
         self.message: discord.Message | None = None
 
     @discord.ui.button(label="Answer follow-up", emoji="💬", style=discord.ButtonStyle.primary)
-    async def answer(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def answer(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         if interaction.message is None:
             await interaction.response.send_message(
                 "The court message is unavailable.", ephemeral=True
@@ -374,7 +377,7 @@ class CourtClarificationView(MeyayaView):
         )
 
     @discord.ui.button(label="Continue to verdict", emoji="⚖️", style=discord.ButtonStyle.success)
-    async def judge(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def judge(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         if interaction.message is None:
             await interaction.response.send_message(
                 "The court message is unavailable.", ephemeral=True
@@ -390,7 +393,8 @@ class CourtClarificationView(MeyayaView):
         except CourtError:
             return
         for child in self.children:
-            child.disabled = True
+            if isinstance(child, (discord.ui.Button, discord.ui.Select)):
+                child.disabled = True
         if self.message is not None:
             try:
                 await self.message.edit(embed=build_court_embed(case), view=self)

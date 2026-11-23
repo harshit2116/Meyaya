@@ -8,6 +8,7 @@ from hashlib import sha256
 import json
 from pathlib import Path
 from random import Random
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -25,7 +26,7 @@ class CardResult:
 
 
 @lru_cache(maxsize=1)
-def definitions():
+def definitions() -> dict[str, Any]:
     root = Path(__file__).resolve().parents[1] / "data" / "cards"
     packs = {
         name: json.loads((root / f"{name}.json").read_text("utf-8"))
@@ -54,12 +55,20 @@ def definitions():
     }
 
 
-def draw_card(kind, guild_id, user_id, *, day=None, question=""):
+def draw_card(
+    kind: str,
+    guild_id: int,
+    user_id: int,
+    *,
+    day: str | None = None,
+    question: str = "",
+) -> CardResult:
     data = definitions()
     day = day or datetime.now(UTC).date().isoformat()
     seed = f"{data['version']}:{kind}:{guild_id}:{user_id}:{day}"
     rng = Random(int.from_bytes(sha256(seed.encode()).digest(), "big"))
-    fields, panels = [], []
+    fields: list[tuple[str, str]] = []
+    panels: list[tuple[str, str, str]] = []
     if kind == "fortune":
         title = rng.choice(data["verdicts"])
         luck = rng.randint(1, 100)
@@ -114,7 +123,7 @@ def draw_card(kind, guild_id, user_id, *, day=None, question=""):
             )
     elif kind == "tarot":
         title = "Past / Present / Future"
-        for position, card in zip(("Past", "Present", "Future"), rng.sample(data["tarot"], 3)):
+        for position, card in zip(("Past", "Present", "Future"), rng.sample(data["tarot"], 3), strict=True):
             reversed_card = rng.choice([False, True])
             panels.append(
                 (
@@ -190,8 +199,9 @@ def draw_card(kind, guild_id, user_id, *, day=None, question=""):
     )
 
 
-def render_card(*args, **kwargs):
+def render_card(*args: Any, **kwargs: Any) -> Any:
     """Compatibility entry point; renderer is imported only when presentation is requested."""
     from bot.services.card_renderer import render_card as render
 
-    return render(*args, **kwargs)
+    render_fn: Any = render
+    return render_fn(*args, **kwargs)

@@ -1,10 +1,14 @@
 """Per-invocation delayed loading stickers, with best-effort cleanup."""
 
+from __future__ import annotations
+
 import asyncio
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from functools import wraps
 import logging
 import time
+from typing import Any
 from bot.utils.application_emojis import loading_emoji
 
 logger = logging.getLogger(__name__)
@@ -21,7 +25,7 @@ SLOW_COMMANDS = frozenset({
 PRIVATE_SLASH_COMMANDS = frozenset({"roleplay", "argumenttimeline"})
 
 
-def resolve_loading_sticker(bot, guild):
+def resolve_loading_sticker(bot: Any, guild: Any) -> Any:
     cache = getattr(bot, "_loading_sticker_cache", None)
     if cache is None:
         cache = bot._loading_sticker_cache = {}
@@ -40,19 +44,21 @@ def resolve_loading_sticker(bot, guild):
 
 
 class LoadingIndicator:
-    def __init__(self, channel, bot, *, delay=LOADING_DELAY, emoji_only=False):
+    def __init__(
+        self, channel: Any, bot: Any, *, delay: float = LOADING_DELAY, emoji_only: bool = False
+    ) -> None:
         self.channel, self.bot, self.delay = channel, bot, delay
         self.emoji_only = emoji_only
-        self.message = None
-        self.task = None
+        self.message: Any = None
+        self.task: asyncio.Task[None] | None = None
         self.closed = False
         self.sending = False
 
-    def start(self):
+    def start(self) -> LoadingIndicator:
         self.task = asyncio.create_task(self._show(), name="meyaya-loading")
         return self
 
-    async def _show(self):
+    async def _show(self) -> None:
         try:
             await asyncio.sleep(self.delay)
             if self.closed:
@@ -83,7 +89,7 @@ class LoadingIndicator:
         except Exception as exc:
             logger.debug("loading indicator failed: %s", type(exc).__name__)
 
-    async def _remove(self):
+    async def _remove(self) -> None:
         message, self.message = self.message, None
         if message is not None:
             try:
@@ -91,7 +97,7 @@ class LoadingIndicator:
             except Exception as exc:
                 logger.debug("loading message cleanup failed: %s", type(exc).__name__)
 
-    async def stop(self):
+    async def stop(self) -> None:
         self.closed = True
         if self.task is not None and not self.task.done() and not self.sending:
             self.task.cancel()
@@ -103,7 +109,9 @@ class LoadingIndicator:
 
 
 @asynccontextmanager
-async def loading_indicator(channel, bot, *, delay=LOADING_DELAY, emoji_only=False):
+async def loading_indicator(
+    channel: Any, bot: Any, *, delay: float = LOADING_DELAY, emoji_only: bool = False
+) -> AsyncIterator[LoadingIndicator]:
     loader = LoadingIndicator(channel, bot, delay=delay, emoji_only=emoji_only).start()
     try:
         yield loader
@@ -111,16 +119,16 @@ async def loading_indicator(channel, bot, *, delay=LOADING_DELAY, emoji_only=Fal
         await loader.stop()
 
 
-def install_command_loading(bot):
+def install_command_loading(bot: Any) -> None:
     """Wrap command callbacks only; conversation listeners never get a loader."""
     for command in bot.walk_commands():
         if getattr(command.callback, "_meyaya_loading", False):
             continue
         callback = command.callback
 
-        def wrap(callback, command):
+        def wrap(callback: Callable[..., Any], command: Any) -> Callable[..., Any]:
             @wraps(callback)
-            async def run(*args, **kwargs):
+            async def run(*args: Any, **kwargs: Any) -> Any:
                 ctx = args[1] if command.cog is not None else args[0]
                 if getattr(ctx, "_meyaya_loader", None) is not None:
                     return await callback(*args, **kwargs)
@@ -144,7 +152,8 @@ def install_command_loading(bot):
                         return await callback(*args, **kwargs)
                     finally:
                         ctx._meyaya_loader = None
-            run._meyaya_loading = True
+            wrapped: Any = run
+            wrapped._meyaya_loading = True
             return run
 
         command.callback = wrap(callback, command)

@@ -1,10 +1,13 @@
 """Retain direct chats, delivered automatic exchanges, and command names for seven days."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import time
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,10 +19,10 @@ RETENTION_DAYS = 7
 MAX_CONTENT = 8000
 
 
-def slash_content(data: dict) -> str:
+def slash_content(data: dict[str, Any]) -> str:
     """Keep explicit option values only, not resolved users, attachments or credentials."""
 
-    def options(items):
+    def options(items: list[dict[str, Any]]) -> str:
         result = []
         for item in items:
             name = str(item.get("name", ""))
@@ -35,18 +38,29 @@ def slash_content(data: dict) -> str:
 
 
 class RequestLogService:
-    def __init__(self, sessions):
+    def __init__(self, sessions: Any) -> None:
         self.sessions = sessions
         self._last_failure = float("-inf")
-        self._pending = set()
+        self._pending: set[asyncio.Task[None]] = set()
         self._closing = False
         # Review logging must not occupy the whole three-connection DB pool.
         self._write_slot = asyncio.Semaphore(1)
 
     async def record(
-        self, *, event_id, guild_id, channel_id, user_id, user_name, kind, content, message_id=None,
-        response=None, outcome=None, latency_ms=None
-    ):
+        self,
+        *,
+        event_id: int,
+        guild_id: int | None,
+        channel_id: int | None,
+        user_id: int,
+        user_name: str,
+        kind: str,
+        content: str,
+        message_id: int | None = None,
+        response: str | None = None,
+        outcome: str | None = None,
+        latency_ms: int | float | None = None,
+    ) -> None:
         if guild_id is None or channel_id is None:
             return
         bounded = (
@@ -74,7 +88,7 @@ class RequestLogService:
                             outcome=outcome,
                             latency_ms=latency_ms,
                         ))
-                    updates = {}
+                    updates: dict[str, Any] = {}
                     if response is not None:
                         updates['response'] = statement.excluded.response
                     if outcome is not None:
@@ -95,7 +109,15 @@ class RequestLogService:
             if elapsed >= 500:
                 logger.info("request_log write_ms=%.0f", elapsed)
 
-    async def record_message(self, message, kind="chat", *, response=None, outcome=None, latency_ms=None):
+    async def record_message(
+        self,
+        message: Any,
+        kind: str = "chat",
+        *,
+        response: str | None = None,
+        outcome: str | None = None,
+        latency_ms: int | float | None = None,
+    ) -> None:
         if message.guild is None or message.author.bot:
             return
         if self._closing or kind not in {"chat", "auto_chat"}:
@@ -127,10 +149,22 @@ class RequestLogService:
         self._pending.add(task)
         task.add_done_callback(self._record_done)
 
-    async def record_outcome(self, message, outcome, latency_ms):
+    async def record_outcome(
+        self, message: Any, outcome: str, latency_ms: int | float | None
+    ) -> None:
         await self.record_message(message, outcome=outcome, latency_ms=latency_ms)
 
-    async def record_command(self, *, event_id, guild_id, channel_id, user, command, invocation, message_id=None):
+    async def record_command(
+        self,
+        *,
+        event_id: int,
+        guild_id: int | None,
+        channel_id: int | None,
+        user: Any,
+        command: str,
+        invocation: str,
+        message_id: int | None = None,
+    ) -> None:
         if self._closing or guild_id is None or channel_id is None or len(self._pending) >= 8:
             return
         task = asyncio.create_task(self._queued_record(event_id=event_id, guild_id=guild_id,
@@ -139,16 +173,16 @@ class RequestLogService:
         self._pending.add(task)
         task.add_done_callback(self._record_done)
 
-    async def _queued_record(self, **fields):
+    async def _queued_record(self, **fields: Any) -> None:
         async with self._write_slot:
             await self.record(**fields)
 
-    def _record_done(self, task):
+    def _record_done(self, task: asyncio.Task[None]) -> None:
         self._pending.discard(task)
         if not task.cancelled() and task.exception() is not None:
             logger.warning("Request review logging failed")
 
-    async def close(self):
+    async def close(self) -> None:
         self._closing = True
         if self._pending:
             _, pending = await asyncio.wait(tuple(self._pending), timeout=3)
@@ -156,7 +190,9 @@ class RequestLogService:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
 
-    async def page(self, guild_id: int, before: int | None = None, *, kind="all"):
+    async def page(
+        self, guild_id: int, before: int | None = None, *, kind: str = "all"
+    ) -> dict[str, Any]:
         kinds = {"all": ("chat", "auto_chat"), "direct": ("chat",), "automatic": ("auto_chat",), "command": ("command",)}
         if kind not in kinds:
             raise ValueError("Invalid log kind")
@@ -196,7 +232,7 @@ class RequestLogService:
             "retention_days": RETENTION_DAYS,
         }
 
-    async def cleanup(self):
+    async def cleanup(self) -> None:
         async with self.sessions() as session:
             await session.execute(
                 delete(RequestLog).where(
@@ -210,7 +246,7 @@ class RequestLogService:
             )
             await session.commit()
 
-    async def maintenance(self):
+    async def maintenance(self) -> None:
         while True:
             try:
                 async with asyncio.timeout(30):

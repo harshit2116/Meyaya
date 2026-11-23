@@ -1,4 +1,6 @@
 """Context-aware, cheap chat boundaries; never apply decisions to quoted speakers."""
+from __future__ import annotations
+
 import re
 import time
 import unicodedata
@@ -21,12 +23,12 @@ QUESTION_OR_ACTION_WORDS = {
 _COURTESY = {'bro', 'bhai', 'yaar', 'dude', 'mate', 'meyaya'}
 
 
-def _normalize(text):
+def _normalize(text: str | None) -> str:
     text = unicodedata.normalize('NFKC', text or '').casefold().replace('’', "'")
     return ''.join(char for char in text if unicodedata.category(char) != 'Cf')
 
 
-def _fold_words(text):
+def _fold_words(text: str) -> str:
     # Match elongated Romanized speech without changing other scripts.
     return re.sub(r'([a-z])\1+', r'\1', text)
 
@@ -34,12 +36,12 @@ def _fold_words(text):
 _ACK_KEYS = {_fold_words(text) for text in ACKNOWLEDGEMENTS}
 
 
-def meaningful_text(text):
+def meaningful_text(text: str | None) -> str:
     text = re.sub(r'<a?:\w+:\d+>|<@!?\d+>|<@&\d+>|[0-9#*]\ufe0f?\u20e3', ' ', text or '')
     return ' '.join(text.split())
 
 
-def is_empty_reply(text, *, has_attachments=False):
+def is_empty_reply(text: str | None, *, has_attachments: bool = False) -> bool:
     """Emoji and punctuation alone never need a social reply allowance."""
     if has_attachments:
         return False
@@ -50,34 +52,44 @@ def is_empty_reply(text, *, has_attachments=False):
 class ShortReplyBudget:
     """Count delivered social replies per member/channel, without storing text."""
 
-    def __init__(self, limit=3, idle_seconds=1800, capacity=2048):
+    def __init__(
+        self, limit: int = 3, idle_seconds: float = 1800, capacity: int = 2048
+    ) -> None:
         self.limit = limit
         self.idle_seconds = idle_seconds
         self.capacity = capacity
-        self._turns = OrderedDict()
+        self._turns: OrderedDict[tuple[int | None, int, int], tuple[int, float]] = OrderedDict()
 
-    def allows(self, guild_id, channel_id, user_id):
+    def allows(self, guild_id: int | None, channel_id: int, user_id: int) -> bool:
         key = (guild_id, channel_id, user_id)
-        count, last_reply = self._turns.get(key, (0, 0))
+        count, last_reply = self._turns.get(key, (0, 0.0))
         if time.monotonic() - last_reply >= self.idle_seconds:
             self._turns.pop(key, None)
             return True
         return count < self.limit
 
-    def delivered(self, guild_id, channel_id, user_id, *, low_effort):
+    def delivered(
+        self, guild_id: int | None, channel_id: int, user_id: int, *, low_effort: bool
+    ) -> None:
         key = (guild_id, channel_id, user_id)
         if not low_effort:
             self._turns.pop(key, None)
             return
         self.allows(*key)  # Expire the old conversation before incrementing.
-        count, _ = self._turns.get(key, (0, 0))
+        count, _ = self._turns.get(key, (0, 0.0))
         self._turns[key] = (min(count + 1, self.limit), time.monotonic())
         self._turns.move_to_end(key)
         while len(self._turns) > self.capacity:
             self._turns.popitem(last=False)
 
 
-def is_low_effort_reply(text, *, has_attachments=False, previous_text=None, screen_single_words=True):
+def is_low_effort_reply(
+    text: str | None,
+    *,
+    has_attachments: bool = False,
+    previous_text: str | None = None,
+    screen_single_words: bool = True,
+) -> bool:
     """Classify short social turns; the separate budget decides when to pause."""
     if has_attachments:
         return False
@@ -105,7 +117,7 @@ def is_low_effort_reply(text, *, has_attachments=False, previous_text=None, scre
     return False
 
 
-def _own_clauses(text):
+def _own_clauses(text: str | None) -> list[str]:
     text = _normalize(text)
     text = re.sub(r'```[\s\S]*?```|`[^`]*`|"[^"]*"|“[^”]*”|(?<!\w)\x27[^\x27\n]+\x27(?!\w)', '', text)
     text = '\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('>'))
@@ -122,7 +134,7 @@ def _own_clauses(text):
     return [clause.strip() for clause in clauses if clause.strip() and not reporting.search(clause.strip())]
 
 
-def direct_hostility(text, *, directed=False):
+def direct_hostility(text: str | None, *, directed: bool = False) -> bool:
     """Recognize current direct abuse, including the Hinglish forms seen in chat."""
     if not directed and not re.search(r'\bmeyaya\b', _normalize(text)):
         return False
@@ -145,7 +157,7 @@ def direct_hostility(text, *, directed=False):
     return False
 
 
-def model_hostility_eligible(text, *, directed):
+def model_hostility_eligible(text: str | None, *, directed: bool) -> bool:
     """A multilingual model signal may assess only this speaker's unquoted text."""
     return directed and any(not is_low_effort_reply(clause) for clause in _own_clauses(text))
 

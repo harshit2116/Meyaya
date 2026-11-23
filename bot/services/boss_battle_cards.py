@@ -1,17 +1,24 @@
 """Distinct live arenas and defeated-fighter cards for patron encounters."""
 
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from typing import Any, cast
+
 from PIL import Image, ImageDraw, ImageEnhance, ImageOps
 
 from bot.services.fantasy_duel_renderer import fit, shattered_portrait, victory_background
-from bot.services.fantasy_render import portrait, rgb
+from bot.services.fantasy_render import RGB, portrait, rgb
 from bot.services.meyaya_boss_renderer import encode, masked_bar, template
 
 
-def fighter_art(fighter, avatar, size):
+def fighter_art(fighter: Any, avatar: bytes, size: int) -> Image.Image:
     if not fighter.is_boss:
         return portrait(avatar, fighter.name, size).convert("RGB")
     try:
-        source = template(f"{fighter.boss_key or 'meyaya'}-profile.png")
+        source = cast(Callable[[str], Image.Image], cast(Any, template))(
+            f"{fighter.boss_key or 'meyaya'}-profile.png"
+        )
         source = source.crop(
             (
                 0,
@@ -25,18 +32,20 @@ def fighter_art(fighter, avatar, size):
         return portrait(b"", fighter.name, size).convert("RGB")
 
 
-def fighter_colors(state, palettes):
+def fighter_colors(state: Any, palettes: Sequence[Sequence[str]]) -> list[RGB]:
     return [
         (
             rgb("#ff617e" if fighter.boss_key == "veyra" else "#f3b2dc")
             if fighter.is_boss
             else rgb(palette[0] if palette else "#b6b9ed")
         )
-        for fighter, palette in zip((state.left, state.right), palettes)
+        for fighter, palette in zip((state.left, state.right), palettes, strict=False)
     ]
 
 
-def render_boss_arena(state, portraits, palettes):
+def render_boss_arena(
+    state: Any, portraits: Sequence[bytes], palettes: Sequence[Sequence[str]]
+) -> bytes:
     if not state.left.is_boss and state.right.boss_key in {"meyaya", "veyra"}:
         return render_meyaya_scene(state, portraits, intro=False)
     colors = fighter_colors(state, palettes)
@@ -80,7 +89,7 @@ def render_boss_arena(state, portraits, palettes):
             (577, "MP", fighter.mp, fighter.max_mp),
         ):
             if fighter.is_boss:
-                masked_bar(
+                cast(Any, masked_bar)(
                     draw,
                     center - 184,
                     vertical,
@@ -119,10 +128,12 @@ def render_boss_arena(state, portraits, palettes):
         width=125,
         color="#ffbddb",
     )
-    return encode(image)
+    return cast(Callable[[Image.Image], bytes], cast(Any, encode))(image)
 
 
-def render_boss_defeat(state, portraits, palettes):
+def render_boss_defeat(
+    state: Any, portraits: Sequence[bytes], palettes: Sequence[Sequence[str]]
+) -> bytes:
     if (
         not state.left.is_boss
         and state.right.boss_key in {"meyaya", "veyra"}
@@ -131,10 +142,10 @@ def render_boss_defeat(state, portraits, palettes):
         return render_meyaya_victory(state, portraits)
     colors = fighter_colors(state, palettes)
     fighters = [state.left, state.right]
-    portraits = list(portraits)
+    portrait_list = list(portraits)
     if state.winner_id == state.right.user_id:
         fighters.reverse()
-        portraits.reverse()
+        portrait_list.reverse()
         colors.reverse()
     image = victory_background(colors)
     draw = ImageDraw.Draw(image)
@@ -158,7 +169,7 @@ def render_boss_defeat(state, portraits, palettes):
     )
     for index, fighter in enumerate(fighters):
         center = 260 if index == 0 else 840
-        art = fighter_art(fighter, portraits[index], 274)
+        art = fighter_art(fighter, portrait_list[index], 274)
         mask = Image.new("L", art.size)
         ImageDraw.Draw(mask).ellipse((1, 1, 272, 272), fill=255)
         if index == 1 and not draw_result:
@@ -177,10 +188,12 @@ def render_boss_defeat(state, portraits, palettes):
             color=colors[index],
         )
     fit(draw, (550, 615), state.finisher or state.verdict, 16, width=1010, color="#c4a7ee")
-    return encode(image)
+    return cast(Callable[[Image.Image], bytes], cast(Any, encode))(image)
 
 
-def patron_header(image, state, title, lines=()):
+def patron_header(
+    image: Image.Image, state: Any, title: str, lines: Sequence[str] = ()
+) -> bytes:
     """Reserve a separate caption strip so artwork and portraits stay unobstructed."""
     erasure = state.right.boss_key == "veyra"
     canvas = Image.new("RGB", (1100, 640), "#140a10" if erasure else "#fff1ed")
@@ -195,10 +208,17 @@ def patron_header(image, state, title, lines=()):
         # The card font has no emoji glyphs; retain the readable battle narration.
         line = "".join(c for c in line if ord(c) < 0x2600 or c.isalnum()).strip()
         fit(draw, (550, 49 + index * 21), line, 14, width=1010, color=ink)
-    return encode(canvas)
+    return cast(Callable[[Image.Image], bytes], cast(Any, encode))(canvas)
 
 
-def scene_portrait(image, fighter, avatar, center, size, bottom=None):
+def scene_portrait(
+    image: Image.Image,
+    fighter: Any,
+    avatar: bytes,
+    center: tuple[int, int],
+    size: int,
+    bottom: int | None = None,
+) -> None:
     art = fighter_art(fighter, avatar, size)
     mask = Image.new("L", art.size)
     ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
@@ -208,11 +228,13 @@ def scene_portrait(image, fighter, avatar, center, size, bottom=None):
     image.paste(art, (center[0] - size // 2, center[1] - size // 2), mask)
 
 
-def render_meyaya_scene(state, portraits, *, intro):
+def render_meyaya_scene(state: Any, portraits: Sequence[bytes], *, intro: bool) -> bytes:
     erasure = state.right.boss_key == "veyra"
     key = "veyra" if erasure else "meyaya"
     stage = "encounter" if intro else "arena"
-    image = template(f"{key}-{stage}-v2.png").resize((1100, 640), Image.Resampling.LANCZOS)
+    image = cast(Callable[[str], Image.Image], cast(Any, template))(
+        f"{key}-{stage}-v2.png"
+    ).resize((1100, 640), Image.Resampling.LANCZOS)
     centers = (
         (((269, 222), (890, 222)) if intro else ((235, 282), (866, 282)))
         if erasure
@@ -260,7 +282,9 @@ def render_meyaya_scene(state, portraits, *, intro):
         ):
             tint = ("#ec5373" if erasure else "#f3b2dc") if label == "HP" else "#c4a7ee"
             if fighter.is_boss:
-                masked_bar(draw, x - 132, y, value, maximum, width=264, label=label, color=tint)
+                cast(Any, masked_bar)(
+                    draw, x - 132, y, value, maximum, width=264, label=label, color=tint
+                )
             else:
                 fit(draw, (x, y - 17), f"{label} {value} / {maximum}", 15, width=264)
                 draw.rounded_rectangle((x - 132, y, x + 132, y + 14), radius=4, fill="#342239")
@@ -278,7 +302,7 @@ def render_meyaya_scene(state, portraits, *, intro):
         # Use the encounter renderer's text helper so the existing intro hook remains useful.
         from bot.services import meyaya_boss_renderer
 
-        meyaya_boss_renderer.fit(draw, (550, badge_y), "VS", 43, width=100)
+        cast(Any, meyaya_boss_renderer).fit(draw, (550, badge_y), "VS", 43, width=100)
     else:
         fit(draw, (550, badge_y), f"MOVE {state.moves:02}", 19, width=105)
     fit(
@@ -301,10 +325,12 @@ def render_meyaya_scene(state, portraits, *, intro):
     )
 
 
-def render_meyaya_victory(state, portraits):
+def render_meyaya_victory(state: Any, portraits: Sequence[bytes]) -> bytes:
     erasure = state.right.boss_key == "veyra"
     key = "veyra" if erasure else "meyaya"
-    image = template(f"{key}-victory-v2.png").resize((1100, 640), Image.Resampling.LANCZOS)
+    image = cast(Callable[[str], Image.Image], cast(Any, template))(
+        f"{key}-victory-v2.png"
+    ).resize((1100, 640), Image.Resampling.LANCZOS)
     if erasure:
         scene_portrait(image, state.right, portraits[1], (173, 276), 156)
     art = fighter_art(state.left, portraits[0], 156 if erasure else 208)

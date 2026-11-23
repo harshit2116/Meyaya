@@ -1,55 +1,59 @@
 """Permanent awakenings: database first, bounded visual reveal second."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import secrets
 from collections import OrderedDict
 from contextlib import nullcontext
+from datetime import UTC, datetime
 from io import BytesIO
 from time import monotonic
 from types import SimpleNamespace
-from typing import Literal
-from bot.services.fantasy_boss import meyaya_boss_profile
-from bot.services.meyaya_boss_combat import BossDuelEngine, public_fighter
-from bot.services.meyaya_boss_presentation import BossPresentation
-from bot.services.fantasy_boss import veyra_boss_profile, VEYRA_BOSS_ID
-from bot.services.patron_boss_combat import VeyraDuelEngine, PatronClashEngine
-from bot.services.patron_boss_presentation import VeyraPresentation, PatronClashPresentation
-from bot.services.veyra_boss_hud import VeyraBossHud
-from bot.services import meyaya_boss_hud
-from bot.services.patron_clash_hud import PatronClashHud
-from bot.utils.fantasy_profile_target import FantasyProfileTarget
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import discord
 from discord.ext import commands
 
-from bot.logging.health import health
-from bot.services.fantasy_profile import FantasyProfileService, REBIRTH_COOLDOWN, utc
-from datetime import UTC, datetime
-from bot.views.fantasy_rebirth import RebirthView
-from bot.repositories.fantasy_dungeon import FantasyDungeonRepository
-from bot.services.fantasy_dungeon import DungeonService, DungeonUnavailable
 from bot.data.private_identity import AYAYA_USER_ID
-from bot.views.fantasy_dungeon import DungeonView, dungeon_notice
+from bot.logging.health import health
+from bot.repositories.fantasy_duels import FantasyDuelRepository
+from bot.repositories.fantasy_dungeon import FantasyDungeonRepository
+from bot.services import meyaya_boss_hud
+from bot.services.fantasy_boss import VEYRA_BOSS_ID, meyaya_boss_profile, veyra_boss_profile
+from bot.services.fantasy_duel import RULES_VERSION, DuelEngine, Fighter
+from bot.services.fantasy_duel_renderer import render_duel
+from bot.services.fantasy_dungeon import DungeonService, DungeonUnavailable
+from bot.services.fantasy_guardian import GUARDIAN_PERSONALITIES, bound_guardian
+from bot.services.fantasy_profile import REBIRTH_COOLDOWN, FantasyProfileService, utc
 from bot.services.fantasy_render import render_ritual, render_soul_card
 from bot.services.fantasy_weapon_render import render_weapon_acquisition
-from bot.services.fantasy_duel import DuelEngine, Fighter, RULES_VERSION
-from bot.services.fantasy_duel_renderer import render_duel
-from bot.repositories.fantasy_duels import FantasyDuelRepository
-from bot.views.fantasy_duel import DuelChallengeView, DuelResultView
-from bot.services.fantasy_guardian import bound_guardian, GUARDIAN_PERSONALITIES
 from bot.services.guardian_render import guardian_card
+from bot.services.meyaya_boss_combat import BossDuelEngine, public_fighter
+from bot.services.meyaya_boss_presentation import BossPresentation
+from bot.services.patron_boss_combat import PatronClashEngine, VeyraDuelEngine
+from bot.services.patron_boss_presentation import PatronClashPresentation, VeyraPresentation
+from bot.services.patron_clash_hud import PatronClashHud
+from bot.services.veyra_boss_hud import VeyraBossHud
 from bot.utils.command_context import CommandOutput, remember_command_result
 from bot.utils.embeds import meyaya_embed
-from bot.utils.image_work import BoundedImageGate, image_work, animation_work
+from bot.utils.fantasy_profile_target import FantasyProfileTarget
+from bot.utils.image_work import BoundedImageGate, animation_work, image_work
 from bot.views.fantasy import (
     AlreadyAwakenedView,
-    AwakeningView,
     AwakeningRevealView,
+    AwakeningView,
     FantasyProfileView,
     soul_embed,
 )
+from bot.views.fantasy_duel import DuelChallengeView, DuelResultView
+from bot.views.fantasy_dungeon import DungeonView, dungeon_notice
+from bot.views.fantasy_rebirth import RebirthView
+
+if TYPE_CHECKING:
+    from bot.app import MeyayaBot
 
 logger = logging.getLogger(__name__)
 MAX_VIEWS = 64
@@ -57,7 +61,11 @@ BOSS_ENCOUNTER_TIMEOUT = 180
 DUEL_DELIVERY_TIMEOUT = 15
 
 
-def result_summary(profile, member):
+def _safe_text(value: Any) -> str:
+    return discord.utils.escape_markdown(discord.utils.escape_mentions(str(value)))
+
+
+def result_summary(profile: Any, member: Any) -> dict[str, Any]:
     if getattr(profile, "is_meyaya_boss", False):
         return dict(
             target_id=profile.user_id,
@@ -90,48 +98,49 @@ def result_summary(profile, member):
 
 
 class FantasyCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
-        self.views = set()
-        self.pending = {}
-        self.duel_users = {}
-        self.duel_cooldowns = OrderedDict()
-        self.clash_cooldowns = OrderedDict()
+        self.views: set[Any] = set()
+        self.pending: dict[int, Any] = {}
+        self.duel_users: dict[int, Any] = {}
+        self.duel_cooldowns: OrderedDict[int, float] = OrderedDict()
+        self.clash_cooldowns: OrderedDict[int, float] = OrderedDict()
         self.render_slots = BoundedImageGate(capacity=4, concurrency=2)
 
-    def track_view(self, view):
+    def track_view(self, view: Any) -> None:
         if len(self.views) >= MAX_VIEWS:
             view.stop()
             raise commands.CommandError("The Soul Interface is busy. Please try again shortly.")
         self.views.add(view)
 
-    def release_view(self, view):
+    def release_view(self, view: Any) -> None:
         self.views.discard(view)
-        if self.pending.get(view.owner) is view:
-            self.pending.pop(view.owner, None)
+        owner = view.owner
+        if self.pending.get(owner) is view:
+            self.pending.pop(owner, None)
 
-    def cog_unload(self):
+    def cog_unload(self) -> None:  # type: ignore[override]
         for view in tuple(self.views):
             view.finish()
 
-    async def get_profile(self, user_id):
+    async def get_profile(self, user_id: int) -> Any:
         if user_id == getattr(getattr(self.bot, "user", None), "id", None):
             return meyaya_boss_profile(user_id)
         async with asyncio.timeout(10):
             async with self.bot.db_session() as session:
                 return await FantasyProfileService(session).get(user_id)
 
-    async def awaken_user(self, user_id):
+    async def awaken_user(self, user_id: int) -> Any:
         async with asyncio.timeout(10):
             async with self.bot.db_session() as session:
                 return await FantasyProfileService(session).awaken(user_id)
 
-    async def rebirth_user(self, user_id, expected_awakening):
+    async def rebirth_user(self, user_id: int, expected_awakening: datetime) -> Any:
         async with asyncio.timeout(10):
             async with self.bot.db_session() as session:
                 return await FantasyProfileService(session).rebirth(user_id, expected_awakening)
 
-    async def align_user(self, user_id, expected_awakening, choice):
+    async def align_user(self, user_id: int, expected_awakening: datetime, choice: str) -> Any:
         if user_id in self.duel_users:
             from bot.services.fantasy_profile import AlignmentUnavailable
 
@@ -142,7 +151,7 @@ class FantasyCog(commands.Cog):
                     user_id, expected_awakening, choice
                 )
 
-    def report(self, error, stage):
+    def report(self, error: BaseException, stage: str) -> str:
         error_id = health.capture(
             error,
             command=(
@@ -164,7 +173,7 @@ class FantasyCog(commands.Cog):
         )
         return error_id
 
-    async def create_duel(self, left, right):
+    async def create_duel(self, left: Any, right: Any) -> tuple[discord.Embed, Any]:
         boss = right.id == getattr(getattr(self.bot, "user", None), "id", None)
         if left.id == right.id or left.bot or (right.bot and not boss):
             raise commands.CommandError("Choose another human member or Meyaya to challenge.")
@@ -172,7 +181,7 @@ class FantasyCog(commands.Cog):
             raise commands.CommandError("Both fighters must be in this server.")
         ids = (left.id,) if boss else (left.id, right.id)
 
-        def available():
+        def available() -> None:
             if any(user_id in self.pending for user_id in ids):
                 raise commands.CommandError("Finish the open awakening or rebirth before battling.")
             if any(user_id in self.duel_users for user_id in ids):
@@ -187,18 +196,20 @@ class FantasyCog(commands.Cog):
         available()
         await self.check_dungeon_activity(*ids)
         members = (left, right)
-        loaded = await asyncio.gather(
+        loaded: list[Any] = await asyncio.gather(
             *(self.get_profile(member.id) for member in members), return_exceptions=True
         )
-        for profile in loaded:
-            if isinstance(profile, BaseException):
-                raise profile
-        profiles = {member.id: profile for member, profile in zip(members, loaded)}
+        for item in loaded:
+            if isinstance(item, BaseException):
+                raise item
+        profiles: dict[int, Any] = {
+            member.id: profile for member, profile in zip(members, loaded, strict=True)
+        }
         if any(profile is None for profile in profiles.values()):
             raise commands.CommandError("Both fighters need a saved identity. Use `/awaken` first.")
         # Recheck after database awaits; admission and reservation are atomic on this loop.
         available()
-        view = DuelChallengeView(self, left, right, profiles)
+        view = cast(Any, DuelChallengeView)(self, left, right, profiles)
         self.track_view(view)
         for user_id in ids:
             self.duel_users[user_id] = view
@@ -206,16 +217,15 @@ class FantasyCog(commands.Cog):
         self.duel_cooldowns.move_to_end(left.id)
         while len(self.duel_cooldowns) > 512:
             self.duel_cooldowns.popitem(last=False)
-        safe = lambda text: discord.utils.escape_markdown(discord.utils.escape_mentions(str(text)))
         embed = meyaya_embed(
             "The arena calls",
-            f"**{safe(left.display_name)}** challenges **{safe(right.display_name)}**.\nOnly the challenged member can accept.\n\nTemporary combat · no XP, rewards or permanent changes",
+            f"**{_safe_text(left.display_name)}** challenges **{_safe_text(right.display_name)}**.\nOnly the challenged member can accept.\n\nTemporary combat · no XP, rewards or permanent changes",
             icon="⚔",
         )
         for member in (left, right):
             p = profiles[member.id]
             embed.add_field(
-                name=safe(member.display_name),
+                name=_safe_text(member.display_name),
                 value=f"{p.class_name} · {p.affinity_name}\n{p.weapon_name} ({p.weapon_rarity})",
                 inline=True,
             )
@@ -224,13 +234,13 @@ class FantasyCog(commands.Cog):
         )
         return embed, view
 
-    async def run_duel(self, view, interaction):
+    async def run_duel(self, view: Any, interaction: Any) -> None:
         boss_key = getattr(view.profiles[view.right.id], "boss_key", "")
         is_boss = bool(boss_key) or view.right.id == getattr(
             getattr(self.bot, "user", None), "id", None
         )
         clash = getattr(view, "patron_clash", False)
-        engine_type = (
+        engine_type: Any = (
             PatronClashEngine
             if clash
             else (
@@ -239,28 +249,25 @@ class FantasyCog(commands.Cog):
                 else BossDuelEngine if is_boss else DuelEngine
             )
         )
-        engine = engine_type(
-            *(
-                Fighter.snapshot(view.profiles[m.id], m.display_name)
-                for m in (view.left, view.right)
-            ),
-            seed=secrets.randbits(63),
-        )
+        left_fighter = Fighter.snapshot(view.profiles[view.left.id], view.left.display_name)
+        right_fighter = Fighter.snapshot(view.profiles[view.right.id], view.right.display_name)
+        engine: Any = engine_type(left_fighter, right_fighter, seed=secrets.randbits(63))
         state = engine.state
         # Keep immutable starting combat inputs for reproducibility, not full profiles.
         initial = [public_fighter(state.left), public_fighter(state.right)]
-        portraits, palettes = [], []
-        result_view = None
-        battle_message = None
+        portraits: list[bytes] = []
+        palettes: list[Any] = []
+        result_view: Any = None
+        battle_message: Any = None
         image_delivery_failed = False
         boss_comment = state.dialogue
-        presentation = (
+        presentation: Any = (
             PatronClashPresentation
             if clash
             else VeyraPresentation if boss_key == "veyra" else BossPresentation
         )
-        cinematic = presentation(self, view, interaction.channel) if is_boss else None
-        veyra_hud = None
+        cinematic: Any = presentation(self, view, interaction.channel) if is_boss else None
+        veyra_hud: Any = None
         if clash:
             veyra_hud = PatronClashHud(self, view, interaction.channel)
         if getattr(view, "boss_hud_trial", False) and boss_key in {"veyra", "meyaya"} and not clash:
@@ -293,7 +300,7 @@ class FantasyCog(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
 
-            async def inspect_fighter(member):
+            async def inspect_fighter(member: Any) -> tuple[bytes, Any]:
                 if getattr(member, "patron_key", None) or clash:
                     return b"", ()
                 try:
@@ -317,17 +324,33 @@ class FantasyCog(commands.Cog):
             if cinematic and not veyra_hud:
                 await cinematic.intro(state)
 
-            async def frame(*, intro=False, outcome=False, exchange=False, controls=None, history_note=""):
+            async def frame(
+                *,
+                intro: bool = False,
+                outcome: bool = False,
+                exchange: bool = False,
+                controls: Any = None,
+                history_note: str = "",
+            ) -> Any:
                 nonlocal battle_message, boss_comment, image_delivery_failed
                 if view.closed:
                     raise commands.CommandError("This duel has ended.")
                 if veyra_hud:
                     async with asyncio.timeout(DUEL_DELIVERY_TIMEOUT):
-                        return await veyra_hud.update(engine, intro=intro, final=outcome, history_note=history_note,
-                                                     **({"exchange": exchange} if clash else {}))
-                safe = lambda text: discord.utils.escape_markdown(
-                    discord.utils.escape_mentions(str(text))
-                )
+                        if clash:
+                            return await veyra_hud.update(
+                                engine,
+                                intro=intro,
+                                final=outcome,
+                                history_note=history_note,
+                                exchange=exchange,
+                            )
+                        return await veyra_hud.update(
+                            engine,
+                            intro=intro,
+                            final=outcome,
+                            history_note=history_note,
+                        )
                 title = (
                     "An encounter begins"
                     if intro
@@ -339,20 +362,21 @@ class FantasyCog(commands.Cog):
                 )
                 lines = [
                     (
-                        f"**{safe(f.name)}** · HP ??? / ??? · MP ??? / ???\n"
-                        f"✦ **{safe(f.class_name)}** · Soul Pressure: UNREADABLE"
+                        f"**{_safe_text(f.name)}** · HP ??? / ??? · MP ??? / ???\n"
+                        f"✦ **{_safe_text(f.class_name)}** · Soul Pressure: UNREADABLE"
                         if f.is_boss
-                        else f"**{safe(f.name)}** · HP {f.hp}/{f.max_hp} · MP {f.mp}/{f.max_mp}"
+                        else f"**{_safe_text(f.name)}** · HP {f.hp}/{f.max_hp} · MP {f.mp}/{f.max_mp}"
                     )
                     for f in (state.left, state.right)
                 ]
+                winner: str | None = None
                 if state.finished:
                     winner = next(
                         (f.name for f in (state.left, state.right) if f.user_id == state.winner_id),
                         None,
                     )
                     lines.append(
-                        f"\n**{safe(winner)} wins!**"
+                        f"\n**{_safe_text(winner)} wins!**"
                         if winner
                         else "\n**Draw · neither fighter yields.**"
                     )
@@ -361,7 +385,7 @@ class FantasyCog(commands.Cog):
                     )
                 if state.history:
                     lines.append("\n**Recent events · newest first**")
-                    lines.extend(safe(line) for line in reversed(state.history[-3:]))
+                    lines.extend(_safe_text(line) for line in reversed(state.history[-3:]))
                 if history_note:
                     lines.append(history_note)
                 embed = meyaya_embed(title, "\n".join(lines), icon="⚔")
@@ -369,11 +393,11 @@ class FantasyCog(commands.Cog):
                 if cinematic:
                     embed.colour = boss_colour
                 embed.set_footer(text=f"{state.arena[0]} · Temporary combat · identities unchanged")
-                png = None
+                png: bytes | None = None
                 try:
                     if not image_delivery_failed or state.finished:
                         async with self.render_slots:
-                            png = await image_work(
+                            png = await cast(Any, image_work)(
                                 render_duel, state, tuple(portraits), tuple(palettes), intro=intro
                             )
                 except Exception as error:
@@ -384,18 +408,18 @@ class FantasyCog(commands.Cog):
                 if cinematic and not intro:
                     if state.dialogue:
                         boss_comment = state.dialogue
-                    boss_content = f"## {safe(title if state.finished else state.boss_form)}"
+                    boss_content = f"## {_safe_text(title if state.finished else state.boss_form)}"
                     if not state.finished and boss_comment:
-                        boss_content += f"\n**{safe(boss_comment)}**"
+                        boss_content += f"\n**{_safe_text(boss_comment)}**"
                     if state.finished:
                         boss_content += "\n" + (
-                            f"**{safe(winner)} wins.**" if winner else "**Neither fighter yields.**"
+                            f"**{_safe_text(winner)} wins.**" if winner else "**Neither fighter yields.**"
                         )
                     elif state.history:
-                        boss_content += "\n" + "\n".join(safe(line) for line in state.history[-2:])
+                        boss_content += "\n" + "\n".join(_safe_text(line) for line in state.history[-2:])
                     boss_content = boss_content[:1950]
                 # Every boss frame uses a full-size image inside its themed embed.
-                kwargs = dict(
+                kwargs: dict[str, Any] = dict(
                     content=boss_content
                     or (history_note if outcome and png and history_note else None),
                     embed=(
@@ -412,7 +436,7 @@ class FantasyCog(commands.Cog):
                     allowed_mentions=discord.AllowedMentions.none(),
                 )
 
-                async def deliver_frame():
+                async def deliver_frame() -> Any:
                     if intro or outcome or battle_message is None:
                         send_kwargs = dict(kwargs)
                         send_kwargs["files"] = send_kwargs.pop("attachments")
@@ -456,9 +480,10 @@ class FantasyCog(commands.Cog):
                 if not state.finished or clash:
                     await asyncio.sleep(veyra_hud.hold_seconds if clash else 1.5)
             note = ""
-            summary = dict(
+            summary: dict[str, Any] = dict(
                 inputs=initial,
                 moves=state.moves,
+                actual_rounds=state.round,
                 verdict=state.verdict,
                 finisher=state.finisher,
                 fighters=[
@@ -501,7 +526,7 @@ class FantasyCog(commands.Cog):
                                     winner_id=state.winner_id,
                                     seed=state.seed,
                                     rules_version=RULES_VERSION,
-                                    rounds=state.round,
+                                    rounds=max(1, min(60, state.round)),
                                     arena=state.arena[0],
                                     summary=summary,
                                 )
@@ -515,7 +540,7 @@ class FantasyCog(commands.Cog):
                 await cinematic.finish(state, history_note=note)
                 message = cinematic.message
             else:
-                result_view = DuelResultView(self, view.left, view.right, view.profiles, state)
+                result_view = cast(Any, DuelResultView)(self, view.left, view.right, view.profiles, state)
                 result_view.task = view.task
                 self.release_view(view)
                 self.track_view(result_view)
@@ -523,9 +548,12 @@ class FantasyCog(commands.Cog):
                     outcome=True, controls=result_view, history_note=note
                 )
                 message = result_view.message
-            outputs = getattr(self.bot, "_meyaya_command_outputs", None)
+            outputs: OrderedDict[tuple[int, int], tuple[float, CommandOutput]] | None = getattr(
+                self.bot, "_meyaya_command_outputs", None
+            )
             if outputs is None:
-                outputs = self.bot._meyaya_command_outputs = OrderedDict()
+                outputs = OrderedDict()
+                cast(Any, self.bot)._meyaya_command_outputs = outputs
             outputs[(message.channel.id, message.id)] = (
                 monotonic(),
                 CommandOutput(
@@ -584,7 +612,7 @@ class FantasyCog(commands.Cog):
                 result_view.finish()
             try:
                 async with asyncio.timeout(2):
-                    edit = (
+                    edit: Any = (
                         battle_message.edit
                         if battle_message
                         else interaction.edit_original_response
@@ -607,13 +635,13 @@ class FantasyCog(commands.Cog):
             raise
 
     @staticmethod
-    def view_guild_id(view):
+    def view_guild_id(view: Any) -> int | None:
         return getattr(view, "guild_id", None) or getattr(
             getattr(getattr(view, "left", None), "guild", None), "id", None
         )
 
     @commands.Cog.listener()
-    async def on_member_remove(self, member):
+    async def on_member_remove(self, member: discord.Member) -> None:
         for view in tuple(self.views):
             if (
                 member.id in getattr(view, "participant_ids", ())
@@ -622,7 +650,7 @@ class FantasyCog(commands.Cog):
                 view.finish()
 
     @commands.Cog.listener()
-    async def on_raw_member_remove(self, payload):
+    async def on_raw_member_remove(self, payload: discord.RawMemberRemoveEvent) -> None:
         for view in tuple(self.views):
             if (
                 payload.user.id in getattr(view, "participant_ids", ())
@@ -631,13 +659,13 @@ class FantasyCog(commands.Cog):
                 view.finish()
 
     @commands.Cog.listener()
-    async def on_guild_remove(self, guild):
+    async def on_guild_remove(self, guild: discord.Guild) -> None:
         for view in tuple(self.views):
             if self.view_guild_id(view) == guild.id:
                 view.finish()
 
     @commands.Cog.listener()
-    async def on_raw_message_delete(self, payload):
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
         for view in tuple(self.views):
             if payload.message_id in {
                 getattr(getattr(view, "message", None), "id", None),
@@ -645,19 +673,20 @@ class FantasyCog(commands.Cog):
             } and hasattr(view, "participant_ids"):
                 view.finish()
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         description="Challenge a member, or face Meyaya's adaptive final-boss encounter."
     )
     @commands.guild_only()
     @commands.cooldown(1, 30, commands.BucketType.user)
-    async def versus(self, ctx, member: FantasyProfileTarget):
+    async def versus(self, ctx: commands.Context[Any], member: FantasyProfileTarget) -> None:
         await ctx.defer()
         if isinstance(member, str):
             await self.start_patron_encounter(ctx, member)
             return
-        embed, view = await self.create_duel(ctx.author, member)
+        target: Any = member
+        embed, view = await self.create_duel(ctx.author, target)
         try:
-            if member.id == getattr(getattr(self.bot, "user", None), "id", None):
+            if target.id == getattr(getattr(self.bot, "user", None), "id", None):
                 view.running = True
                 for child in view.children:
                     child.disabled = True
@@ -681,10 +710,10 @@ class FantasyCog(commands.Cog):
                 finally:
                     view.finish()
                 return
-            remember_command_result(
+            cast(Any, remember_command_result)(
                 ctx,
                 challenger_id=ctx.author.id,
-                opponent_id=member.id,
+                opponent_id=target.id,
                 status="Awaiting opponent consent; no battle result yet.",
             )
             view.message = await ctx.send(
@@ -694,8 +723,13 @@ class FantasyCog(commands.Cog):
             view.finish()
             raise
 
-    async def start_patron_encounter(self, ctx, patron, *, clash=False):
-        def available():
+    async def start_patron_encounter(
+        self, ctx: commands.Context[Any], patron: str, *, clash: bool = False
+    ) -> None:
+        assert ctx.guild is not None
+        guild = ctx.guild
+
+        def available() -> None:
             activity = self.duel_users.get(ctx.author.id)
             if ctx.author.id in self.pending or (
                 activity is not None and not isinstance(activity, DungeonView)
@@ -707,35 +741,36 @@ class FantasyCog(commands.Cog):
                 raise commands.CommandError(
                     "Let the arena settle for 15 seconds before another challenge."
                 )
-            if clash and monotonic() - self.clash_cooldowns.get(ctx.guild.id, -100) < 60:
+            if clash and monotonic() - self.clash_cooldowns.get(guild.id, -100) < 60:
                 raise commands.CommandError("Let this world's collision settle for 60 seconds.")
 
         available()
         # Patron fights use temporary snapshots. A saved descent can be paused
         # without abandoning it or changing its HP, progression, or rewards.
+        assert self.bot.user is not None
         meyaya = SimpleNamespace(
             id=self.bot.user.id,
-            guild=ctx.guild,
+            guild=guild,
             bot=True,
             display_name="Meyaya",
             patron_key="meyaya",
         )
         veyra = SimpleNamespace(
-            id=VEYRA_BOSS_ID, guild=ctx.guild, bot=True, display_name="Veyra", patron_key="veyra"
+            id=VEYRA_BOSS_ID, guild=guild, bot=True, display_name="Veyra", patron_key="veyra"
         )
-        left = meyaya if clash else ctx.author
-        right = veyra if clash or patron == "veyra" else meyaya
+        left: Any = meyaya if clash else ctx.author
+        right: Any = veyra if clash or patron == "veyra" else meyaya
         left_profile = meyaya_boss_profile(left.id) if clash else await self.get_profile(left.id)
         if left_profile is None:
             raise commands.CommandError(
                 "Awaken your soul with `/awaken` before challenging a patron."
             )
-        profiles = {
+        profiles: dict[int, Any] = {
             left.id: left_profile,
             right.id: veyra_boss_profile() if right is veyra else meyaya_boss_profile(right.id),
         }
         available()
-        view = DuelChallengeView(self, left, right, profiles)
+        view = cast(Any, DuelChallengeView)(self, left, right, profiles)
         view.owner = ctx.author.id
         view.participant_ids = (ctx.author.id,)
         view.patron_clash = clash
@@ -757,8 +792,8 @@ class FantasyCog(commands.Cog):
         while len(self.duel_cooldowns) > 512:
             self.duel_cooldowns.popitem(last=False)
         if clash:
-            self.clash_cooldowns[ctx.guild.id] = monotonic()
-            self.clash_cooldowns.move_to_end(ctx.guild.id)
+            self.clash_cooldowns[guild.id] = monotonic()
+            self.clash_cooldowns.move_to_end(guild.id)
             while len(self.clash_cooldowns) > 512:
                 self.clash_cooldowns.popitem(last=False)
         view.task = asyncio.current_task()
@@ -775,12 +810,16 @@ class FantasyCog(commands.Cog):
         finally:
             view.finish()
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         description="Challenge Meyaya or Veyra, or witness their world-shattering clash."
     )
     @commands.guild_only()
     @commands.cooldown(1, 30, commands.BucketType.user)
-    async def bossfight(self, ctx, boss: Literal["meyaya", "veyra", "clash"] = "veyra"):
+    async def bossfight(
+        self,
+        ctx: commands.Context[Any],
+        boss: Literal["meyaya", "veyra", "clash"] = "veyra",
+    ) -> None:
         await ctx.defer()
         await self.start_patron_encounter(
             ctx, "veyra" if boss == "clash" else boss, clash=boss == "clash"
@@ -791,37 +830,48 @@ class FantasyCog(commands.Cog):
     )
     @commands.guild_only()
     @commands.cooldown(1, 60, commands.BucketType.guild)
-    async def bossbattle(self, ctx):
+    async def bossbattle(self, ctx: commands.Context[Any]) -> None:
         await ctx.defer()
         await self.start_patron_encounter(ctx, "veyra", clash=True)
 
-    @commands.hybrid_command(description="View the soul-bound guardian linked to an awakening.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        description="View the soul-bound guardian linked to an awakening."
+    )
     @commands.cooldown(1, 8, commands.BucketType.user)
     @discord.app_commands.describe(preview="Meet another companion without changing your bound guardian",
                                    patron="View Meyaya or Veyra's exclusive sovereign summon")
-    async def guardian(self, ctx, member: FantasyProfileTarget | None = None,
-                       preview: Literal["hare", "cat", "axolotl", "kirin", "wolf", "serpent", "tanuki", "crane", "ferret", "bat", "fenrir", "seraph", "leviathan"] | None = None,
-                       patron: Literal["meyaya", "veyra"] | None = None):
+    async def guardian(
+        self,
+        ctx: commands.Context[Any],
+        member: FantasyProfileTarget | None = None,
+        preview: Literal["hare", "cat", "axolotl", "kirin", "wolf", "serpent", "tanuki", "crane", "ferret", "bat", "fenrir", "seraph", "leviathan"] | None = None,
+        patron: Literal["meyaya", "veyra"] | None = None,
+    ) -> None:
         await ctx.defer()
         if patron and member is not None:
             raise commands.CommandError("Choose either a member or a patron to view.")
-        patron = patron or (member if isinstance(member, str) else None)
-        if patron:
-            profile = veyra_boss_profile() if patron == "veyra" else meyaya_boss_profile(self.bot.user.id)
-            member = SimpleNamespace(id=profile.user_id, display_name="Veyra" if patron == "veyra" else "Meyaya")
+        chosen_patron: str | None = patron or (member if isinstance(member, str) else None)
+        target: Any
+        if chosen_patron:
+            assert self.bot.user is not None
+            profile = veyra_boss_profile() if chosen_patron == "veyra" else meyaya_boss_profile(self.bot.user.id)
+            target = SimpleNamespace(
+                id=profile.user_id,
+                display_name="Veyra" if chosen_patron == "veyra" else "Meyaya",
+            )
         else:
-            member = member or ctx.author
-            profile = await self.get_profile(member.id)
+            target = member or ctx.author
+            profile = await self.get_profile(target.id)
         if profile is None:
             await ctx.send("Their soul has not awakened. Use `/awaken` before meeting a guardian.")
             return
         if preview and getattr(profile, "is_meyaya_boss", False):
             raise commands.CommandError("Sovereign summons are exclusive to their patron. Preview with a player's awakening instead.")
         g = bound_guardian(profile, preview_species=preview)
-        remember_command_result(
+        cast(Any, remember_command_result)(
             ctx,
-            target_id=member.id,
-            target_name=member.display_name,
+            target_id=target.id,
+            target_name=target.display_name,
             guardian=g.name,
             summon_rarity=g.rarity,
             summon_chance=g.summon_chance,
@@ -841,10 +891,12 @@ class FantasyCog(commands.Cog):
             + ("\n\nPreview only · Your bound companion is unchanged." if preview else ""),
             icon="✦",
         )
-        data = None
+        data: bytes | None = None
         try:
             async with self.render_slots:
-                data = await image_work(guardian_card, g, member.display_name, preview=preview is not None)
+                data = await cast(Any, image_work)(
+                    guardian_card, g, target.display_name, preview=preview is not None
+                )
         except Exception as error:
             self.report(error, "guardian_render")
         try:
@@ -860,11 +912,13 @@ class FantasyCog(commands.Cog):
                 raise
             await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    async def card_bytes(self, profile, member):
+    async def card_bytes(self, profile: Any, member: Any) -> bytes:
         async with self.render_slots:
             if getattr(profile, "is_meyaya_boss", False):
-                return await image_work(render_soul_card, profile, member.display_name)
-            avatar = b""
+                return cast(
+                    bytes, await cast(Any, image_work)(render_soul_card, profile, member.display_name)
+                )
+            avatar: bytes | None = b""
             asset = None
             try:
                 asset = member.display_avatar.with_size(512).with_format("png")
@@ -883,34 +937,50 @@ class FantasyCog(commands.Cog):
                             avatar = await read()
                     except Exception as error:
                         self.report(error, "fantasy_avatar")
-            return await image_work(render_soul_card, profile, member.display_name, avatar)
+            return cast(
+                bytes,
+                await cast(Any, image_work)(render_soul_card, profile, member.display_name, avatar),
+            )
 
-    async def weapon_bytes(self, profile):
+    async def weapon_bytes(self, profile: Any) -> bytes | None:
         try:
-            return await animation_work(render_weapon_acquisition, profile)
+            return cast(bytes, await cast(Any, animation_work)(render_weapon_acquisition, profile))
         except Exception as error:
             self.report(error, "fantasy_weapon_render")
             return None
 
-    async def response(self, profile, member, owner):
+    async def response(
+        self, profile: Any, member: Any, owner: int
+    ) -> tuple[discord.Embed, Any, bytes | None]:
         png = None
         try:
             png = await self.card_bytes(profile, member)
         except Exception as error:
             self.report(error, "fantasy_render")
-        view = FantasyProfileView(self, owner, profile, member.display_name, image=bool(png))
+        view = cast(Any, FantasyProfileView)(self, owner, profile, member.display_name, image=bool(png))
         self.track_view(view)
-        return soul_embed(profile, member.display_name, image=bool(png), bot=self.bot), view, png
+        return (
+            cast(Any, soul_embed)(profile, member.display_name, image=bool(png), bot=self.bot),
+            view,
+            png,
+        )
 
-    async def reveal(self, interaction, profile, member, owner, previous=None):
+    async def reveal(
+        self,
+        interaction: Any,
+        profile: Any,
+        member: Any,
+        owner: int,
+        previous: Any = None,
+    ) -> None:
         if previous is not None:
             previous.finish()
-        view = AwakeningRevealView(self, owner, profile, member)
+        view = cast(Any, AwakeningRevealView)(self, owner, profile, member)
         self.track_view(view)
         self.pending[owner] = view
-        gif = None
+        gif: bytes | None = None
         try:
-            gif = await animation_work(render_ritual, profile)
+            gif = await cast(Any, animation_work)(render_ritual, profile)
         except Exception as error:
             self.report(error, "fantasy_reveal")
         try:
@@ -940,7 +1010,16 @@ class FantasyCog(commands.Cog):
             view.finish()
             raise
 
-    async def deliver(self, interaction, profile, member, owner, *, reveal=False, previous=None):
+    async def deliver(
+        self,
+        interaction: Any,
+        profile: Any,
+        member: Any,
+        owner: int,
+        *,
+        reveal: bool = False,
+        previous: Any = None,
+    ) -> None:
         from bot.data.fantasy_alignment import patron_for
 
         if (
@@ -967,7 +1046,7 @@ class FantasyCog(commands.Cog):
                 )
             except discord.HTTPException:
                 view.image = False
-                embed = soul_embed(profile, member.display_name, bot=self.bot)
+                embed = cast(Any, soul_embed)(profile, member.display_name, bot=self.bot)
                 try:
                     message = await interaction.edit_original_response(
                         content=None,
@@ -986,10 +1065,12 @@ class FantasyCog(commands.Cog):
             view.message = message
             # Component edits bypass TimedContext.send; retain the actual result
             # so replies to this image-only reveal still have useful context.
-            outputs = getattr(self.bot, "_meyaya_command_outputs", None)
+            outputs: OrderedDict[tuple[int, int], tuple[float, CommandOutput]] | None = getattr(
+                self.bot, "_meyaya_command_outputs", None
+            )
             if outputs is None:
                 outputs = OrderedDict()
-                self.bot._meyaya_command_outputs = outputs
+                cast(Any, self.bot)._meyaya_command_outputs = outputs
             outputs[(message.channel.id, message.id)] = (
                 monotonic(),
                 CommandOutput(
@@ -1005,11 +1086,11 @@ class FantasyCog(commands.Cog):
             view.finish()
             raise
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         description="Replace your fantasy build after confirmation. Available once every 24 hours."
     )
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def rebirth(self, ctx):
+    async def rebirth(self, ctx: commands.Context[Any]) -> None:
         await ctx.defer()
         if ctx.author.id in self.duel_users or ctx.author.id in self.pending:
             await ctx.send("Finish your current battle, awakening or rebirth first.")
@@ -1028,15 +1109,12 @@ class FantasyCog(commands.Cog):
         if ctx.author.id in self.duel_users or ctx.author.id in self.pending:
             await ctx.send("Finish your current fantasy activity first.")
             return
-        view = RebirthView(self, ctx.author.id, profile)
+        view = cast(Any, RebirthView)(self, ctx.author.id, profile)
         self.track_view(view)
         self.pending[ctx.author.id] = view
-        safe = lambda value: discord.utils.escape_markdown(
-            discord.utils.escape_mentions(str(value))
-        )
         embed = meyaya_embed(
             "Rebirth · a new soul",
-            f"Replace **{safe(profile.class_name)} / {safe(profile.affinity_name)}** and **{safe(profile.weapon_name)}**?\n\n"
+            f"Replace **{_safe_text(profile.class_name)} / {_safe_text(profile.affinity_name)}** and **{_safe_text(profile.weapon_name)}**?\n\n"
             "Your class, base stats, weapon identity, abilities, guardian and alignment will be replaced across every server. "
             "A new random build is saved immediately and revealed at your pace. There is no undo.\n\n"
             "Total XP, Soul Level, Weapon Level, Highest Floor, rebirth count and battle history remain. "
@@ -1051,36 +1129,42 @@ class FantasyCog(commands.Cog):
             view.finish()
             raise
 
-    async def check_dungeon_activity(self, *user_ids):
+    async def check_dungeon_activity(self, *user_ids: int) -> None:
+        if not user_ids:
+            return
         async with asyncio.timeout(10):
             async with self.bot.db_session() as session:
                 repository = FantasyDungeonRepository(session)
-                for user_id in user_ids:
-                    if await repository.active(user_id):
-                        raise commands.CommandError("Resume `/dungeon` and finish or abandon your active run first.")
+                if await repository.any_active(user_ids):
+                    raise commands.CommandError("Resume `/dungeon` and finish or abandon your active run first.")
 
-    @commands.hybrid_command(description="Enter or resume the Tenfold Descent: ten worlds, one soul.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        description="Enter or resume the Tenfold Descent: ten worlds, one soul."
+    )
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def dungeon(self, ctx):
+    async def dungeon(self, ctx: commands.Context[Any]) -> None:
+        assert ctx.guild is not None
         control = ""
         if getattr(ctx, "interaction", None) is None and getattr(ctx, "view", None) is not None:
             control = " ".join(ctx.view.read_rest().split()).casefold()
         if control and (ctx.author.id != AYAYA_USER_ID or (ctx.prefix or "").strip().casefold() != "uwu"):
-            await ctx.send(view=dungeon_notice("These dungeon controls are owner-only and use the `uwu` prefix."))
+            await ctx.send(view=cast(Any, dungeon_notice)("These dungeon controls are owner-only and use the `uwu` prefix."))
             return
         if control and control not in {"restart", "skip", "skip floor"}:
-            await ctx.send(view=dungeon_notice("Use `uwu dungeon restart`, `uwu dungeon skip`, or `uwu dungeon skip floor`."))
+            await ctx.send(view=cast(Any, dungeon_notice)("Use `uwu dungeon restart`, `uwu dungeon skip`, or `uwu dungeon skip floor`."))
             return
         await ctx.defer()
         owner = ctx.author.id
         existing = self.duel_users.get(owner)
         if owner in self.pending or (existing is not None and not isinstance(existing, DungeonView)):
-            await ctx.send(view=dungeon_notice("Finish your current fantasy activity before opening the descent."))
+            await ctx.send(view=cast(Any, dungeon_notice)("Finish your current fantasy activity before opening the descent."))
             return
         if len(self.duel_users) >= 32 and existing is None:
-            await ctx.send(view=dungeon_notice("The arenas are busy. Try again shortly."))
+            await ctx.send(view=cast(Any, dungeon_notice)("The arenas are busy. Try again shortly."))
             return
+        profile: Any
+        run: Any
         async with asyncio.timeout(10):
             async with existing.lock if control and isinstance(existing, DungeonView) else nullcontext():
                 try:
@@ -1091,28 +1175,35 @@ class FantasyCog(commands.Cog):
                         else:
                             profile, run = await service.read(owner)
                 except DungeonUnavailable as error:
-                    await ctx.send(view=dungeon_notice(str(error)))
+                    await ctx.send(view=cast(Any, dungeon_notice)(str(error)))
                     return
                 if control and isinstance(existing, DungeonView):
                     existing.finish()
         if profile is None:
-            await ctx.send(view=dungeon_notice("Use `/awaken` before beginning the descent."))
+            await ctx.send(view=cast(Any, dungeon_notice)("Use `/awaken` before beginning the descent."))
             return
         if profile.alignment not in {"meyaya", "veyra"} and not getattr(profile, "ending_route", None):
-            await ctx.send(view=dungeon_notice("Choose your patron through `/fantasyprofile` first. Your oath matters here."))
+            await ctx.send(view=cast(Any, dungeon_notice)("Choose your patron through `/fantasyprofile` first. Your oath matters here."))
             return
         # Revalidate admission after database awaits, then supersede old UI only.
         if owner in self.pending or (self.duel_users.get(owner) is not None and not isinstance(self.duel_users[owner], DungeonView)):
-            await ctx.send(view=dungeon_notice("Finish your current fantasy activity first."))
+            await ctx.send(view=cast(Any, dungeon_notice)("Finish your current fantasy activity first."))
             return
         if len(self.duel_users) >= 32 and owner not in self.duel_users:
-            await ctx.send(view=dungeon_notice("The arenas are busy. Try again shortly."))
+            await ctx.send(view=cast(Any, dungeon_notice)("The arenas are busy. Try again shortly."))
             return
         for old in tuple(self.views):
             if isinstance(old, DungeonView) and old.owner == owner:
                 old.finish()
-        view = DungeonView(self, owner, profile, run, guild_id=ctx.guild.id,
-                           player_user=ctx.author, show_landing=not control)
+        view = cast(Any, DungeonView)(
+            self,
+            owner,
+            profile,
+            run,
+            guild_id=ctx.guild.id,
+            player_user=ctx.author,
+            show_landing=not control,
+        )
         self.track_view(view)
         if run is None or run.phase != "complete":
             self.duel_users[owner] = view
@@ -1130,9 +1221,11 @@ class FantasyCog(commands.Cog):
             view.finish()
             raise
 
-    @commands.hybrid_command(description="Reveal the permanent fantasy identity hidden within you.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        description="Reveal the permanent fantasy identity hidden within you."
+    )
     @commands.cooldown(1, 15, commands.BucketType.user)
-    async def awaken(self, ctx):
+    async def awaken(self, ctx: commands.Context[Any]) -> None:
         await ctx.defer()
         if ctx.author.id in self.duel_users:
             await ctx.send("Finish your current battle before opening an awakening.")
@@ -1153,15 +1246,16 @@ class FantasyCog(commands.Cog):
         if ctx.author.id in self.pending or ctx.author.id in self.duel_users:
             await ctx.send("Finish your current fantasy activity first.")
             return
+        view: Any
         if profile is not None:
-            view = AlreadyAwakenedView(self, ctx.author.id, profile, ctx.author)
+            view = cast(Any, AlreadyAwakenedView)(self, ctx.author.id, profile, ctx.author)
             embed = meyaya_embed(
                 "Your soul has already awakened",
                 "The same identity follows you across servers until you choose `/rebirth`.\n\nOpen your Soul Interface below.",
                 icon="✦",
             )
         else:
-            view = AwakeningView(self, ctx.author.id)
+            view = cast(Any, AwakeningView)(self, ctx.author.id)
             embed = meyaya_embed(
                 "Something within you is stirring…",
                 "*A dormant signature waits beyond the veil.*\n\nYour class, affinity, weapon and potential will become a **saved identity**. It stays until you choose `/rebirth` (24-hour cooldown).\n\n**Will you let it answer?**",
@@ -1178,24 +1272,28 @@ class FantasyCog(commands.Cog):
             view.finish()
             raise
 
-    @commands.hybrid_command(description="View an awakened fantasy character.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        description="View an awakened fantasy character."
+    )
     @commands.cooldown(1, 8, commands.BucketType.user)
-    async def fantasyprofile(self, ctx, member: FantasyProfileTarget | None = None):
+    async def fantasyprofile(
+        self, ctx: commands.Context[Any], member: FantasyProfileTarget | None = None
+    ) -> None:
         await ctx.defer()
         if isinstance(member, str) and member in {"meyaya", "veyra"}:
             from bot.services.meyaya_boss_renderer import render_patron_profile
             from bot.data.fantasy_alignment import PATRONS, PATRON_PROFILES
             from bot.views.fantasy import patron_profile_embed
 
-            png = None
+            png: bytes | None = None
             try:
                 async with self.render_slots:
-                    png = await image_work(render_patron_profile, member)
+                    png = await cast(Any, image_work)(render_patron_profile, member)
             except Exception as error:
                 self.report(error, "fantasy_patron_render")
             patron = PATRONS[member]
             lore = PATRON_PROFILES[member]
-            remember_command_result(
+            cast(Any, remember_command_result)(
                 ctx,
                 target_name=patron.name,
                 title=patron.subtitle,
@@ -1208,24 +1306,29 @@ class FantasyCog(commands.Cog):
                 weapon=lore["weapon"],
                 method="Authored patron lore profile; hidden vitals, not a saved member identity.",
             )
-            kwargs = dict(
-                embed=patron_profile_embed(member, image=bool(png)),
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-            if png:
-                kwargs["file"] = discord.File(BytesIO(png), filename="meyaya-soul.png")
             try:
-                await ctx.send(**kwargs)
+                if png:
+                    await ctx.send(
+                        embed=cast(Any, patron_profile_embed)(member, image=True),
+                        file=discord.File(BytesIO(png), filename="meyaya-soul.png"),
+                        allowed_mentions=discord.AllowedMentions.none(),
+                    )
+                else:
+                    await ctx.send(
+                        embed=cast(Any, patron_profile_embed)(member, image=False),
+                        allowed_mentions=discord.AllowedMentions.none(),
+                    )
             except discord.HTTPException:
                 if not png:
                     raise
-                kwargs.pop("file", None)
-                kwargs["embed"] = patron_profile_embed(member, image=False)
-                await ctx.send(**kwargs)
+                await ctx.send(
+                    embed=cast(Any, patron_profile_embed)(member, image=False),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
             return
-        member = member or ctx.author
+        target: Any = member or ctx.author
         try:
-            profile = await self.get_profile(member.id)
+            profile = await self.get_profile(target.id)
         except Exception as error:
             error_id = self.report(error, "fantasy_lookup")
             await ctx.send(
@@ -1235,18 +1338,18 @@ class FantasyCog(commands.Cog):
         if profile is None:
             await ctx.send(
                 "Your soul hasn't awakened yet. Use `/awaken` when you're ready."
-                if member.id == ctx.author.id
+                if target.id == ctx.author.id
                 else "Their soul hasn't awakened yet."
             )
             return
         from bot.data.fantasy_alignment import patron_for
 
         if (
-            member.id == ctx.author.id
+            target.id == ctx.author.id
             and not getattr(profile, "is_meyaya_boss", False)
             and not patron_for(profile)
         ):
-            view = AwakeningRevealView(self, ctx.author.id, profile, member)
+            view = cast(Any, AwakeningRevealView)(self, ctx.author.id, profile, target)
             previous = self.pending.get(ctx.author.id)
             if previous:
                 previous.finish()
@@ -1260,26 +1363,38 @@ class FantasyCog(commands.Cog):
                 view.finish()
                 raise
             return
-        embed, view, png = await self.response(profile, member, ctx.author.id)
-        remember_command_result(ctx, **result_summary(profile, member))
-        kwargs = dict(embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none())
+        embed, view, png = await self.response(profile, target, ctx.author.id)
+        cast(Any, remember_command_result)(ctx, **result_summary(profile, target))
         try:
-            if png:
-                kwargs["file"] = discord.File(BytesIO(png), filename="meyaya-soul.png")
             try:
-                view.message = await ctx.send(**kwargs)
+                if png:
+                    view.message = await ctx.send(
+                        embed=embed,
+                        view=view,
+                        file=discord.File(BytesIO(png), filename="meyaya-soul.png"),
+                        allowed_mentions=discord.AllowedMentions.none(),
+                    )
+                else:
+                    view.message = await ctx.send(
+                        embed=embed,
+                        view=view,
+                        allowed_mentions=discord.AllowedMentions.none(),
+                    )
             except discord.HTTPException:
                 if not png:
                     raise
-                kwargs.pop("file", None)
                 view.image = False
-                kwargs["embed"] = soul_embed(profile, member.display_name, bot=self.bot)
-                remember_command_result(ctx, **result_summary(profile, member))
-                view.message = await ctx.send(**kwargs)
+                embed = cast(Any, soul_embed)(profile, target.display_name, bot=self.bot)
+                cast(Any, remember_command_result)(ctx, **result_summary(profile, target))
+                view.message = await ctx.send(
+                    embed=embed,
+                    view=view,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
         except BaseException:
             view.finish()
             raise
 
 
-async def setup(bot):
+async def setup(bot: MeyayaBot) -> None:
     await bot.add_cog(FantasyCog(bot))

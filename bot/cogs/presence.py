@@ -1,12 +1,18 @@
 """A gentle presence rotation drawn from Meyaya's personality and Origin lore."""
 
+from __future__ import annotations
+
 import logging
 from urllib.parse import urlsplit
 
 import discord
 from discord.ext import commands, tasks
 
+from bot.app import MeyayaBot
+
 logger = logging.getLogger(__name__)
+
+ActivityLike = discord.CustomActivity | discord.Streaming | discord.Game | discord.Activity
 
 
 STATUS_TEXT = "The Girl at the end of every story"
@@ -38,7 +44,7 @@ def identity_activity() -> discord.CustomActivity:
     )
 
 
-def presence_activities(stream_url=""):
+def presence_activities(stream_url: str = "") -> tuple[ActivityLike, ...]:
     stream_url = stream_url.strip()
     if not stream_url:
         logger.info("Streaming statuses disabled: PRESENCE_STREAM_URL is not configured")
@@ -54,7 +60,7 @@ def presence_activities(stream_url=""):
         if not valid:
             logger.warning("PRESENCE_STREAM_URL must be a Twitch or YouTube HTTPS link; skipping Streaming statuses")
             stream_url = ""
-    activities = [identity_activity()]
+    activities: list[ActivityLike] = [identity_activity()]
     for kind, text in PRESENCES:
         if kind == discord.ActivityType.streaming:
             if stream_url:
@@ -67,7 +73,7 @@ def presence_activities(stream_url=""):
 
 
 class PresenceCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
         self.activities = presence_activities(
             getattr(getattr(bot, "settings", None), "presence_stream_url", "")
@@ -77,12 +83,12 @@ class PresenceCog(commands.Cog):
         self.index = 1
         self._first_tick = True
 
-    async def cog_load(self):
+    async def cog_load(self) -> None:
         # Extensions can also be reloaded after READY has already happened.
         if self.bot.is_ready():
             await self.on_ready()
 
-    async def apply_presence(self):
+    async def apply_presence(self) -> None:
         try:
             await self.bot.change_presence(
                 status=discord.Status.dnd,
@@ -95,19 +101,19 @@ class PresenceCog(commands.Cog):
                            type(error).__name__)
 
     @commands.Cog.listener()
-    async def on_ready(self):
+    async def on_ready(self) -> None:
         await self.apply_presence()
         if not self.rotate.is_running():
             self._first_tick = True
             self.rotate.start()
 
     @commands.Cog.listener()
-    async def on_resumed(self):
+    async def on_resumed(self) -> None:
         # A successful gateway resume does not dispatch another READY event.
         await self.on_ready()
 
     @tasks.loop(minutes=ROTATION_MINUTES)
-    async def rotate(self):
+    async def rotate(self) -> None:
         # tasks.loop runs immediately; on_ready already applied this activity.
         if self._first_tick:
             self._first_tick = False
@@ -115,9 +121,9 @@ class PresenceCog(commands.Cog):
         self.index = (self.index + 1) % len(self.activities)
         await self.apply_presence()
 
-    def cog_unload(self):
+    def cog_unload(self) -> None:  # type: ignore[override]
         self.rotate.cancel()
 
 
-async def setup(bot):
+async def setup(bot: MeyayaBot) -> None:
     await bot.add_cog(PresenceCog(bot))

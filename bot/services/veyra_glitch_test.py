@@ -1,5 +1,7 @@
 """Temporary Veyra visual prototype. No production fantasy integration."""
 
+from __future__ import annotations
+
 import asyncio
 from contextlib import closing
 import logging
@@ -34,7 +36,7 @@ _BANNER = (
 )
 
 
-def _frame(title: str, pattern: str = "", intensity: int = 0, *, ghost=False,
+def _frame(title: str, pattern: str = "", intensity: int = 0, *, ghost: bool = False,
            failure: str = "") -> str:
     """Build a plain-text, 20-row canvas with the title always on row five.
 

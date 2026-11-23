@@ -1,6 +1,7 @@
 """Last-known server identity, retained after the bot leaves."""
 from sqlalchemy import BigInteger, String, Boolean, DateTime, Integer, func
 from datetime import datetime
+from typing import Any
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from bot.database.base import Base
@@ -28,4 +29,4 @@ class GuildEvent(Base):
     event_type: Mapped[str] = mapped_column(String(32))
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     actor: Mapped[str | None] = mapped_column(String(80))
-    details: Mapped[dict] = mapped_column(JSONB, default=dict)
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)

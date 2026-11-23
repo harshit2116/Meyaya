@@ -1,11 +1,16 @@
 """Single-message Origin/Erasure spectacle with cached authority cinematics."""
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Sequence
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from typing import Any, cast
 
 import discord
 
+from bot.services.fantasy_duel import Battle, Fighter
 from bot.services.veyra_boss_hud import safe
 from bot.services.patron_clash_dialogue import dialogue_for
 from bot.services.patron_clash_spectacle import (
@@ -26,15 +31,21 @@ ATTACKS = {
 PHASES = ("THE FIRST FRACTURE", "REALITY UNRAVELS", "THE LAST POSSIBLE WORLD")
 
 
-def phase_for(state):
+def phase_for(state: Battle) -> int:
     return max(0, min(2, state.memory_count - 1))
 
 
-def actor_for(state):
+def actor_for(state: Battle) -> Fighter | None:
     return next((f for f in (state.left, state.right) if f.user_id == state.last_actor), None)
 
 
-def scene_for(state, *, intro=False, final=False, exchange=False):
+def scene_for(
+    state: Battle,
+    *,
+    intro: bool = False,
+    final: bool = False,
+    exchange: bool = False,
+) -> str:
     if exchange:
         actor = actor_for(state)
         return ATTACKS.get(actor.last_move, ("worldfall", ""))[0] if actor and state.finisher else "worldfall"
@@ -50,7 +61,7 @@ def scene_for(state, *, intro=False, final=False, exchange=False):
 
 
 @lru_cache(maxsize=24)
-def media_bytes(scene, animated):
+def media_bytes(scene: str, animated: bool) -> tuple[bytes, str]:
     if scene == "opening" and not animated:
         scene = "arena"
     if animated and scene in {"origin-win", "erasure-win"}:
@@ -63,7 +74,7 @@ def media_bytes(scene, animated):
     return path.read_bytes(), path.name
 
 
-def chronicle_layout(state, history=None):
+def chronicle_layout(state: Battle, history: Sequence[str] | None = None) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView(timeout=None)
     lines = ["# Worldfall chronicle"] + [safe(line) for line in (state.history if history is None else history)]
     chunk = ""
@@ -77,7 +88,17 @@ def chronicle_layout(state, history=None):
     return view
 
 
-def battle_layout(state, *, media=None, intro=False, final=False, exchange=False, history_note="", controller=None, awakening=None):
+def battle_layout(
+    state: Battle,
+    *,
+    media: str | None = None,
+    intro: bool = False,
+    final: bool = False,
+    exchange: bool = False,
+    history_note: str = "",
+    controller: PatronClashHud | None = None,
+    awakening: int | None = None,
+) -> discord.ui.LayoutView:
     ended = (final or state.finished) and not exchange
     phase = phase_for(state) if awakening is None else awakening
     title = "ORIGIN // ERASURE" if intro else PHASES[phase]
@@ -92,7 +113,7 @@ def battle_layout(state, *, media=None, intro=False, final=False, exchange=False
     elif awakening is not None:
         title = AWAKENINGS[phase][0]
     progress = " · ".join(("◆ " if i == phase else "◇ ") + str(i+1) for i in range(3))
-    items = [discord.ui.TextDisplay(
+    items: list[discord.ui.Item[Any]] = [discord.ui.TextDisplay(
         f"-# WORLDFALL / TWO AUTHORITIES. ONE WORLD.\n# {title}\n"
         + ("**Meyaya · Bloom of Origin** ⚔ **Veyra · Enemy of All**" if intro else
            f"-# ACT {phase+1}/3  {progress} · Move {state.moves} · Round {state.round}"))]
@@ -148,30 +169,35 @@ def battle_layout(state, *, media=None, intro=False, final=False, exchange=False
     if history_note:
         items.append(discord.ui.TextDisplay(history_note))
     items.append(discord.ui.TextDisplay("-# Automatic cinematic clash · Temporary encounter · Saved souls unchanged"))
-    view = ClashControls(controller, ended or exchange, exchange=exchange) if controller else discord.ui.LayoutView(timeout=None)
-    view.add_item(discord.ui.Container(*items, accent_colour=accent))
+    view: discord.ui.LayoutView
     if controller:
-        view.add_controls()
+        controls = ClashControls(controller, ended or exchange, exchange=exchange)
+        controls.add_item(discord.ui.Container(*items, accent_colour=accent))
+        controls.add_controls()
+        view = controls
+    else:
+        view = discord.ui.LayoutView(timeout=None)
+        view.add_item(discord.ui.Container(*items, accent_colour=accent))
     return view
 
 
 class ClashControls(discord.ui.LayoutView):
-    def __init__(self, controller, ended, *, exchange=False):
+    def __init__(self, controller: PatronClashHud, ended: bool, *, exchange: bool = False) -> None:
         super().__init__(timeout=180)
         self.controller, self.ended = controller, ended
         self.exchange = exchange
 
-    def add_controls(self):
+    def add_controls(self) -> None:
         hud = self.controller
-        motion = discord.ui.Button(
+        motion: discord.ui.Button[Any] = discord.ui.Button(
             label="Use static artwork" if hud.motion else "Enable cinematics",
             style=discord.ButtonStyle.secondary, disabled=self.ended)
-        record = discord.ui.Button(label="Battle chronicle", style=discord.ButtonStyle.secondary, emoji="📜", disabled=self.exchange)
-        motion.callback = self.toggle_motion
-        record.callback = self.chronicle
+        record: discord.ui.Button[Any] = discord.ui.Button(label="Battle chronicle", style=discord.ButtonStyle.secondary, emoji="📜", disabled=self.exchange)
+        cast(Any, motion).callback = self.toggle_motion
+        cast(Any, record).callback = self.chronicle
         self.add_item(discord.ui.ActionRow(motion, record))
 
-    async def toggle_motion(self, interaction):
+    async def toggle_motion(self, interaction: discord.Interaction) -> None:
         hud = self.controller
         if interaction.user.id != hud.owner_view.owner:
             await interaction.response.send_message("Only the person who started this clash can change its presentation.", ephemeral=True)
@@ -184,7 +210,7 @@ class ClashControls(discord.ui.LayoutView):
             await hud._update(hud.engine, intro=hud.intro, final=hud.final,
                               awakening=hud.awakening, history_note=hud.history_note)
 
-    async def chronicle(self, interaction):
+    async def chronicle(self, interaction: discord.Interaction) -> None:
         if self.controller.exchange:
             await interaction.response.send_message("The final exchange is playing. The chronicle returns with the verdict.", ephemeral=True)
             return
@@ -192,10 +218,10 @@ class ClashControls(discord.ui.LayoutView):
             view=chronicle_layout(self.controller.engine.state, self.controller.history), ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none())
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         hud = self.controller
         async with hud.lock:
-            if hud.current_view is not self:
+            if hud.current_view is not self or hud.message is None:
                 return
             for child in self.walk_children():
                 if isinstance(child, discord.ui.Button):
@@ -206,32 +232,45 @@ class ClashControls(discord.ui.LayoutView):
             except (discord.HTTPException, TimeoutError):
                 pass
 
-    async def on_error(self, interaction, error, item):
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        item: discord.ui.Item[Any],
+        /,
+    ) -> None:
         self.controller.cog.report(error, "clash_controls")
-        sender = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
-        await sender("The presentation control could not update. The battle continues.", ephemeral=True)
+        if interaction.response.is_done():
+            await interaction.followup.send(
+                "The presentation control could not update. The battle continues.", ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "The presentation control could not update. The battle continues.", ephemeral=True
+            )
 
 
 class PatronClashHud:
-    def __init__(self, cog, owner_view, channel):
+    def __init__(self, cog: Any, owner_view: Any, channel: discord.abc.Messageable) -> None:
         self.cog, self.owner_view, self.channel = cog, owner_view, channel
-        self.message = None
-        self.media_key = None
+        self.message: discord.Message | None = None
+        self.media_key: tuple[str, bool] | None = None
         self.motion = True
         self.art_failed = False
-        self.current_view = None
+        self.current_view: discord.ui.LayoutView | None = None
         self.lock = asyncio.Lock()
-        self.engine = None
+        self.engine: Any = None
         self.intro = self.final = False
         self.history_note = ""
         self.hold_seconds = 1.5
         self.exchange = False
-        self.history = []
+        self.history: list[str] = []
         self.recorded_move = 0
-        self.awakening = None
-        self.awakened = set()
+        self.delivered_move = -1
+        self.awakening: int | None = None
+        self.awakened: set[int] = set()
 
-    async def awaken(self, engine):
+    async def awaken(self, engine: Any) -> bool:
         """Release each act once, before its first attack; no extra combat turns."""
         phase = min(2, engine.state.moves // 4)
         async with self.lock:
@@ -242,11 +281,36 @@ class PatronClashHud:
             self.history = (self.history + [f"AUTHORITY RELEASE · {AWAKENINGS[phase][0]}"])[-100:]
         return True
 
-    async def update(self, engine, **kwargs):
+    async def update(
+        self,
+        engine: Any,
+        *,
+        intro: bool = False,
+        final: bool = False,
+        exchange: bool = False,
+        history_note: str = "",
+        awakening: int | None = None,
+    ) -> discord.Message:
         async with self.lock:
-            return await self._update(engine, **kwargs)
+            return await self._update(
+                engine,
+                intro=intro,
+                final=final,
+                exchange=exchange,
+                history_note=history_note,
+                awakening=awakening,
+            )
 
-    async def _update(self, engine, *, intro=False, final=False, exchange=False, history_note="", awakening=None):
+    async def _update(
+        self,
+        engine: Any,
+        *,
+        intro: bool = False,
+        final: bool = False,
+        exchange: bool = False,
+        history_note: str = "",
+        awakening: int | None = None,
+    ) -> discord.Message:
         self.engine, self.intro, self.final, self.history_note = engine, intro, final or engine.state.finished, history_note
         self.exchange = exchange
         self.awakening = awakening
@@ -264,10 +328,12 @@ class PatronClashHud:
             self.hold_seconds = 6.5
         if exchange:
             self.hold_seconds = 2.8 if self.motion else 1.2
-        attachments = list(getattr(self.message, "attachments", ())) if self.message else []
+        attachments: list[discord.Attachment | discord.File] = (
+            list(getattr(self.message, "attachments", ())) if self.message else []
+        )
         media = f"attachment://{attachments[0].filename}" if attachments else None
         # Refresh an attack attachment on a new move so its GIF actually restarts.
-        replay = awakening is None and engine.state.moves != getattr(self, "delivered_move", -1)
+        replay = awakening is None and engine.state.moves != self.delivered_move
         if (key != self.media_key or replay) and not self.art_failed:
             try:
                 if awakening is not None:
@@ -285,9 +351,16 @@ class PatronClashHud:
             attachments, media = [], None
             self.hold_seconds = 1.2 if exchange else 6.5 if awakening is not None else 4.5
 
-        async def deliver(layout, files):
+        async def deliver(
+            layout: discord.ui.LayoutView,
+            files: Sequence[discord.Attachment | discord.File],
+        ) -> discord.Message:
             if self.message is None:
-                return await self.channel.send(view=layout, files=files, allowed_mentions=discord.AllowedMentions.none())
+                return await self.channel.send(
+                    view=layout,
+                    files=cast(Sequence[discord.File], files),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
             return await self.message.edit(view=layout, attachments=files, allowed_mentions=discord.AllowedMentions.none())
 
         layout = battle_layout(engine.state, media=media, intro=intro, final=final, exchange=exchange,
@@ -314,7 +387,7 @@ class PatronClashHud:
         self.owner_view.message = message
         return message
 
-    def close_if_interrupted(self):
+    def close_if_interrupted(self) -> None:
         if self.current_view:
             self.current_view.stop()
             self.current_view = None

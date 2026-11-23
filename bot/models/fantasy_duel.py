@@ -1,6 +1,7 @@
 """Compact durable results; battle resources never update fantasy_profiles."""
 
 from datetime import datetime
+from typing import Any
 from sqlalchemy import BigInteger, Integer, String, DateTime, JSON, CheckConstraint, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from bot.database.base import Base
@@ -10,7 +11,7 @@ class FantasyDuelResult(Base):
     __tablename__ = "fantasy_duel_results"
     __table_args__ = (
         CheckConstraint("challenger_id <> opponent_id", name="ck_duel_distinct"),
-        CheckConstraint("rounds BETWEEN 1 AND 6", name="ck_duel_rounds"),
+        CheckConstraint("rounds BETWEEN 1 AND 60", name="ck_duel_rounds"),
         CheckConstraint(
             "winner_id IS NULL OR winner_id IN (challenger_id, opponent_id)", name="ck_duel_winner"
         ),
@@ -26,7 +27,7 @@ class FantasyDuelResult(Base):
     rules_version: Mapped[int] = mapped_column(Integer, nullable=False)
     rounds: Mapped[int] = mapped_column(Integer, nullable=False)
     arena: Mapped[str] = mapped_column(String(60), nullable=False)
-    summary: Mapped[dict] = mapped_column(JSON, nullable=False)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

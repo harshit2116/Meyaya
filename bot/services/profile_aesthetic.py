@@ -6,6 +6,7 @@ import asyncio
 from bot.utils.image_work import image_work, BoundedImageGate
 from bot.utils.command_timing import timing_stage
 from collections import OrderedDict
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from hashlib import blake2s
 from io import BytesIO
@@ -13,6 +14,7 @@ import math
 import logging
 import time
 import colorsys
+from typing import Any
 from weakref import WeakValueDictionary
 
 import aiohttp
@@ -20,7 +22,10 @@ import discord
 from PIL import Image, ImageChops, ImageEnhance, ImageStat
 from bot.services.profile_badges import PROFILE_BADGES
 from bot.services.profile_critique import Critique, analyze_advice
-from bot.services.profile_scoring import finalize_profile_score, profilecheck_points
+from bot.services.profile_scoring import (
+    finalize_profile_score,
+    profilecheck_points as profilecheck_points,
+)
 
 MAX_ASSET_BYTES = 6 * 1024 * 1024
 CACHE_TTL_SECONDS = 30 * 60
@@ -75,18 +80,20 @@ class ProfileVisual:
 class ProfileAestheticService:
     """Fetch only public Discord assets and cache analysis by their immutable URLs."""
 
-    def __init__(self, bot) -> None:
+    def __init__(self, bot: Any) -> None:
         self.bot = bot
         self._cache: OrderedDict[str, tuple[float, ProfileVisual]] = OrderedDict()
         self._user_cache: OrderedDict[int, tuple[float, discord.User | None]] = OrderedDict()
         self._cache_bytes = 0
-        self._asset_cache = OrderedDict()
+        self._asset_cache: OrderedDict[str, tuple[float, bytes]] = OrderedDict()
         self._asset_cache_bytes = 0
         # Overlap two network inspections, but keep CPU/Pillow work serialized.
         self._inspect_slots = BoundedImageGate(concurrency=2)
         self._inspect_admission = BoundedImageGate(concurrency=4)
-        self._asset_locks = WeakValueDictionary()
-        self._member_locks = WeakValueDictionary()
+        self._asset_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+        self._member_locks: WeakValueDictionary[tuple[int | None, int], asyncio.Lock] = (
+            WeakValueDictionary()
+        )
 
     async def inspect(self, member: discord.Member, *, refresh: bool = False, animated: bool = False) -> ProfileVisual:
         # Bound all waiting callers, but do not let a duplicate member request
@@ -99,9 +106,9 @@ class ProfileAestheticService:
                     # Server avatars/banners and global profile data can change
                     # independently of the gateway's cached Member object.
                     started = time.monotonic()
-                    prefetch = {}
+                    prefetch: dict[str, asyncio.Task[bytes | None]] = {}
 
-                    async def fresh_member():
+                    async def fresh_member() -> discord.Member:
                         fresh = await member.guild.fetch_member(member.id)
                         logger.info("profile_metadata member_ms=%.0f", (time.monotonic() - started) * 1000)
                         # These freshly fetched server assets take precedence
@@ -120,29 +127,44 @@ class ProfileAestheticService:
                                     prefetch[url] = asyncio.create_task(self._download(url))
                         return fresh
 
-                    async def fresh_user():
-                        user = await self.bot.fetch_user(member.id)
+                    async def fresh_user() -> discord.User:
+                        user: discord.User = await self.bot.fetch_user(member.id)
                         logger.info("profile_metadata user_ms=%.0f", (time.monotonic() - started) * 1000)
                         return user
 
-                    metadata = [asyncio.create_task(fresh_member()), asyncio.create_task(fresh_user())]
+                    member_task = asyncio.create_task(fresh_member())
+                    user_task = asyncio.create_task(fresh_user())
+                    metadata: tuple[asyncio.Task[discord.Member], asyncio.Task[discord.User]] = (
+                        member_task,
+                        user_task,
+                    )
                     try:
                         with timing_stage('discord_metadata_ms'):
-                            member, fetched = await asyncio.gather(*metadata)
+                            member, fetched = await asyncio.gather(member_task, user_task)
                         logger.info("profile_metadata fetch_ms=%.0f", (time.monotonic() - started) * 1000)
                         return await self._inspect(member, refresh=True, fetched_user=fetched, animated=animated, prefetched_assets=prefetch)
                     finally:
                         # A failed/cancelled inspection must not leave HTTP work
                         # running outside the bounded inspection admission gate.
-                        for task in (*metadata, *prefetch.values()):
+                        all_tasks: tuple[asyncio.Task[Any], ...] = (*metadata, *prefetch.values())
+                        for task in all_tasks:
                             if not task.done():
                                 task.cancel()
-                        await asyncio.gather(*metadata, *prefetch.values(), return_exceptions=True)
+                        await asyncio.gather(*all_tasks, return_exceptions=True)
                 return await self._inspect(member, refresh=refresh, animated=animated)
 
-    async def _inspect(self, member: discord.Member, *, refresh: bool = False, fetched_user=None, animated: bool = False, prefetched_assets=None) -> ProfileVisual:
+    async def _inspect(
+        self,
+        member: discord.Member,
+        *,
+        refresh: bool = False,
+        fetched_user: discord.User | None = None,
+        animated: bool = False,
+        prefetched_assets: Mapping[str, asyncio.Task[bytes | None]] | None = None,
+    ) -> ProfileVisual:
         now = time.monotonic()
         cached_user = self._user_cache.get(member.id)
+        fetched: discord.User | None
         if fetched_user is not None:
             fetched = fetched_user
             self._user_cache[member.id] = (now, fetched)
@@ -238,7 +260,7 @@ class ProfileAestheticService:
         logger.info("profile_assets download_ms=%.0f analysis_and_queue_ms=%.0f",
                     (downloaded - started) * 1000, (time.monotonic() - downloaded) * 1000)
         # Do not preserve a transient failed asset download for half an hour.
-        if all(not url or data is not None for url, data in zip((*urls, nameplate_url), (avatar, banner, decoration, nameplate_data))):
+        if all(not url or data is not None for url, data in zip((*urls, nameplate_url), (avatar, banner, decoration, nameplate_data), strict=True)):
             self._store(cache_key, visual)
         return visual
 
@@ -269,10 +291,10 @@ class ProfileAestheticService:
         # Discord asset URLs include their content hash. A changed banner
         # should not force a second download of an unchanged avatar.
         now = time.monotonic()
-        for key, (created, data) in list(self._asset_cache.items()):
+        for key, (created, cached_data) in list(self._asset_cache.items()):
             if now - created >= 600:
                 del self._asset_cache[key]
-                self._asset_cache_bytes -= len(data)
+                self._asset_cache_bytes -= len(cached_data)
         cached = self._asset_cache.get(url)
         if cached is not None:
             self._asset_cache.move_to_end(url)
@@ -330,7 +352,6 @@ class ProfileAestheticService:
     ) -> ProfileVisual:
         avatar_image = cls._open(avatar)
         banner_image = cls._open(banner)
-        decoration_image = cls._open(decoration)
         sources = [image for image in (avatar_image, banner_image) if image is not None]
         # Only real image pixels establish the primary palette. Discord's solid
         # banner fallback is shown last, explicitly labelled, and never quantized
@@ -421,15 +442,24 @@ class ProfileAestheticService:
         colors = sorted(quantized.getcolors(quantized.width * quantized.height) or [], reverse=True)
         selected: list[tuple[int, int, int]] = []
         for _, color in colors:
-            if all(cls._distance(color, existing) >= 42 for existing in selected):
-                selected.append(color)
+            if not isinstance(color, tuple) or len(color) != 3:
+                continue
+            rgb_color = (color[0], color[1], color[2])
+            if all(cls._distance(rgb_color, existing) >= 42 for existing in selected):
+                selected.append(rgb_color)
             if len(selected) == 5:
                 break
         while len(selected) < 5:
-            base = selected[0] if selected else (117, 97, 127)
+            r_base, g_base, b_base = selected[0] if selected else (117, 97, 127)
             factor = 0.55 + len(selected) * 0.14
-            selected.append(tuple(min(255, int(channel * factor + 28)) for channel in base))
-        return tuple("#%02x%02x%02x" % color for color in selected)
+            selected.append(
+                (
+                    min(255, int(r_base * factor + 28)),
+                    min(255, int(g_base * factor + 28)),
+                    min(255, int(b_base * factor + 28)),
+                )
+            )
+        return tuple(f"#{r:02x}{g:02x}{b:02x}" for r, g, b in selected)
 
     @staticmethod
     def _colorfulness(image: Image.Image) -> int:
@@ -453,7 +483,7 @@ class ProfileAestheticService:
     @staticmethod
     def _rgb(value: str) -> tuple[int, int, int]:
         value = value.lstrip("#")
-        return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4))
+        return (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
 
     @staticmethod
     def _hex(value: int) -> str:
@@ -481,14 +511,18 @@ def calculate_category_scores(visual: ProfileVisual) -> ProfileVisual:
         return replace(visual, avatar_score=0, styling_score=0, harmony_score=0,
                        originality_score=0, comparison_available=False, detail_kind="unavailable",
                        weakest_comparison=None, suggested_color=None)
-    def actual_colors(image):
+    def actual_colors(image: Image.Image) -> list[tuple[float, tuple[int, int, int]]]:
         small = image.convert("RGB")
         if small.width * small.height > 9216:
             small.thumbnail((96, 96))
         quantized = small.quantize(colors=8).convert("RGB")
         counts = sorted(quantized.getcolors(9216) or [], reverse=True)
         total = sum(count for count, _ in counts)
-        return [(count / total, color) for count, color in counts if count / total >= .03]
+        return [
+            (count / total, (color[0], color[1], color[2]))
+            for count, color in counts
+            if count / total >= .03 and isinstance(color, tuple) and len(color) == 3
+        ]
 
     avatar_palette = actual_colors(avatar)
     matches = []
@@ -500,7 +534,11 @@ def calculate_category_scores(visual: ProfileVisual) -> ProfileVisual:
             # Transparent pixels are not a dark design choice. Inspect only ink.
             with Image.open(BytesIO(visual.decoration)) as raw:
                 raw.thumbnail((96, 96))
-                pixels = [p[:3] for p in raw.convert("RGBA").getdata() if p[3] >= 128]
+                pixels = [
+                    (p[0], p[1], p[2])
+                    for p in raw.convert("RGBA").get_flattened_data()
+                    if isinstance(p, tuple) and len(p) >= 4 and p[3] >= 128
+                ]
             if not pixels:
                 continue
             asset = Image.new("RGB", (len(pixels), 1))
@@ -535,7 +573,7 @@ def calculate_category_scores(visual: ProfileVisual) -> ProfileVisual:
                        originality_score=detail, comparison_available=bool(matches),
                        detail_kind=detail_kind,
                        weakest_comparison=match_items[matches.index(min(matches))] if matches else None,
-                       suggested_color="#%02X%02X%02X" % avatar_palette[0][1])
+                       suggested_color="#{:02X}{:02X}{:02X}".format(*avatar_palette[0][1]))
     return reviewed
 
 

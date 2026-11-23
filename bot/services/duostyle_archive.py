@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import colorsys
+from collections.abc import Sequence
 from functools import lru_cache
 import math
 from pathlib import Path
+from typing import Any
+
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
-from bot.services.card_renderer import font
+from bot.services.card_renderer import CardFont, font
 from bot.services.aura_archive import _asset, _serif, _spark
+
+type RGB = tuple[int, int, int]
 
 SIZE = (1600, 900)
 PORTRAIT_SIZE = 430
@@ -16,26 +21,35 @@ PORTRAIT_Y = 100
 LEFT_X, RIGHT_X = 215, 955
 
 
-def _rgb(color):
-    return tuple(bytes.fromhex(color.lstrip("#")))
+def _rgb(color: str) -> RGB:
+    raw = bytes.fromhex(color.lstrip("#"))
+    return (raw[0], raw[1], raw[2])
 
 
-def _hex(rgb):
-    return "#%02x%02x%02x" % tuple(round(max(0, min(255, v))) for v in rgb)
+def _hex(rgb: RGB) -> str:
+    r, g, b = (round(max(0, min(255, v))) for v in rgb)
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
-def _mix(a, b, amount):
-    return tuple(round(x + (y - x) * amount) for x, y in zip(a, b))
+def _mix(a: RGB, b: RGB, amount: float) -> RGB:
+    return (
+        round(a[0] + (b[0] - a[0]) * amount),
+        round(a[1] + (b[1] - a[1]) * amount),
+        round(a[2] + (b[2] - a[2]) * amount),
+    )
 
 
-def theme(palette):
+def theme(palette: Sequence[str]) -> tuple[str, str]:
     base = _rgb(palette[0])
-    if colorsys.rgb_to_hsv(*(v / 255 for v in base))[1] < 0.16:
+    if colorsys.rgb_to_hsv(base[0] / 255, base[1] / 255, base[2] / 255)[1] < 0.16:
         base = next(
             (
-                _rgb(color)
+                rgb_val
                 for color in palette[:4]
-                if colorsys.rgb_to_hsv(*(v / 255 for v in _rgb(color)))[1] > 0.18
+                if colorsys.rgb_to_hsv(
+                    (rgb_val := _rgb(color))[0] / 255, rgb_val[1] / 255, rgb_val[2] / 255
+                )[1]
+                > 0.18
             ),
             base,
         )
@@ -45,9 +59,9 @@ def theme(palette):
     return _hex(accent), _hex(secondary)
 
 
-def palette_tags(palette):
+def palette_tags(palette: Sequence[str]) -> tuple[str, str, str, str]:
     colors = [_rgb(color) for color in palette[:4]]
-    hsv = [colorsys.rgb_to_hsv(*(v / 255 for v in color)) for color in colors]
+    hsv = [colorsys.rgb_to_hsv(c[0] / 255, c[1] / 255, c[2] / 255) for c in colors]
     h, s, _ = hsv[0]
     if s < 0.13:
         h, s, _ = next((color for color in hsv if color[1] > 0.18), hsv[0])
@@ -67,14 +81,14 @@ def palette_tags(palette):
 
 
 @lru_cache(maxsize=1)
-def _neutral_art():
+def _neutral_art() -> Image.Image:
     path = Path(__file__).resolve().parents[1] / "assets/profile/duostyle/convergence-overlay.png"
     with Image.open(path) as source:
         return source.convert("RGBA").resize(SIZE, Image.Resampling.LANCZOS)
 
 
 @lru_cache(maxsize=1)
-def _ornament_source():
+def _ornament_source() -> tuple[Image.Image, Image.Image]:
     """One neutral half-frame, independently tinted for each member."""
     layer = Image.new("RGBA", (800, 900))
     layer.alpha_composite(_neutral_art().crop((0, 0, 800, 900)), (-19, -8))
@@ -86,7 +100,7 @@ def _ornament_source():
 
 
 @lru_cache(maxsize=4)
-def _side_ornaments(accent, secondary):
+def _side_ornaments(accent: str, secondary: str) -> Image.Image:
     """Four palette variants at most; no member images are retained in this cache."""
     luminance, alpha = _ornament_source()
     shadow = _hex(_mix(_rgb(secondary), (20, 13, 25), 0.62))
@@ -102,29 +116,35 @@ def _side_ornaments(accent, secondary):
 
 
 @lru_cache(maxsize=1)
-def _portrait_mask():
+def _portrait_mask() -> Image.Image:
     mask = Image.new("L", (PORTRAIT_SIZE, PORTRAIT_SIZE))
     ImageDraw.Draw(mask).ellipse((0, 0, PORTRAIT_SIZE - 1, PORTRAIT_SIZE - 1), fill=255)
     return mask
 
 
 @lru_cache(maxsize=2)
-def _shard_geometry(mirrored):
-    shapes = (((22, 42), (162, 108), (181, 590), (10, 662)),)
-    result = []
+def _shard_geometry(
+    mirrored: bool,
+) -> tuple[tuple[int, int, Image.Image, tuple[tuple[int, int], ...]], ...]:
+    shapes: tuple[tuple[tuple[int, int], ...], ...] = (
+        ((22, 42), (162, 108), (181, 590), (10, 662)),
+    )
+    result: list[tuple[int, int, Image.Image, tuple[tuple[int, int], ...]]] = []
     for points in shapes:
-        points = tuple((1600 - x, y) for x, y in points) if mirrored else points
-        x = min(p[0] for p in points)
-        y = min(p[1] for p in points)
-        width = max(p[0] for p in points) - x + 1
-        height = max(p[1] for p in points) - y + 1
+        pts: tuple[tuple[int, int], ...] = (
+            tuple((1600 - x, y) for x, y in points) if mirrored else points
+        )
+        x = min(p[0] for p in pts)
+        y = min(p[1] for p in pts)
+        width = max(p[0] for p in pts) - x + 1
+        height = max(p[1] for p in pts) - y + 1
         mask = Image.new("L", (width, height))
-        ImageDraw.Draw(mask).polygon([(px - x, py - y) for px, py in points], fill=115)
-        result.append((x, y, mask, points))
+        ImageDraw.Draw(mask).polygon([(px - x, py - y) for px, py in pts], fill=115)
+        result.append((x, y, mask, pts))
     return tuple(result)
 
 
-def _reflections(image, art, accent, mirrored):
+def _reflections(image: Image.Image, art: Image.Image, accent: str, mirrored: bool) -> None:
     reflected = ImageOps.mirror(art)
     for x, y, mask, points in _shard_geometry(mirrored):
         fragment = ImageOps.fit(
@@ -135,7 +155,7 @@ def _reflections(image, art, accent, mirrored):
         ImageDraw.Draw(image).line([*points, points[0]], fill=accent, width=1)
 
 
-def _portrait(image, visual, x, accent, mirrored):
+def _portrait(image: Image.Image, visual: Any, x: int, accent: str, mirrored: bool) -> None:
     art = _asset(visual.avatar)
     if art is None:
         art = Image.new("RGBA", (PORTRAIT_SIZE, PORTRAIT_SIZE), visual.palette[3])
@@ -161,13 +181,24 @@ def _portrait(image, visual, x, accent, mirrored):
         )
 
 
-def _centred(draw, text, cx, y, width, size, color, *, serif=False, lines=1):
-    text = " ".join(str(text).split())[:180]
-    family = _serif if serif and all(ord(c) < 0x3000 for c in text) else font
+def _centred(
+    draw: ImageDraw.ImageDraw,
+    text: object,
+    cx: float,
+    y: float,
+    width: float,
+    size: int,
+    color: str,
+    *,
+    serif: bool = False,
+    lines: int = 1,
+) -> None:
+    value = " ".join(str(text).split())[:180]
+    family = _serif if serif and all(ord(c) < 0x3000 for c in value) else font
     while True:
         chosen = family(size)
-        words = text.split()
-        rows = []
+        words = value.split()
+        rows: list[str] = []
         row = ""
         for word in words:
             test = (row + " " + word).strip()
@@ -188,7 +219,7 @@ def _centred(draw, text, cx, y, width, size, color, *, serif=False, lines=1):
         draw.text((cx, y + i * (size + 7)), row, font=chosen, fill=color, anchor="ma")
 
 
-def _identity(image, visual, x, accent):
+def _identity(image: Image.Image, visual: Any, x: int, accent: str) -> None:
     draw = ImageDraw.Draw(image)
     center = x + PORTRAIT_SIZE // 2
     draw.rounded_rectangle(
@@ -221,7 +252,7 @@ def _identity(image, visual, x, accent):
     for i, color in enumerate(swatches):
         cx = center - 145 + i * 97
         draw.ellipse((cx - 26, 576, cx + 26, 628), fill=color, outline=accent)
-    tags = palette_tags(visual.palette)
+    tags: tuple[str, ...] = palette_tags(visual.palette)
     if visual.banner_swatch:
         tags = (*tags[:3], "Banner")
     for i, tag in enumerate(tags):
@@ -231,7 +262,7 @@ def _identity(image, visual, x, accent):
 
 
 @lru_cache(maxsize=1)
-def _score_font():
+def _score_font() -> CardFont:
     for path in (
         "C:/Windows/Fonts/georgiai.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf",
@@ -242,7 +273,7 @@ def _score_font():
 
 
 @lru_cache(maxsize=8)
-def _sync_emblem(left_accent, right_accent):
+def _sync_emblem(left_accent: str, right_accent: str) -> Image.Image:
     neutral = _neutral_art().crop((700, 0, 900, 261))
     accent = _hex(_mix(_rgb(left_accent), _rgb(right_accent), 0.5))
     emblem = ImageOps.colorize(
@@ -253,7 +284,9 @@ def _sync_emblem(left_accent, right_accent):
 
 
 @lru_cache(maxsize=4)
-def _convergence_band(left_palette, right_palette):
+def _convergence_band(
+    left_palette: tuple[str, ...], right_palette: tuple[str, ...]
+) -> Image.Image:
     stops = [
         _rgb(left_palette[0]),
         _rgb(left_palette[2]),
@@ -262,7 +295,7 @@ def _convergence_band(left_palette, right_palette):
         _rgb(right_palette[3]),
     ]
     band = Image.new("RGB", (1340, 1))
-    colors = []
+    colors: list[RGB] = []
     for x in range(1340):
         t = x / 1339 * 4
         index = min(3, int(t))
@@ -271,7 +304,9 @@ def _convergence_band(left_palette, right_palette):
     return band.resize((1340, 44)).convert("RGBA")
 
 
-def _convergence(image, left, right, left_accent, right_accent):
+def _convergence(
+    image: Image.Image, left: Any, right: Any, left_accent: str, right_accent: str
+) -> None:
     draw = ImageDraw.Draw(image)
     common = _hex(_mix(_rgb(left_accent), _rgb(right_accent), 0.5))
     draw.rounded_rectangle((74, 692, 1526, 813), radius=42, fill="#130f19", outline=common, width=2)
@@ -282,7 +317,7 @@ def _convergence(image, left, right, left_accent, right_accent):
     # Fine crossing light threads retain both profile palettes in the blend.
     threads = Image.new("RGBA", SIZE)
     td = ImageDraw.Draw(threads)
-    for phase, color in ((0, left_accent), (math.pi, right_accent), (1.2, "#fff0f7")):
+    for phase, color in ((0.0, left_accent), (math.pi, right_accent), (1.2, "#fff0f7")):
         points = [
             (130 + x, 761 + math.sin(x / 1340 * math.tau * 1.7 + phase) * 19)
             for x in range(0, 1341, 5)
@@ -291,7 +326,9 @@ def _convergence(image, left, right, left_accent, right_accent):
     image.alpha_composite(threads)
 
 
-def render_duo(left, right, *, score, verdict, reason):
+def render_duo(
+    left: Any, right: Any, *, score: int, verdict: str, reason: str
+) -> Image.Image:
     left_accent, left_secondary = theme(left.palette)
     right_accent, right_secondary = theme(right.palette)
     common = _hex(_mix(_rgb(left_accent), _rgb(right_accent), 0.5))

@@ -1,14 +1,16 @@
 """Consistent public member labels without changing callback argument names."""
 
+from __future__ import annotations
+
 import re
-from typing import get_args
+from typing import Any, get_args
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 
-def member_annotation(annotation):
+def member_annotation(annotation: Any) -> bool:
     return (
         annotation in (discord.Member, discord.User)
         or (isinstance(annotation, type) and issubclass(annotation, commands.MemberConverter))
@@ -16,7 +18,7 @@ def member_annotation(annotation):
     )
 
 
-def normalize_member_parameters(bot):
+def normalize_member_parameters(bot: Any) -> None:
     """Run after all cogs load, before syncing both generated and hybrid commands."""
     from bot.data.help_catalog import COMMANDS_BY_NAME
 
@@ -52,17 +54,16 @@ def normalize_member_parameters(bot):
             command.description = entry.description
 
 
-def member_label(index, total):
+def member_label(index: int, total: int) -> str:
     return "member" if total == 1 else f"member{index}"
 
 
-def member_usage(usage):
-    """Give hand-written prefix examples the same ordered member labels."""
+def member_usage(usage: str) -> str:
     index = 0
     pattern = r"([@<\[])(?:member\d*|first|second|third|fourth|fifth|other)(?=[\]>\s]|$)"
     total = len(re.findall(pattern, usage))
 
-    def replace(match):
+    def replace(match: re.Match[str]) -> str:
         nonlocal index
         index += 1
         return f"{match[1]}{member_label(index, total)}"

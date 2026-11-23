@@ -1,8 +1,12 @@
 """Single continuous, seeded boss encounter; no profile mutations or AI calls."""
 
+from __future__ import annotations
+
 from dataclasses import asdict
+from typing import Any
+
 from bot.data.fantasy_combat import CombatRule, ELEMENT_ADVANTAGES
-from bot.services.fantasy_duel import DuelEngine, MIN_MOVES, element_multiplier
+from bot.services.fantasy_duel import Battle, DuelEngine, Fighter, MIN_MOVES, element_multiplier
 
 FORMS = {
     "physical": ("Glassblade Seraph", "PHYSICAL RESIST / REACTIVE WARD"),
@@ -14,7 +18,7 @@ FORMS = {
 }
 
 
-def archetype(fighter):
+def archetype(fighter: Fighter) -> str:
     # Authored mechanics, not guessed class-name substring matches.
     if fighter.signature == "heal" or fighter.passive == "renew":
         return "support"
@@ -25,7 +29,7 @@ def archetype(fighter):
     return fighter.rule.mode if fighter.rule.mode in FORMS else "hybrid"
 
 
-def public_fighter(fighter):
+def public_fighter(fighter: Fighter) -> dict[str, Any]:
     """Use at every serialization boundary, including AI-visible command memory."""
     if not fighter.is_boss:
         return asdict(fighter)
@@ -49,7 +53,7 @@ def public_fighter(fighter):
 
 
 class BossDuelEngine(DuelEngine):
-    def __init__(self, player, boss, seed):
+    def __init__(self, player: Fighter, boss: Fighter, seed: int) -> None:
         super().__init__(player, boss, seed)
         self.player, self.boss = player, boss
         # Encounter-local only: never mutate either saved fantasy profile.
@@ -68,13 +72,14 @@ class BossDuelEngine(DuelEngine):
         boss.rule = CombatRule(
             "magic", "", "", initiative=2 if self.pattern in {"agile", "hybrid"} else 0
         )
-        self.observations = {}
+        self.observations: dict[str, int] = {}
         self.memory_resistance = 0.0
         self.reflected = False
         self.learned_signature = ""
         self.reactive_ward = False
-        self.dialogue_seen = set()
+        self.dialogue_seen: set[str] = set()
         self.boss_actions = 0
+        self.cascade_hits: list[int] = []
         self.state.dialogue = {
             "physical": "You hit hard. I noticed.",
             "magic": "Spells are such honest little things. People aren't.",
@@ -84,12 +89,12 @@ class BossDuelEngine(DuelEngine):
             "hybrid": "Show me what makes your soul different.",
         }[self.pattern]
 
-    def heal(self, fighter, amount):
+    def heal(self, fighter: Fighter, amount: int) -> int:
         if fighter is self.player and self.pattern in {"support", "tank"}:
             amount = round(amount * 0.75)
         return super().heal(fighter, amount)
 
-    def absorb(self, fighter, amount):
+    def absorb(self, fighter: Fighter, amount: int) -> tuple[int, int]:
         if fighter is self.boss:
             resistance = (
                 0.10
@@ -99,12 +104,12 @@ class BossDuelEngine(DuelEngine):
             amount = max(1, round(amount * (1 - resistance - self.memory_resistance)))
         return super().absorb(fighter, amount)
 
-    def speak(self, trigger, line):
+    def speak(self, trigger: str, line: str) -> None:
         if trigger not in self.dialogue_seen and len(self.dialogue_seen) < 3:
             self.dialogue_seen.add(trigger)
             self.state.dialogue = line
 
-    def attack(self, a, b, signature=False):
+    def attack(self, a: Fighter, b: Fighter, signature: bool = False) -> None:
         if a is self.player:
             old_crit = a.critical_hits
             old_skills = a.skills_used
@@ -198,6 +203,6 @@ class BossDuelEngine(DuelEngine):
         if not b.hp:
             self.state.finisher = skill
 
-    def advance_move(self):
+    def advance_move(self) -> Battle:
         self.state.dialogue = ""
         return super().advance_move()

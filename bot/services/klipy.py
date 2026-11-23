@@ -9,6 +9,7 @@ from random import SystemRandom
 import time
 import re
 from urllib.parse import urlsplit
+from typing import TypeGuard
 from weakref import WeakValueDictionary
 
 import aiohttp
@@ -84,7 +85,7 @@ class KlipyService:
         self.cache = cache
         self._search_cache: dict[str, tuple[float, tuple[str, ...]]] = {}
         self._last_url_by_query: dict[str, str] = {}
-        self._search_locks = WeakValueDictionary()
+        self._search_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
 
     async def random_anime_gif(self, query: str) -> GifResult:
         """Return an action-relevant anime GIF or no GIF at all."""
@@ -164,7 +165,7 @@ class KlipyService:
         endpoint = f"{KLIPY_BASE_URL}/{self.api_key}/gifs/search"
         # Search engines rank page one most strongly. Going deeper randomly can
         # return visually popular but unrelated results.
-        params = {"q": query, "page": 1, "per_page": 24}
+        params: dict[str, str | int] = {"q": query, "page": 1, "per_page": 24}
         try:
             async with self.http_session.get(
                 endpoint,
@@ -248,6 +249,7 @@ class KlipyService:
                         pipe.zadd(KEY, {chosen_url: now})
                         # Trim to 200 entries without a separate count round trip.
                         pipe.zremrangebyrank(KEY, 0, -201)
+                        pipe.expire(KEY, 86400)
                         await pipe.execute()
         except Exception:
             logger.exception("Failed to update Redis recent set for Klipy")
@@ -388,7 +390,7 @@ class KlipyService:
         return None
 
     @staticmethod
-    def _valid_media_url(value, *, require_extension=False):
+    def _valid_media_url(value: object, *, require_extension: bool = False) -> TypeGuard[str]:
         if not isinstance(value, str) or not value.strip():
             return False
         try:

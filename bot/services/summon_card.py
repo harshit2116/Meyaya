@@ -1,21 +1,49 @@
 """Local illustrated AniList summon cards with bounded, transient caches."""
 
+from __future__ import annotations
+
 import asyncio
 from collections import OrderedDict
+from collections.abc import Callable
 from functools import lru_cache
 from io import BytesIO
 import math
 from pathlib import Path
 from time import monotonic
+from typing import Protocol, cast
 from urllib.parse import urlparse
 
 import aiohttp
+import discord
 from PIL import Image, ImageChops, ImageDraw, ImageFont, ImageOps
 
-from bot.services.aura_archive import _asset, _serif, _text
-from bot.services.character_catalog import RARITY_NAMES
-from bot.services.character_provider import safe_anilist_image
+from bot.services.aura_archive import _asset as _raw_asset
+from bot.services.aura_archive import _serif as _raw_serif
+from bot.services.aura_archive import _text as _raw_text
+from bot.services.character_catalog import RARITY_NAMES, GameplayDraw
+from bot.services.character_provider import CharacterDisplay, safe_anilist_image
 from bot.utils.image_work import BoundedImageGate, image_work
+
+type _Font = ImageFont.FreeTypeFont | ImageFont.ImageFont
+
+
+class _TextFn(Protocol):
+    def __call__(
+        self,
+        draw: ImageDraw.ImageDraw,
+        box: tuple[int, int, int, int],
+        value: object,
+        size: int,
+        color: str,
+        *,
+        minimum: int = 20,
+        serif: bool = True,
+    ) -> None: ...
+
+
+_asset = cast(Callable[[bytes | None], Image.Image | None], _raw_asset)
+_serif = cast(Callable[[int], _Font], _raw_serif)
+_text: _TextFn = _raw_text
 
 SIZE = (1500, 1000)
 RARITY_COLORS = {2: "#b6c2d5", 3: "#b8a5ff", 4: "#cf99ef", 5: "#f4d08f", 6: "#ff91c5"}
@@ -23,7 +51,7 @@ IMAGE_LIMIT = 4 * 1024 * 1024
 
 
 @lru_cache(maxsize=1)
-def _frame():
+def _frame() -> Image.Image:
     # A neutral, code-drawn frame works with every character's artwork.
     # Keep all detail on the border, leaving the portrait and reading area clear.
     result = Image.new("RGBA", SIZE)
@@ -34,7 +62,7 @@ def _frame():
 
 
 @lru_cache(maxsize=1)
-def _portrait_mask():
+def _portrait_mask() -> Image.Image:
     mask = Image.new("L", (580, 880))
     draw = ImageDraw.Draw(mask)
     draw.rounded_rectangle((0, 0, 579, 879), radius=23, fill=255)
@@ -42,7 +70,7 @@ def _portrait_mask():
 
 
 @lru_cache(maxsize=24)
-def _native_font(size):
+def _native_font(size: int) -> ImageFont.FreeTypeFont | None:
     for path in (
         "C:/Windows/Fonts/YuGothM.ttc",
         "C:/Windows/Fonts/meiryo.ttc",
@@ -54,8 +82,8 @@ def _native_font(size):
     return None
 
 
-def _star(draw, x, y, r, color):
-    points = []
+def _star(draw: ImageDraw.ImageDraw, x: float, y: float, r: float, color: str) -> None:
+    points: list[tuple[float, float]] = []
     for index in range(10):
         a = index * math.pi / 5 - math.pi / 2
         radius = r if index % 2 == 0 else r * 0.43
@@ -63,7 +91,7 @@ def _star(draw, x, y, r, color):
     draw.polygon(points, fill=color)
 
 
-def _seal(draw, x, y, color, kind):
+def _seal(draw: ImageDraw.ImageDraw, x: int, y: int, color: str, kind: str) -> None:
     draw.rounded_rectangle(
         (x - 35, y - 35, x + 35, y + 35), radius=16,
         fill="#171e2c", outline="#343e51", width=1,
@@ -83,7 +111,13 @@ def _seal(draw, x, y, color, kind):
                                fill="#171e2c", outline=color, width=2)
 
 
-def render_summon_card(gameplay, display, portrait=None, avatar=None, member_name=""):
+def render_summon_card(
+    gameplay: GameplayDraw,
+    display: CharacterDisplay,
+    portrait: bytes | None = None,
+    avatar: bytes | None = None,
+    member_name: str = "",
+) -> bytes:
     """Use provider artwork as supplied; rarity and gameplay are never rerolled."""
     accent = RARITY_COLORS[gameplay.rarity_stars]
     image = Image.new("RGBA", SIZE, "#0c1018")
@@ -184,16 +218,16 @@ def render_summon_card(gameplay, display, portrait=None, avatar=None, member_nam
 class SummonCardRenderer:
     """Memory-only TTL caches, safe bounded HTTP reads and off-loop rendering."""
 
-    def __init__(self, session):
+    def __init__(self, session: aiohttp.ClientSession | None) -> None:
         self.session = session
-        self.assets = OrderedDict()
-        self.cards = OrderedDict()
+        self.assets: OrderedDict[str, tuple[float, bytes]] = OrderedDict()
+        self.cards: OrderedDict[tuple[object, ...], tuple[float, bytes]] = OrderedDict()
         self.asset_bytes = 0
         self.card_bytes = 0
         self.gate = BoundedImageGate()
 
     @staticmethod
-    def _prune(cache, now):
+    def _prune[K](cache: OrderedDict[K, tuple[float, bytes]], now: float) -> int:
         removed = 0
         for key, (expires, data) in list(cache.items()):
             if expires <= now:
@@ -201,7 +235,7 @@ class SummonCardRenderer:
                 removed += len(data)
         return removed
 
-    async def _download(self, url, *, character=False):
+    async def _download(self, url: str | None, *, character: bool = False) -> bytes | None:
         if not url or self.session is None:
             return None
         parsed = urlparse(url)
@@ -227,13 +261,13 @@ class SummonCardRenderer:
             ) as response:
                 if response.status != 200 or (response.content_length or 0) > IMAGE_LIMIT:
                     return None
-                data = bytearray()
+                buf = bytearray()
                 async for chunk in response.content.iter_chunked(64 * 1024):
-                    data.extend(chunk)
-                    if len(data) > IMAGE_LIMIT:
+                    buf.extend(chunk)
+                    if len(buf) > IMAGE_LIMIT:
                         return None
-                data = bytes(data)
-        except (aiohttp.ClientError, asyncio.TimeoutError):
+                data = bytes(buf)
+        except (TimeoutError, aiohttp.ClientError):
             return None
         while self.assets and (
             self.asset_bytes + len(data) > 8 * 1024 * 1024 or len(self.assets) >= 32
@@ -244,10 +278,15 @@ class SummonCardRenderer:
         self.asset_bytes += len(data)
         return data
 
-    async def render(self, gameplay, display, member):
-        avatar = member.display_avatar.with_size(128).with_static_format("png")
-        avatar_url = str(avatar)
-        key = (
+    async def render(
+        self,
+        gameplay: GameplayDraw,
+        display: CharacterDisplay,
+        member: discord.Member | discord.User,
+    ) -> bytes:
+        avatar_asset = member.display_avatar.with_size(128).with_static_format("png")
+        avatar_url = str(avatar_asset)
+        key: tuple[object, ...] = (
             gameplay.internal_id,
             gameplay.rarity_stars,
             gameplay.class_name,

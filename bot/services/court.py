@@ -48,7 +48,9 @@ class CourtStatus(StrEnum):
     DECLINED = "CLOSED"
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: object) -> CourtStatus | None:
+        if not isinstance(value, str):
+            return None
         return {"PENDING": cls.LOBBY, "COMPLETED": cls.RESULTS, "DECLINED": cls.CLOSED}.get(value)
 
 
@@ -433,9 +435,16 @@ def parse_court_decision(raw: str) -> CourtJudgement | CourtClarification:
     reasoning = payload.get("reasoning")
     decisive_factors = payload.get("decisive_factors")
     punishment = payload.get("punishment")
-    required_text = (plaintiff_summary, defendant_summary, reasoning, decisive_factors)
-    if not isinstance(raw_verdict, str) or any(
-        not isinstance(value, str) or not value.strip() for value in required_text
+    if (
+        not isinstance(raw_verdict, str)
+        or not isinstance(plaintiff_summary, str)
+        or not isinstance(defendant_summary, str)
+        or not isinstance(reasoning, str)
+        or not isinstance(decisive_factors, str)
+        or any(
+            not value.strip()
+            for value in (plaintiff_summary, defendant_summary, reasoning, decisive_factors)
+        )
     ):
         raise ValueError("Court verdict requires both summaries, reasoning, and decisive factors.")
     normalized = raw_verdict.strip().casefold().replace(" ", "_").replace("-", "_")

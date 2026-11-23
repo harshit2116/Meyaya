@@ -1,7 +1,10 @@
 """Seeded, Discord-independent temporary combat. Never mutate an ORM profile."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from random import Random
+from typing import Any, cast
 
 from bot.data.fantasy import CLASSES, RARITIES
 from bot.data.fantasy_combat import (
@@ -61,7 +64,7 @@ class Fighter:
     boss_key: str = ""
 
     @classmethod
-    def snapshot(cls, profile, name):
+    def snapshot(cls, profile: Any, name: object) -> Fighter:
         rule = CLASS_COMBAT.get(profile.class_id, CombatRule("hybrid", "", ""))
         authored = CLASSES.get(profile.class_id)
         passive = (
@@ -110,7 +113,7 @@ class Fighter:
         fighter.boss_key = getattr(profile, "boss_key", "meyaya" if fighter.is_boss else "")
         from bot.data.fantasy_alignment import patron_for
 
-        patron = patron_for(profile)
+        patron = cast(Any, patron_for)(profile)
         fighter.alignment = getattr(profile, "alignment", "") if patron else ""
         return fighter
 
@@ -120,7 +123,7 @@ class Battle:
     left: Fighter
     right: Fighter
     seed: int
-    arena: tuple
+    arena: tuple[str, ...]
     round: int = 0
     moves: int = 0
     last_actor: int | None = None
@@ -136,7 +139,7 @@ class Battle:
     dialogue: str = ""
 
 
-def element_multiplier(attacker, defender):
+def element_multiplier(attacker: str, defender: str) -> float:
     if (attacker, defender) in ELEMENT_ADVANTAGES:
         return 1.1
     if (defender, attacker) in ELEMENT_ADVANTAGES:
@@ -145,22 +148,22 @@ def element_multiplier(attacker, defender):
 
 
 class DuelEngine:
-    def __init__(self, left, right, seed):
+    def __init__(self, left: Fighter, right: Fighter, seed: int) -> None:
         self.rng = Random(seed)
         self.state = Battle(left, right, seed, self.rng.choice(ARENAS))
-        self._turns = []
+        self._turns: list[Fighter] = []
 
-    def initiative(self, fighter):
+    def initiative(self, fighter: Fighter) -> float:
         return fighter.dexterity + fighter.rule.initiative + self.rng.uniform(-2, 2)
 
-    def heal(self, fighter, amount):
+    def heal(self, fighter: Fighter, amount: int) -> int:
         if fighter.alignment == "meyaya":
             amount = round(amount * 1.10)
         recovered = min(max(0, amount), fighter.max_hp - fighter.hp)
         fighter.hp += recovered
         return recovered
 
-    def absorb(self, fighter, amount):
+    def absorb(self, fighter: Fighter, amount: int) -> tuple[int, int]:
         blocked = min(fighter.shield, amount)
         fighter.shield -= blocked
         taken = min(fighter.hp, amount - blocked)
@@ -168,11 +171,11 @@ class DuelEngine:
         fighter.damage_taken += taken
         return taken, blocked
 
-    def status(self, fighter, name, turns=2):
+    def status(self, fighter: Fighter, name: str, turns: int = 2) -> None:
         if name in fighter.statuses or len(fighter.statuses) < 3:
             fighter.statuses[name] = turns
 
-    def activate_passive(self, f):
+    def activate_passive(self, f: Fighter) -> None:
         if f.alignment == "meyaya" and not f.resonance_used:
             f.resonance_used = True
             f.shield += max(1, round(f.max_hp * 0.04))
@@ -191,7 +194,7 @@ class DuelEngine:
             self.status(f, effect, 2)
         self.state.log.append(f"✦ {f.name}'s {f.passive_name} awakens ({effect}).")
 
-    def attack(self, a, b, signature=False):
+    def attack(self, a: Fighter, b: Fighter, signature: bool = False) -> None:
         family_mult, weapon_crit, _ = WEAPON_COMBAT.get(a.weapon_family, (1, 0, 0))
         skill = a.signature_name if signature else a.weapon
         a.last_move = skill
@@ -303,7 +306,7 @@ class DuelEngine:
         if not b.hp:
             self.state.finisher = skill
 
-    def end_round(self):
+    def end_round(self) -> None:
         for f in (self.state.left, self.state.right):
             for status in tuple(f.statuses):
                 if status in {"burn", "bleed", "erasure_trace"} and f.hp:
@@ -335,7 +338,7 @@ class DuelEngine:
                 else "Arena verdict · evenly matched"
             )
 
-    def advance_move(self):
+    def advance_move(self) -> Battle:
         """One fighter action, including misses; round-end effects join its last move."""
         if self.state.finished:
             return self.state
@@ -360,7 +363,7 @@ class DuelEngine:
         self.state.history = (self.state.history + self.state.log)[-3:]
         return self.state
 
-    def advance(self):
+    def advance(self) -> Battle:
         """Compatibility helper for offline simulations: finish the current round."""
         self.advance_move()
         while self._turns and not self.state.finished:

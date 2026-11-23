@@ -1,11 +1,13 @@
 """Personalize the supplied duck animation in the shared, bounded image worker."""
 
+from __future__ import annotations
+
 from io import BytesIO
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageOps
 
-from bot.services.card_renderer import font
+from bot.services.card_renderer import CardFont, font
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "assets" / "duck" / "eject.gif"
 CROP = (80, 22, 342, 240)  # Omit the recording's player list and microphone UI.
@@ -13,12 +15,12 @@ OUTPUT_SIZE = (480, 400)
 MAX_OUTPUT_BYTES = 7 * 1024 * 1024
 
 
-def duck_message(name):
-    name = " ".join(str(name).split())[:32] or "Member"
-    return f"{name} is looking for Davey Jones locker."
+def duck_message(name: object) -> str:
+    text = " ".join(str(name).split())[:32] or "Member"
+    return f"{text} is looking for Davey Jones locker."
 
 
-def _avatar(data, name):
+def _avatar(data: bytes, name: str) -> tuple[Image.Image, Image.Image]:
     art = Image.new("RGB", (42, 42), "#344f6f")
     draw = ImageDraw.Draw(art)
     draw.text((21, 21), name[:1].upper() or "?", font=font(22), fill="white", anchor="mm")
@@ -35,17 +37,18 @@ def _avatar(data, name):
     return art, mask
 
 
-def render_duck(name, avatar=b""):
+def render_duck(name: object, avatar: bytes = b"") -> bytes:
     """Keep every source frame and fit the complete caption on one output line."""
-    name = " ".join(str(name).split())[:32] or "Member"
-    message = duck_message(name)
+    label_name = " ".join(str(name).split())[:32] or "Member"
+    message = duck_message(label_name)
     # Measure the final sentence once, not each partial typewriter reveal. This
     # keeps font size stable throughout the animation and never wraps the ending.
     caption_font = fitted_caption_font(message)
-    art, mask = _avatar(avatar, name)
-    frames, durations = [], []
+    art, mask = _avatar(avatar, label_name)
+    frames: list[Image.Image] = []
+    durations: list[int] = []
     with Image.open(TEMPLATE) as source:
-        if source.size != (426, 240) or source.n_frames != 94:
+        if source.size != (426, 240) or getattr(source, "n_frames", 1) != 94:
             raise ValueError("Unsupported duck animation template")
         clean = source.convert("RGB").crop((48, 94, 383, 152))
         # One shared palette keeps dark ocean gradients and the portrait readable
@@ -84,7 +87,7 @@ def render_duck(name, avatar=b""):
     return data
 
 
-def fitted_caption_font(message):
+def fitted_caption_font(message: str) -> CardFont:
     """Fit text at final resolution with comfortable margins and its outline."""
     draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
     for size in range(20, 0, -1):

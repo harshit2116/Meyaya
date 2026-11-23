@@ -1,13 +1,17 @@
 """Bounded in-memory source text and asynchronous, summary-only persistence."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
 from collections import deque
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.logging.telemetry import event, model_context
 from bot.models.voice_summary import VoiceSummary
@@ -35,21 +39,21 @@ SUMMARY_INSTRUCTION = (
 class VoiceSummaryBuffer:
     """Only source text from the existing voice connection, never raw audio."""
 
-    def __init__(self):
-        self._segments = deque()
+    def __init__(self) -> None:
+        self._segments: deque[list[str]] = deque()
         self._chars = 0
         self._boundary = True
         self.has_member_speech = False
         self.partial = False
-        self.coverage_reasons = set()
+        self.coverage_reasons: set[str] = set()
         self._interruption_handled = False
 
-    def gap(self, reason):
+    def gap(self, reason: str) -> None:
         self.partial = True
         self.coverage_reasons.add(reason)
         self._boundary = True
 
-    def interrupted(self):
+    def interrupted(self) -> None:
         """Drop the last assistant passage when playback may not have completed."""
         self.gap('interrupted_playback')
         if self._interruption_handled:
@@ -61,7 +65,7 @@ class VoiceSummaryBuffer:
                 del self._segments[index]
                 break
 
-    def add(self, role, text):
+    def add(self, role: str, text: str) -> None:
         if role in {"boundary", "gap"}:
             self._boundary = True
             if role == 'gap':
@@ -95,7 +99,7 @@ class VoiceSummaryBuffer:
                 self._segments.popleft()
             self.gap('source_cap')
 
-    def take(self):
+    def take(self) -> str:
         text = "\n".join(
             f"{'Member speech' if role == 'user' else 'Meyaya response'}: {text}"
             for role, text in self._segments
@@ -107,24 +111,24 @@ class VoiceSummaryBuffer:
 
 
 class VoiceSummaryService:
-    def __init__(self, sessions):
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self.sessions = sessions
-        self._pending = set()
+        self._pending: set[asyncio.Task[None]] = set()
         self._slot = asyncio.Semaphore(1)
         self._closing = False
-        self._status_tasks = set()
+        self._status_tasks: set[asyncio.Task[None]] = set()
 
-    async def recover(self):
+    async def recover(self) -> None:
         """A prior process cannot still own recording/queued sessions."""
         async with asyncio.timeout(5), self.sessions() as session:
             await session.execute(update(VoiceSummary).where(VoiceSummary.status.in_(['recording','queued']))
                 .values(status='interrupted', partial=True, end_reason='process_restart'))
             await session.commit()
 
-    async def started(self, **metadata):
+    async def started(self, **metadata: Any) -> None:
         await self._store(metadata, None, 'recording')
 
-    async def _store(self, metadata, summary, status):
+    async def _store(self, metadata: dict[str, Any], summary: str | None, status: str) -> None:
         async with asyncio.timeout(5), self.sessions() as session:
             statement = insert(VoiceSummary).values(**metadata, summary=summary, status=status)
             updates = {name:getattr(statement.excluded,name) for name in
@@ -134,13 +138,20 @@ class VoiceSummaryService:
                 where=VoiceSummary.status.in_(['recording','queued'])))
             await session.commit()
 
-    async def _skipped(self, metadata):
+    async def _skipped(self, metadata: dict[str, Any]) -> None:
         try:
             await self._store(metadata, None, 'skipped')
         except Exception as error:
             logger.warning('Voice status persistence unavailable error=%s', type(error).__name__)
 
-    def enqueue(self, *, source, has_member_speech, provider, **metadata):
+    def enqueue(
+        self,
+        *,
+        source: str,
+        has_member_speech: bool,
+        provider: Any,
+        **metadata: Any,
+    ) -> bool:
         # Keep the voice disconnect path free of model and database waits.
         if self._closing or len(self._pending) >= 8:
             logger.warning("Voice summary queue unavailable")
@@ -158,18 +169,24 @@ class VoiceSummaryService:
         task.add_done_callback(self._pending.discard)
         return True
 
-    async def _create(self, source, has_member_speech, provider, metadata):
+    async def _create(
+        self,
+        source: str | None,
+        has_member_speech: bool,
+        provider: Any,
+        metadata: dict[str, Any],
+    ) -> None:
         try:
             settings = getattr(getattr(provider, 'guard', None), 'settings', None)
             limit = getattr(settings, 'ai_max_input_chars', 32000)
             available = max(0, limit - len(SUMMARY_INSTRUCTION) - 128)
-            if len(source) > available:
+            if source is not None and len(source) > available:
                 source = source[-available:] if available else ''
                 metadata = dict(metadata, partial=True,
                     coverage_reasons=sorted(set(metadata.get('coverage_reasons', ())) | {'source_cap'}))
             await self._store(metadata, None, 'queued')
             async with self._slot:
-                summary = None
+                summary: str | None = None
                 status = "no_speech" if not has_member_speech else "unavailable"
                 if has_member_speech and source and provider is not None:
                     try:
@@ -218,7 +235,7 @@ class VoiceSummaryService:
         finally:
             source = None
 
-    async def close(self):
+    async def close(self) -> None:
         self._closing = True
         tasks = self._pending | self._status_tasks
         if tasks:
@@ -227,7 +244,7 @@ class VoiceSummaryService:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
 
-    async def page(self, guild_id, before=None):
+    async def page(self, guild_id: int, before: int | None = None) -> dict[str, Any]:
         statement = select(VoiceSummary).where(
             VoiceSummary.guild_id == guild_id,
             VoiceSummary.ended_at >= datetime.now(UTC) - timedelta(days=RETENTION_DAYS),

@@ -6,6 +6,7 @@ from datetime import date
 import asyncio
 from collections import OrderedDict
 from time import monotonic
+from typing import Any
 from weakref import WeakValueDictionary
 
 import discord
@@ -21,11 +22,11 @@ class DailyCog(commands.Cog):
 
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
-        self._candidate_cache = OrderedDict()
-        self._candidate_locks = WeakValueDictionary()
+        self._candidate_cache: OrderedDict[int, tuple[float, list[int]]] = OrderedDict()
+        self._candidate_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
         self._candidate_downloads = asyncio.Semaphore(2)
 
-    def _cached_candidates(self, guild_id):
+    def _cached_candidates(self, guild_id: int) -> list[int] | None:
         cached = self._candidate_cache.get(guild_id)
         if cached and cached[0] > monotonic():
             self._candidate_cache.move_to_end(guild_id)
@@ -33,7 +34,7 @@ class DailyCog(commands.Cog):
         self._candidate_cache.pop(guild_id, None)
         return None
 
-    async def _candidate_ids(self, guild) -> list[int]:
+    async def _candidate_ids(self, guild: discord.Guild) -> list[int]:
         # Startup chunking is deliberately disabled on small hosting plans.
         # REST iteration doesn't populate Discord's permanent member cache.
         if guild.chunked:
@@ -57,11 +58,13 @@ class DailyCog(commands.Cog):
                     self._candidate_cache.popitem(last=False)
             return candidates
 
-    @commands.hybrid_command(name="iq", description="Show a daily IQ score for a member.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="iq", description="Show a daily IQ score for a member."
+    )
     @app_commands.describe(member="Member to score; defaults to you")
     async def iq(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         member: discord.Member | None = None,
     ) -> None:
         if ctx.guild is None:
@@ -79,21 +82,27 @@ class DailyCog(commands.Cog):
             allowed_mentions=discord.AllowedMentions(users=[target], roles=False, everyone=False, replied_user=False),
         )
 
-    @commands.hybrid_command(name="dumb", description="Choose the dumbest member of the day.")
-    async def dumb(self, ctx: commands.Context) -> None:
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="dumb", description="Choose the dumbest member of the day."
+    )
+    async def dumb(self, ctx: commands.Context[Any]) -> None:
         await self._daily_winner(ctx, "dumbest")
 
-    @commands.hybrid_command(name="smart", description="Choose the smartest member of the day.")
-    async def smart(self, ctx: commands.Context) -> None:
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="smart", description="Choose the smartest member of the day."
+    )
+    async def smart(self, ctx: commands.Context[Any]) -> None:
         await self._daily_winner(ctx, "smartest")
 
-    @commands.hybrid_command(name="clown", description="Choose the clown of the day.")
-    async def clown(self, ctx: commands.Context) -> None:
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="clown", description="Choose the clown of the day."
+    )
+    async def clown(self, ctx: commands.Context[Any]) -> None:
         await self._daily_winner(ctx, "clown")
 
     async def _daily_winner(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         kind: str,
     ) -> None:
         if ctx.guild is None:

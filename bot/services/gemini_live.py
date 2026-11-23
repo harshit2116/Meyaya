@@ -6,14 +6,16 @@ import asyncio
 import logging
 import queue
 import time
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from bot.logging.telemetry import event
-from typing import Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 SEND_TIMEOUT_SECONDS = 10
 
-genai = None
-types = None
+genai: Any = None
+types: Any = None
 
 
 def _load_sdk() -> None:
@@ -55,12 +57,12 @@ class GeminiLiveSession:
         on_reconnected: ReconnectCallback,
         guild_id: int | None = None,
         channel_id: int | None = None,
-        key_pool=None,
+        key_pool: Any = None,
         on_transcription: TranscriptionCallback | None = None,
     ) -> None:
         self.api_key = api_key
-        self.key_pool = key_pool
-        self._key_index = None
+        self.key_pool: Any = key_pool
+        self._key_index: int | None = None
         self.model = model
         self.guild_id = guild_id
         self.channel_id = channel_id
@@ -72,13 +74,13 @@ class GeminiLiveSession:
         self.on_reconnected = on_reconnected
         self.on_transcription = on_transcription
 
-        self._client = None
-        self._conn_cm = None
-        self._session = None
+        self._client: Any = None
+        self._conn_cm: Any = None
+        self._session: Any = None
         self._running = False
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._receiver_task: asyncio.Task | None = None
-        self._sender_task: asyncio.Task | None = None
+        self._receiver_task: asyncio.Task[None] | None = None
+        self._sender_task: asyncio.Task[None] | None = None
 
         # Discord invokes the sink on its audio thread. A standard Queue is the
         # thread-safe boundary; an Event wakes the async sender without creating
@@ -94,8 +96,8 @@ class GeminiLiveSession:
         self._received_output_audio = False
         self._output_chunk_count = 0
 
-    def _config(self) -> dict:
-        config = {
+    def _config(self) -> dict[str, Any]:
+        config: dict[str, Any] = {
             "response_modalities": ["AUDIO"],
             "system_instruction": {"parts": [{"text": self.system_instruction}]},
             "speech_config": {
@@ -114,7 +116,7 @@ class GeminiLiveSession:
             config["output_audio_transcription"] = {}
         return config
 
-    def _metric(self, name: str, **fields) -> None:
+    def _metric(self, name: str, **fields: Any) -> None:
         event(
             name,
             feature="voice",
@@ -148,19 +150,19 @@ class GeminiLiveSession:
         )
         self._sender_task = asyncio.create_task(self._sender_loop(), name="gemini-live-sender")
 
-    def _release_key(self):
-        if self._key_index is not None:
+    def _release_key(self) -> None:
+        if self._key_index is not None and self.key_pool is not None:
             self.key_pool.release(self._key_index)
             self._key_index = None
 
-    async def _open_with_keys(self):
+    async def _open_with_keys(self) -> None:
         if self.key_pool is None or len(self.key_pool.slots) <= 1:
             if self._client is None:
                 key = self.key_pool.slots[0].value if self.key_pool and self.key_pool.slots else self.api_key
                 self._client = genai.Client(api_key=key)
             await self._open_connection()
             return
-        tried = set()
+        tried: set[int] = set()
         while len(tried) < len(self.key_pool.slots):
             index = self.key_pool.acquire([i for i in range(len(self.key_pool.slots)) if i not in tried])
             if index is None:
@@ -380,7 +382,7 @@ class GeminiLiveSession:
                     logger.exception("Gemini audio sender stopped unexpectedly")
                 return
 
-    async def _wait_for_session(self):
+    async def _wait_for_session(self) -> Any:
         while self._running:
             await self._connected.wait()
             if self._session is not None:
@@ -388,7 +390,7 @@ class GeminiLiveSession:
             self._connected.clear()
         raise asyncio.CancelledError
 
-    async def _send_with_recovery(self, **payload) -> None:
+    async def _send_with_recovery(self, **payload: Any) -> None:
         logged_failure = False
         while self._running:
             session = await self._wait_for_session()
@@ -412,7 +414,7 @@ class GeminiLiveSession:
                 await self._reconnect(session, "send failure")
         raise asyncio.CancelledError
 
-    async def _reconnect(self, failed_session, reason: str) -> None:
+    async def _reconnect(self, failed_session: Any, reason: str) -> None:
         self._metric("voice_reconnect", fallback_reason=reason)
         async with self._reconnect_lock:
             if not self._running:
@@ -476,7 +478,7 @@ class GeminiLiveSession:
                     logger.warning("[GEMINI] receiver disconnected (%s); reconnecting", exc)
                     await self._reconnect(session, "receive failure")
 
-    async def _process_event(self, event) -> None:
+    async def _process_event(self, event: Any) -> None:
         try:
             usage = getattr(event, "usage_metadata", None)
             if usage is not None:

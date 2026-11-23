@@ -23,6 +23,7 @@ from bot.models.chat_blacklist import ChatBlacklist
 from bot.services.usage import UsageService
 from bot.services.request_log import RequestLogService
 from bot.services.voice_summary import VoiceSummaryService
+from bot.services.voice_usage import EMPTY_VOICE_TOTALS, report as voice_usage_report
 from bot.services.chat_blacklist import ChatBlacklistService
 from bot.web.dashboard import Dashboard
 from bot.web.server_info import rest_server_info, rest_member_preview
@@ -242,7 +243,9 @@ class LocalDashboard(Dashboard):
         return response
 
     async def servers(self, request):
-        usage, limits = await self.bot.usage.report()
+        (usage, limits), voice_totals = await asyncio.gather(
+            self.bot.usage.report(), voice_usage_report(self.bot.db_session),
+        )
         async with self.bot.db_session() as session:
             records = (await session.scalars(select(GuildSettings))).all()
         settings = {row.guild_id: row for row in records}
@@ -263,7 +266,8 @@ class LocalDashboard(Dashboard):
                 features=feature_states(getattr(config, 'disabled_features', None) or ()),
                 exempt=gid == self.bot.settings.quota_exempt_guild_id,
                 limit=limits.get(gid, 40),
-                **usage.get(gid, dict(today_chats=0, today_commands=0, week_chats=0, week_commands=0))))
+                **usage.get(gid, dict(today_chats=0, today_commands=0, week_chats=0, week_commands=0)),
+                **voice_totals.get(gid, EMPTY_VOICE_TOTALS)))
         return web.json_response(dict(ready=True, mode='local', servers=rows))
 
     async def server_details(self, request):

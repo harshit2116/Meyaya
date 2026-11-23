@@ -6,7 +6,7 @@ from functools import lru_cache
 import json
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from bot.prompts.conversation import CALLBACK_RULES, FOLLOWUP_RECALL_RULES, LANGUAGE_RULES, LISTENING_RULES
 from bot.prompts.rules import (
@@ -30,7 +30,7 @@ DEFAULT_PERSONALITY = {
 }
 
 @lru_cache(maxsize=1)
-def load_personality() -> dict:
+def load_personality() -> dict[str, Any]:
     """Load the single active style config. Restart after editing a revision."""
     try:
         value = json.loads(PERSONALITY_PATH.read_text(encoding="utf-8"))

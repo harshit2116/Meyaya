@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 import discord
 from bot.utils.components_v2 import MeyayaView
@@ -143,7 +144,7 @@ class GameSubmissionModal(discord.ui.Modal):
         self.session_id = session_id
         self.public_message = public_message
         self.judge_callback = judge_callback
-        self.answer = discord.ui.TextInput(
+        self.answer: discord.ui.TextInput[Any] = discord.ui.TextInput(
             label="Your answer",
             placeholder="Only Meyaya will connect this answer to you.",
             style=discord.TextStyle.paragraph,
@@ -193,7 +194,7 @@ class GameLobbyView(MeyayaView):
         await interaction.response.send_message(str(exc), ephemeral=True)
 
     @discord.ui.button(label="Join", emoji="➕", style=discord.ButtonStyle.success)
-    async def join(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def join(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         try:
             await self.service.join(self.session_id, interaction.user.id)
         except GameSessionError as exc:
@@ -204,7 +205,7 @@ class GameLobbyView(MeyayaView):
         )
 
     @discord.ui.button(label="Leave", style=discord.ButtonStyle.secondary)
-    async def leave(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def leave(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         try:
             await self.service.leave(self.session_id, interaction.user.id)
         except GameSessionError as exc:
@@ -215,7 +216,7 @@ class GameLobbyView(MeyayaView):
         )
 
     @discord.ui.button(label="Start", emoji="▶️", style=discord.ButtonStyle.primary)
-    async def start(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def start(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         try:
             await self.service.start(self.session_id, interaction.user.id)
         except GameSessionError as exc:
@@ -231,16 +232,17 @@ class GameLobbyView(MeyayaView):
             embed=build_lobby_closed_embed(self.service, self.session_id),
             view=None,
         )
-        if interaction.channel is None:
+        channel: Any = interaction.channel
+        if channel is None:
             return
-        collection.message = await interaction.channel.send(
+        collection.message = await channel.send(
             embed=build_game_embed(self.service, self.session_id),
             view=collection,
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         try:
             await self.service.cancel(self.session_id, interaction.user.id)
         except GameSessionError as exc:
@@ -298,7 +300,7 @@ class GameCollectionView(MeyayaView):
             self.submit.disabled = True
 
     @discord.ui.button(label="Submit privately", emoji="✍️", style=discord.ButtonStyle.primary)
-    async def submit(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def submit(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         if interaction.message is None:
             await interaction.response.send_message(
                 "The game message is unavailable.", ephemeral=True
@@ -314,7 +316,9 @@ class GameCollectionView(MeyayaView):
         )
 
     @discord.ui.button(label="Judge submitted", style=discord.ButtonStyle.success)
-    async def judge_submitted(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def judge_submitted(
+        self, interaction: discord.Interaction, _: discord.ui.Button[Any]
+    ) -> None:
         if interaction.message is None:
             await interaction.response.send_message(
                 "The game message is unavailable.", ephemeral=True
@@ -330,7 +334,7 @@ class GameCollectionView(MeyayaView):
         )
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
-    async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         try:
             await self.service.cancel(self.session_id, interaction.user.id)
         except GameSessionError as exc:

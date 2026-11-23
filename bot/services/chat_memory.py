@@ -20,8 +20,6 @@ MAX_TURNS = 32  # bounded per member/channel, never shared between speakers
 
 
 class ChatMemoryService:
-    """Stores recent conversation turns per Discord channel."""
-
     def __init__(self, redis: Redis | None) -> None:
         self.redis = redis
         self._last_warning = float("-inf")
@@ -105,9 +103,10 @@ class ChatMemoryService:
         """Append a completed exchange and trim/expire the history. No-ops on Redis failure."""
 
         history_text = f"[{speaker_label}] {user_text}" if speaker_label else user_text
+        user_stamp = utc_time(user_created_at)
         entries = (
             {"role": "user", "content": history_text,
-             'created_at_utc': utc_time(user_created_at).isoformat() if utc_time(user_created_at) else None},
+             'created_at_utc': user_stamp.isoformat() if user_stamp is not None else None},
             {"role": "assistant", "content": model_text,
              'created_at_utc': datetime.now(UTC).isoformat()},
         )

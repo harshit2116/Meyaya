@@ -1,4 +1,8 @@
 """Per-server feature controls shared by commands and the owner dashboard."""
+from __future__ import annotations
+
+from collections.abc import Container
+
 from bot.data.help_catalog import CATEGORY_ORDER, COMMANDS_BY_NAME
 from bot.utils.command_aliases import ALIAS_COMMANDS
 from discord.ext import commands
@@ -10,15 +14,15 @@ FEATURES = {
 
 
 class FeatureDisabled(commands.CheckFailure):
-    def __init__(self, feature):
+    def __init__(self, feature: str) -> None:
         super().__init__(f"{feature} is disabled in this server's Meyaya settings.")
 
 
-def command_feature(name):
+def command_feature(name: str | None) -> str | None:
     root = (name or "").split(" ", 1)[0].casefold()
     entry = COMMANDS_BY_NAME.get(ALIAS_COMMANDS.get(root, root))
     return entry.category if entry is not None and entry.category in FEATURES else None
 
 
-def feature_states(disabled=()):
+def feature_states(disabled: Container[str] = ()) -> dict[str, bool]:
     return {name: name not in disabled for name in FEATURES}

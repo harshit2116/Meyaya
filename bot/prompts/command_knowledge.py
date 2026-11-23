@@ -1,6 +1,10 @@
 """Small, catalog-backed command context; no model calls or message-history scans."""
 
+from __future__ import annotations
+
 import re
+from typing import Any
+
 from bot.data.help_catalog import COMMANDS
 
 PROFILE_HELP = (
@@ -20,7 +24,7 @@ PROFILE_HELP = (
 )
 
 
-def command_knowledge(bot, query):
+def command_knowledge(bot: Any, query: str) -> list[str]:
     catalog = [item for item in COMMANDS if bot.get_command(item.name) or bot.tree.get_command(item.name)]
     words = set(re.findall(r"[a-z0-9]+", query.casefold()))
     profile_question = bool(words & {"profile", "profilecheck", "pfp", "avatar", "banner", "decoration", "decorations", "aesthetic", "palette"})

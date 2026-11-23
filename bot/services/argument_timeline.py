@@ -1,10 +1,17 @@
 """Evidence-linked summaries; model output never controls moderation actions."""
 
+from __future__ import annotations
+
+from collections.abc import Sequence
 import json
+from typing import Any
+
 import discord
 
+from bot.services.llm import LLMProvider
 
-async def build_timeline(llm, messages):
+
+async def build_timeline(llm: LLMProvider | None, messages: Sequence[Any]) -> str:
     if llm is None:
         return "The analysis service is unavailable. No conclusion was made."
     evidence = [
@@ -23,9 +30,11 @@ async def build_timeline(llm, messages):
     if not isinstance(result, dict):
         return "The analysis service could not produce a timeline. No conclusion was made."
     by_id = {str(m.message_id): m for m in messages}
-    safe = lambda text: discord.utils.escape_mentions(
-        discord.utils.escape_markdown(str(text)[:350])
-    )
+
+    def safe(text: object) -> str:
+        return discord.utils.escape_mentions(
+            discord.utils.escape_markdown(str(text)[:350])
+        )
     lines = [
         f"Review of {len(messages)} messages.\n",
         safe(result.get("summary", "")),

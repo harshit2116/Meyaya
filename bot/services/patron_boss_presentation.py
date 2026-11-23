@@ -1,6 +1,10 @@
 """Authored Erasure dialogue and the Origin/Erasure clash finale."""
 
+from __future__ import annotations
+
 import asyncio
+from typing import Any
+
 from bot.services.meyaya_boss_presentation import BossPresentation, INTRO_GIF, VICTORY_GIF
 
 VEYRA_INTRO_GIF = "https://klipy.com/gifs/skadi-alter"
@@ -12,7 +16,7 @@ class VeyraPresentation(BossPresentation):
     embed_colour = 0xDC143C
     embed_title = "Mournfang"
 
-    async def intro(self, state):
+    async def intro(self, state: Any) -> None:
         await self.beat(
             "# Veyra.\n-# ENEMY OF ALL\n\n> **The Soul Interface did not invite her.**\n> **It cannot make her leave.**",
             gif=VEYRA_INTRO_GIF,
@@ -27,12 +31,12 @@ class VeyraPresentation(BossPresentation):
             "# Void Revenant\n\n**ABYSS MEMORY / WORLD SEVER**\n\n*I have seen the end of every world. You will not be the exception.*"
         )
 
-    async def speak(self, state):
+    async def speak(self, state: Any) -> None:
         if state.dialogue and self.speeches < 3:
             self.speeches += 1
             await self.beat(f"# Veyra\n\n**{state.dialogue}**")
 
-    async def finish(self, state, *, history_note=""):
+    async def finish(self, state: Any, *, history_note: str = "") -> None:
         won = state.winner_id == state.right.user_id
         text = (
             "# No one answers.\n\n> **You thought this was a battle.**\n\n## It was your final warning.\n\n-# VEYRA · ENEMY OF ALL"
@@ -49,7 +53,7 @@ class VeyraPresentation(BossPresentation):
 
 
 class PatronClashPresentation(BossPresentation):
-    async def intro(self, state):
+    async def intro(self, state: Any) -> None:
         await self.beat(
             "# ORIGIN // ERASURE\n-# TWO AUTHORITIES. ONE WORLD.\n\n**Meyaya:** Every ending still belongs to a story.\n**Veyra:** Then I will erase the author.\n\n*The Soul Interface disconnects its limiters.*",
             gif=INTRO_GIF,
@@ -60,12 +64,12 @@ class PatronClashPresentation(BossPresentation):
             "# WORLD COLLISION AUTHORIZED\n\n**Everbloom answers Mournfang.**\n**Origin faces its own extinction.**\n\n*There are no spectators left in the sky.*"
         )
 
-    async def speak(self, state):
+    async def speak(self, state: Any) -> None:
         if state.dialogue and self.speeches < 3:
             self.speeches += 1
             await self.beat(f"# {state.boss_form}\n\n**{state.dialogue}**")
 
-    async def finish(self, state, *, history_note=""):
+    async def finish(self, state: Any, *, history_note: str = "") -> None:
         origin_won = state.winner_id == state.left.user_id
         erasure_won = state.winner_id == state.right.user_id
         text = (

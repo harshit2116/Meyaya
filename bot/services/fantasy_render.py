@@ -1,35 +1,47 @@
 """Meyaya's Soul Interface: portrait crest, affinity glyphs and a local ritual."""
 
-from io import BytesIO
-from functools import lru_cache
-import math
+from __future__ import annotations
+
+from collections.abc import Callable
 from dataclasses import replace
+from functools import lru_cache
+from io import BytesIO
+import math
+from typing import Any, cast
 
 from PIL import Image, ImageDraw, ImageOps
 
-from bot.data.fantasy import AFFINITIES, CLASSES, RARITIES, RARITY_COLORS
-from bot.services.card_renderer import font
+from bot.data.fantasy import AFFINITIES, CLASSES, RARITIES, RARITY_COLORS, Affinity
 from bot.data.fantasy_alignment import patron_for
+from bot.services.card_renderer import font
+
+type RGB = tuple[int, int, int]
+type Color = str | RGB | tuple[int, int, int, int]
 
 CARD_SIZE = (900, 1000)
 MAX_CARD_BYTES = 4 * 1024 * 1024
 
 
-def theme_for(profile):
+def theme_for(profile: Any) -> Affinity:
     core = AFFINITIES.get(profile.affinity_id, AFFINITIES["arcane"])
     patron = patron_for(profile)
     return replace(core, color=patron.color, dark=patron.dark, lore=patron.lore) if patron else core
 
 
-def rgb(color):
-    return tuple(bytes.fromhex(color.lstrip("#")))
+def rgb(color: str) -> RGB:
+    raw = bytes.fromhex(color.lstrip("#"))
+    return (raw[0], raw[1], raw[2])
 
 
-def blend(a, b, amount):
-    return tuple(round(x + (y - x) * amount) for x, y in zip(a, b))
+def blend(a: RGB, b: RGB, amount: float) -> RGB:
+    return (
+        round(a[0] + (b[0] - a[0]) * amount),
+        round(a[1] + (b[1] - a[1]) * amount),
+        round(a[2] + (b[2] - a[2]) * amount),
+    )
 
 
-def flower(draw, x, y, radius, color):
+def flower(draw: ImageDraw.ImageDraw, x: float, y: float, radius: float, color: Color) -> None:
     for angle in range(0, 360, 72):
         theta = math.radians(angle)
         cx, cy = x + math.sin(theta) * radius * 0.65, y + math.cos(theta) * radius * 0.65
@@ -38,11 +50,18 @@ def flower(draw, x, y, radius, color):
     draw.ellipse((x - 3, y - 3, x + 3, y + 3), fill=color)
 
 
-def glyph(draw, center, radius, kind, color, width=3):
+def glyph(
+    draw: ImageDraw.ImageDraw,
+    center: tuple[float, float],
+    radius: float,
+    kind: str,
+    color: Color,
+    width: int = 3,
+) -> None:
     x, y = center
     if kind in {"star", "sun", "rune"}:
         count = 8 if kind == "sun" else 4 if kind == "star" else 6
-        points = []
+        points: list[tuple[float, float]] = []
         for i in range(count * 2):
             angle = -math.pi / 2 + i * math.pi / count
             r = radius if i % 2 == 0 else radius * 0.35
@@ -149,7 +168,7 @@ def glyph(draw, center, radius, kind, color, width=3):
         )
 
 
-def portrait(data, name, size=260):
+def portrait(data: bytes, name: object, size: int = 260) -> Image.Image:
     art = Image.new("RGB", (size, size), "#2b233b")
     if data and len(data) <= 6 * 1024 * 1024:
         try:
@@ -172,34 +191,41 @@ def portrait(data, name, size=260):
     return art
 
 
-def centered(draw, y, text, size, color, width=760):
-    text = " ".join(str(text).split())[:150]
-    while size > 14 and draw.textlength(text, font=font(size)) > width:
+def centered(
+    draw: ImageDraw.ImageDraw,
+    y: float,
+    text: object,
+    size: int,
+    color: Color,
+    width: float = 760,
+) -> None:
+    value = " ".join(str(text).split())[:150]
+    while size > 14 and draw.textlength(value, font=font(size)) > width:
         size -= 1
-    if draw.textlength(text, font=font(size)) > width:
-        while text and draw.textlength(text + "…", font=font(size)) > width:
-            text = text[:-1]
-        text += "…"
-    draw.text((450, y), text, font=font(size), fill=color, anchor="mt")
+    if draw.textlength(value, font=font(size)) > width:
+        while value and draw.textlength(value + "…", font=font(size)) > width:
+            value = value[:-1]
+        value += "…"
+    draw.text((450, y), value, font=font(size), fill=color, anchor="mt")
 
 
 @lru_cache(maxsize=32)
-def _soul_gradient(dark, accent):
+def _soul_gradient(dark: RGB, accent: RGB) -> bytes:
     # Cache just a 3 KB column per theme, not a multi-megabyte user card.
     return bytes(channel for y in range(CARD_SIZE[1])
                  for channel in blend(dark, accent, max(0, 1 - abs(y - 345) / 700) * 0.17))
 
 
-def _soul_background(dark, accent):
+def _soul_background(dark: RGB, accent: RGB) -> Image.Image:
     strip = Image.frombytes("RGB", (1, CARD_SIZE[1]), _soul_gradient(dark, accent))
     return strip.resize(CARD_SIZE, Image.Resampling.NEAREST)
 
 
-def render_soul_card(profile, name, avatar=b""):
+def render_soul_card(profile: Any, name: object, avatar: bytes = b"") -> bytes:
     if getattr(profile, "is_meyaya_boss", False):
         from bot.services.meyaya_boss_renderer import render_boss_profile
 
-        return render_boss_profile(profile, avatar)
+        return cast(Callable[[Any, bytes], bytes], cast(Any, render_boss_profile))(profile, avatar)
     theme = theme_for(profile)
     dark, accent = rgb(theme.dark), rgb(theme.color)
     image = _soul_background(dark, accent)
@@ -224,18 +250,19 @@ def render_soul_card(profile, name, avatar=b""):
     centered(d, 158, profile.fantasy_title, 23, "#ddcfe8")
     rarity_index = RARITIES.index(profile.weapon_rarity) if profile.weapon_rarity in RARITIES else 0
     rarity = RARITY_COLORS[rarity_index]
-    for radius, color, width in (
+    ring_specs: tuple[tuple[int, Color, int], ...] = (
         (180, blend(dark, accent, 0.25), 1),
         (158, theme.color, 2),
         (145, rarity, 2),
-    ):
+    )
+    for radius, color, width in ring_specs:
         d.ellipse(
             (450 - radius, 367 - radius, 450 + radius, 367 + radius), outline=color, width=width
         )
     for angle in range(0, 360, 45):
         theta = math.radians(angle)
-        x, y = 450 + math.cos(theta) * 170, 367 + math.sin(theta) * 170
-        d.polygon(((x, y - 4), (x + 4, y), (x, y + 4), (x - 4, y)), fill=theme.color)
+        px, py = 450 + math.cos(theta) * 170, 367 + math.sin(theta) * 170
+        d.polygon(((px, py - 4), (px + 4, py), (px, py + 4), (px - 4, py)), fill=theme.color)
     art = portrait(avatar, name)
     mask = Image.new("L", art.size)
     ImageDraw.Draw(mask).ellipse((0, 0, 259, 259), fill=255)
@@ -250,7 +277,7 @@ def render_soul_card(profile, name, avatar=b""):
     d.line((130, 724, 390, 724), fill=blend(dark, accent, 0.5), width=1)
     flower(d, 450, 724, 12, theme.color)
     d.line((510, 724, 770, 724), fill=blend(dark, accent, 0.5), width=1)
-    for y, title, current, total, color in (
+    for y, title, current, total, bar_color in (
         (762, "HP", profile.hp, profile.max_hp, theme.color),
         (828, "MP", profile.mp, profile.max_mp, "#c6b8ef"),
     ):
@@ -259,7 +286,7 @@ def render_soul_card(profile, name, avatar=b""):
         d.rounded_rectangle((166, y + 6, 640, y + 25), radius=9, fill=blend(dark, accent, 0.12))
         fill = 474 * max(0, min(1, current / max(1, total)))
         if fill:
-            d.rounded_rectangle((166, y + 6, 166 + max(18, fill), y + 25), radius=9, fill=color)
+            d.rounded_rectangle((166, y + 6, 166 + max(18, fill), y + 25), radius=9, fill=bar_color)
     centered(
         d, 902, f"SOUL {profile.level:02d}  ·  {profile.xp} XP  ·  WEAPON +{getattr(profile, 'weapon_level', 0)}", 20, theme.color
     )
@@ -280,7 +307,7 @@ def render_soul_card(profile, name, avatar=b""):
     return data
 
 
-def render_ritual(profile):
+def render_ritual(profile: Any) -> bytes:
     """A quiet illustrated affinity reveal with a matching ambient environment."""
     from bot.services.affinity_animation import render_affinity_ritual
 

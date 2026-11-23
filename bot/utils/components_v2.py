@@ -6,21 +6,24 @@ to Discord. Interactive views keep their original items, callbacks and clocks.
 
 from __future__ import annotations
 
-from functools import wraps
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextvars import ContextVar
+from functools import wraps
+import inspect
 from itertools import groupby
 from pathlib import PurePosixPath
+from typing import Any
 from weakref import WeakValueDictionary
 
 import discord
 
 MISSING = discord.utils.MISSING
-_message_views = WeakValueDictionary()
+_message_views: WeakValueDictionary[int, MeyayaView] = WeakValueDictionary()
 _installed = False
 _delivering = ContextVar("meyaya_v2_delivery", default=False)
 
 
-def _text_chunks(text, limit=2800):
+def _text_chunks(text: object, limit: int = 2800) -> Iterator[str]:
     text = str(text)
     while len(text) > limit:
         cut = text.rfind("\n", 0, limit)
@@ -34,13 +37,13 @@ def _text_chunks(text, limit=2800):
         yield text
 
 
-def _display(text):
+def _display(text: object) -> list[Any]:
     return [discord.ui.TextDisplay(chunk) for chunk in _text_chunks(text)]
 
 
-def _field_displays(fields):
+def _field_displays(fields: Iterable[Any]) -> Iterator[Any]:
     """Pack related fields into readable blocks without splitting short fields."""
-    block = []
+    block: list[str] = []
     for field in fields:
         text = f"**{field.name}**\n{field.value}"
         if block and len("\n\n".join([*block, text])) > 900:
@@ -51,9 +54,15 @@ def _field_displays(fields):
         yield from _display("\n\n".join(block))
 
 
-def _card_parts(content, embeds, media, *, image_first=True):
-    parts = _display(content) if content else []
-    referenced = set()
+def _card_parts(
+    content: str | None,
+    embeds: Sequence[discord.Embed],
+    media: Sequence[str],
+    *,
+    image_first: bool = True,
+) -> tuple[int, list[Any]]:
+    parts: list[Any] = _display(content) if content else []
+    referenced: set[str] = set()
     color = 0xF48FB1
     for index, embed in enumerate(embeds):
         if index == 0 and embed.color is not None:
@@ -66,7 +75,7 @@ def _card_parts(content, embeds, media, *, image_first=True):
             title = f"[{title}]({embed.url})"
         heading = (f"-# {author.name}\n" if author.name else "") + (f"## {title}" if title else "")
         thumbnail = embed.thumbnail.url or author.icon_url
-        text_parts = []
+        text_parts: list[Any] = []
         if heading:
             text_parts.extend(_display(heading))
         if embed.description:
@@ -75,7 +84,8 @@ def _card_parts(content, embeds, media, *, image_first=True):
             # Profile artwork belongs with the opening identity, before the
             # detailed fields can fill the first page.
             if thumbnail and text_parts:
-                opening, size = [], 0
+                opening: list[Any] = []
+                size = 0
                 while text_parts and len(opening) < 3 and size + len(text_parts[0].content) <= 3500:
                     item = text_parts.pop(0)
                     opening.append(item)
@@ -105,7 +115,8 @@ def _card_parts(content, embeds, media, *, image_first=True):
             # which creates an avatar-height gap before the actual response.
             # Sections allow at most three displays; keep the group within one
             # page's text budget so pagination never splits this native unit.
-            opening, size = [], 0
+            opening = []
+            size = 0
             while text_parts and len(opening) < min(3, opening_fields) and size + len(text_parts[0].content) <= 3500:
                 item = text_parts.pop(0)
                 opening.append(item)
@@ -138,19 +149,19 @@ def _card_parts(content, embeds, media, *, image_first=True):
     return color, parts
 
 
-def _text_length(item):
+def _text_length(item: Any) -> int:
     if isinstance(item, discord.ui.TextDisplay):
         return len(item.content)
     return sum(_text_length(child) for child in getattr(item, "children", ()))
 
 
-def _component_count(item):
+def _component_count(item: Any) -> int:
     return 1 + sum(_component_count(child) for child in getattr(item, "children", ())) + (
         1 if isinstance(item, discord.ui.Section) else 0
     )
 
 
-class MeyayaView(discord.ui.View, discord.ui.LayoutView):
+class MeyayaView(discord.ui.View, discord.ui.LayoutView):  # type: ignore[misc]
     """LayoutView with the existing flat control API used by bot callbacks.
 
     View's row allocator and decorator collection keep all current controls on
@@ -160,23 +171,29 @@ class MeyayaView(discord.ui.View, discord.ui.LayoutView):
 
     image_first = True
 
-    def __init__(self, *, timeout=180):
-        self._card_content = None
-        self._card_embeds = []
-        self._card_media = []
-        self._pages = [[]]
+    def __init__(self, *, timeout: float | None = 180) -> None:
+        self._card_content: str | None = None
+        self._card_embeds: list[discord.Embed] = []
+        self._card_media: list[str] = []
+        self._pages: list[list[Any]] = [[]]
         self._page = 0
         self._accent = 0xF48FB1
-        self._page_items = []
+        self._page_items: list[discord.ui.Button[Any]] = []
         super().__init__(timeout=timeout)
 
-    def _is_layout(self):
+    def _is_layout(self) -> bool:
         return True
 
-    def has_components_v2(self):
+    def has_components_v2(self) -> bool:
         return True
 
-    def present(self, *, content=MISSING, embeds=MISSING, media=MISSING):
+    def present(
+        self,
+        *,
+        content: Any = MISSING,
+        embeds: Any = MISSING,
+        media: Any = MISSING,
+    ) -> MeyayaView:
         if content is not MISSING:
             self._card_content = str(content) if content is not None else None
         if embeds is not MISSING:
@@ -187,14 +204,14 @@ class MeyayaView(discord.ui.View, discord.ui.LayoutView):
         self._rebuild_pages()
         return self
 
-    def _control_rows(self):
+    def _control_rows(self) -> list[list[Any]]:
         items = [child for child in self.children if child not in self._page_items]
         return [list(group) for _, group in groupby(
-            sorted(items, key=lambda item: item._rendered_row or 0),
-            key=lambda item: item._rendered_row or 0,
+            sorted(items, key=lambda item: getattr(item, "_rendered_row", None) or 0),
+            key=lambda item: getattr(item, "_rendered_row", None) or 0,
         )]
 
-    def _rebuild_pages(self):
+    def _rebuild_pages(self) -> None:
         for item in self._page_items:
             discord.ui.LayoutView.remove_item(self, item)
         self._page_items = []
@@ -206,7 +223,9 @@ class MeyayaView(discord.ui.View, discord.ui.LayoutView):
         # nested controls count against Discord's 40-component message ceiling.
         budget = 40 - sum(len(row) + 1 for row in rows) - 5
         self._pages = []
-        page, text_size, count = [], 0, 0
+        page: list[Any] = []
+        text_size = 0
+        count = 0
         for part in parts:
             size, cost = _text_length(part), _component_count(part)
             if page and (text_size + size > 3500 or count + cost > budget):
@@ -224,30 +243,37 @@ class MeyayaView(discord.ui.View, discord.ui.LayoutView):
         self._page = min(self._page, len(self._pages) - 1)
         if len(self._pages) > 1:
             for action, label in (("prev", "Previous"), ("position", "Page"), ("next", "Next")):
-                button = discord.ui.Button(label=label, custom_id=f"meyaya:pages:{self.id}:{action}")
+                button: discord.ui.Button[Any] = discord.ui.Button(
+                    label=label, custom_id=f"meyaya:pages:{self.id}:{action}"
+                )
 
-                async def navigate(interaction, action=action):
+                async def navigate(
+                    interaction: discord.Interaction, action: str = action
+                ) -> None:
                     if self.is_finished():
                         await interaction.response.send_message("This menu has expired. Open the command again.", ephemeral=True)
                         return
                     self._page = max(0, min(len(self._pages) - 1, self._page + (-1 if action == "prev" else 1)))
                     await interaction.response.edit_message(view=self)
 
-                button.callback = navigate
+                button_obj: Any = button
+                button_obj.callback = navigate
                 # Pagination uses an additional V2 row even when all five
                 # classic control rows are occupied. Existing rows stay intact.
                 discord.ui.LayoutView.add_item(self, button)
                 self._page_items.append(button)
 
-    def to_components(self):
+    def to_components(self) -> list[dict[str, Any]]:
         # Controls can be added/removed by an existing callback before an edit.
         # Recalculate capacity without resetting the currently selected page.
         self._rebuild_pages()
         parts = self._pages[self._page]
-        container = discord.ui.Container(*(part.copy() for part in parts), accent_color=discord.Colour(self._accent))
+        container: discord.ui.Container[Any] = discord.ui.Container(
+            *(part.copy() for part in parts), accent_color=discord.Colour(self._accent)
+        )
         if not parts:
             container.add_item(discord.ui.TextDisplay("\u200b"))
-        result = [container.to_component_dict()]
+        result: list[dict[str, Any]] = [container.to_component_dict()]
         for row in self._control_rows():
             result.append({"type": 1, "components": [item.to_component_dict() for item in row]})
         if self._page_items:
@@ -259,18 +285,18 @@ class MeyayaView(discord.ui.View, discord.ui.LayoutView):
             result.append({"type": 1, "components": [item.to_component_dict() for item in self._page_items]})
         return result
 
-    def content_length(self):
+    def content_length(self) -> int:
         return sum(_text_length(part) for part in self._pages[self._page])
 
 
-def _message_for(receiver):
+def _message_for(receiver: Any) -> Any:
     if isinstance(receiver, (discord.Message, discord.PartialMessage)):
         return receiver
     interaction = getattr(receiver, "_parent", receiver)
     return getattr(interaction, "message", None)
 
 
-def _frozen_message(message):
+def _frozen_message(message: discord.Message) -> discord.ui.LayoutView:
     view = discord.ui.LayoutView.from_message(message)
     for item in view.walk_children():
         if isinstance(item, (discord.ui.Button, discord.ui.Select)):
@@ -279,11 +305,17 @@ def _frozen_message(message):
     return view
 
 
-def v2_payload(kwargs, *, previous=None, force=False, editing=False):
+def v2_payload(
+    kwargs: Mapping[str, Any],
+    *,
+    previous: Any = None,
+    force: bool = False,
+    editing: bool = False,
+) -> dict[str, Any]:
     """Normalize one send/edit without changing visibility or file ownership."""
     # Library forwarding methods explicitly pass MISSING for omitted options.
     # Treat those as absent so view-only webhook edits retain their card data.
-    result = {key: value for key, value in kwargs.items() if value is not MISSING}
+    result: dict[str, Any] = {key: value for key, value in kwargs.items() if value is not MISSING}
     view = result.get("view", MISSING)
     # Context.send forwards its default None values to channel/interaction
     # send methods. A second normalization must not erase the prepared card.
@@ -301,11 +333,12 @@ def v2_payload(kwargs, *, previous=None, force=False, editing=False):
         if has_embed:
             raise ValueError("Native V2 views cannot be combined with classic embeds.")
         return result
-    cached = _message_views.get(getattr(previous, "id", None))
+    previous_id = getattr(previous, "id", None)
+    cached = _message_views.get(previous_id) if isinstance(previous_id, int) else None
     if view is MISSING and cached is not None:
         view = cached
     previous_v2 = bool(getattr(getattr(previous, "flags", None), "components_v2", False))
-    files = []
+    files: list[Any] = []
     for key in ("files", "attachments"):
         files.extend(result.get(key) or [])
     if result.get("file"):
@@ -330,7 +363,7 @@ def v2_payload(kwargs, *, previous=None, force=False, editing=False):
     # promoting its text into native components, including later page changes.
     if has_embed and not result.get("content") and result.get("allowed_mentions") is None:
         result["allowed_mentions"] = discord.AllowedMentions.none()
-    updates = {}
+    updates: dict[str, Any] = {}
     if "content" in result:
         updates["content"] = result.pop("content")
     if "embed" in result or "embeds" in result:
@@ -346,15 +379,15 @@ def v2_payload(kwargs, *, previous=None, force=False, editing=False):
     return result
 
 
-def _remember(result, view):
+def _remember(result: Any, view: Any) -> None:
     if not isinstance(view, MeyayaView):
         return
     message_id = getattr(result, "id", None) or getattr(result, "message_id", None)
-    if message_id is not None:
+    if isinstance(message_id, int):
         _message_views[message_id] = view
 
 
-async def send_native_embed(destination, embed):
+async def send_native_embed(destination: Any, embed: discord.Embed) -> Any:
     """Deliver an explicitly requested classic embed through the shared transport."""
     token = _delivering.set(True)
     try:
@@ -363,12 +396,11 @@ async def send_native_embed(destination, embed):
         _delivering.reset(token)
 
 
-def install_components_v2():
+def install_components_v2() -> None:
     """Install once at bot startup across channel, DM and interaction delivery."""
     global _installed
     if _installed:
         return
-    import inspect
     targets = (
         (discord.abc.Messageable, "send", False, False),
         (discord.Message, "edit", True, False),
@@ -385,9 +417,14 @@ def install_components_v2():
         original = getattr(cls, name)
         signature = inspect.signature(original)
 
-        def wrap(original, signature, editing, force):
+        def wrap(
+            original: Callable[..., Any],
+            signature: inspect.Signature,
+            editing: bool,
+            force: bool,
+        ) -> Callable[..., Any]:
             @wraps(original)
-            async def deliver(receiver, *args, **kwargs):
+            async def deliver(receiver: Any, *args: Any, **kwargs: Any) -> Any:
                 # WebhookMessage/InteractionMessage delegate edits to another
                 # patched transport. Normalize once, at the outermost call.
                 if _delivering.get():

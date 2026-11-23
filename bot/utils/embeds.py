@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Protocol
+from typing import Any, Protocol
 
 import discord
 
@@ -61,21 +61,17 @@ def score_bar(score: int, *, segments: int = 10) -> str:
 
 
 class ProfileSummaryLike(Protocol):
-    """Profile data needed to render a user profile."""
-
     total_given: int
     total_received: int
     total_interactions: int
     favorite_interaction: str | None
     most_interacted_member_id: int | None
-    meyaya: "MeyayaProfileStateLike"
-    marriage: "MarriageSummaryLike | None"
+    meyaya: MeyayaProfileStateLike
+    marriage: MarriageSummaryLike | None
     titles: tuple[str, ...]
 
 
 class MeyayaProfileStateLike(Protocol):
-    """Meyaya System data shown on a member profile."""
-
     mood: str
     energy: int
     global_annoyance: int
@@ -103,8 +99,6 @@ def build_interaction_embed(
     color: int,
     gif_url: str | None,
 ) -> discord.Embed:
-    """Create a clean, character-focused social interaction embed."""
-
     embed = meyaya_embed(title, description, color=color)
     if gif_url:
         embed.set_image(url=gif_url)
@@ -114,9 +108,8 @@ def build_interaction_embed(
 def build_profile_embed(
     target: discord.Member,
     summary: ProfileSummaryLike,
-    visual=None,
+    visual: Any = None,
 ) -> discord.Embed:
-    """Create a unified profile across Discord, Meyaya, social, and marriage data."""
 
     best_friend = (
         f"<@{summary.most_interacted_member_id}>"
@@ -205,14 +198,12 @@ def _profile_bar(value: int) -> str:
 
 
 def build_ship_embed(
-    user_a: "discord.Member | discord.User",
-    user_b: "discord.Member | discord.User",
+    user_a: discord.Member | discord.User,
+    user_b: discord.Member | discord.User,
     percentage: int,
     label: str,
     attachment_filename: str | None,
-) -> "discord.Embed":
-    """Build a compact ship result with one fresh score and no external GIF."""
-
+) -> discord.Embed:
     if percentage >= 70:
         color = 0xFF4D6D
     elif percentage >= 40:

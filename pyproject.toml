@@ -6,10 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "meyaya"
 version = "0.1.0"
 description = "A polished Discord social interaction bot."
-readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "aiohttp>=3.10",
+    "aiohttp>=3.14.4",
     # ``audioop`` is bundled through Python 3.12; the maintained replacement
     # is only needed (and only published) for Python 3.13 and newer.
     "audioop-lts>=0.2.2; python_version >= '3.13'",
@@ -23,7 +22,7 @@ dependencies = [
     "discord-ext-voice-recv @ git+https://github.com/rdphillips7/discord-ext-voice-recv.git@ddd2860",
     "google-genai>=1.34.0",
     "langdetect>=1.0.9",
-    "pillow>=10.4",
+    "pillow>=13.0.0",
     "PyNaCl>=1.5",
     "pydantic-settings>=2.3",
     "python-dotenv>=1.0",
@@ -39,10 +38,13 @@ dependencies = [
 [project.optional-dependencies]
 dashboard = ["boto3>=1.35"]
 dev = [
-    "black>=24.4",
+    "bandit[toml]>=1.8",
+    "black>=26.10.1",
     "mypy>=1.11",
+    "pip-audit>=2.9",
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
     "ruff>=0.6",
 ]
 
@@ -58,6 +60,10 @@ exclude = ["bot.private", "bot.private.*"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = [".venv-win", "artifacts", "archive", "feature_archive", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E9", "F", "B", "ASYNC", "UP"]
 
 [tool.black]
 line-length = 100
@@ -72,7 +78,42 @@ warn_return_any = true
 no_implicit_optional = true
 disallow_untyped_defs = true
 
+[tool.pyright]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv-win"
+typeCheckingMode = "standard"
+include = ["bot", "alembic", "start.py", "dashboard.py"]
+exclude = [
+    "**/.venv*",
+    "**/__pycache__",
+    "artifacts",
+    "archive",
+    "feature_archive",
+    "build",
+    "dist",
+    "node_modules",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 norecursedirs = ["manual", ".git", ".venv*", "node_modules"]
+
+[tool.coverage.run]
+branch = true
+source = ["bot"]
+omit = ["bot/private/*", "tests/*"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.bandit]
+targets = ["bot", "start.py", "dashboard.py"]
+exclude_dirs = ["tests", "artifacts", "archive", "feature_archive", ".venv", ".venv-win", "build", "dist"]

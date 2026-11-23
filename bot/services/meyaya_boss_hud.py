@@ -1,7 +1,10 @@
 """Meyaya's native bossfight presentation; all combat state remains engine-owned."""
 
+from __future__ import annotations
+
 from functools import lru_cache
 from io import BytesIO
+from typing import Any
 
 import discord
 from PIL import Image, ImageDraw, ImageOps
@@ -17,15 +20,18 @@ STAGES = (
 )
 
 
-def stage_for(engine):
+def stage_for(engine: Any) -> int:
     return 2 if engine.boss.skills_used or engine.reflected else 1 if engine.state.memory_count else 0
 
 
-def signature_for(engine):
-    return engine.boss.last_move == "Prism Cascade" or engine.boss.last_move.startswith("Prism Reflection")
+def signature_for(engine: Any) -> bool:
+    return bool(
+        engine.boss.last_move == "Prism Cascade"
+        or engine.boss.last_move.startswith("Prism Reflection")
+    )
 
 
-def warning_for(engine):
+def warning_for(engine: Any) -> str:
     if engine.state.finished:
         return "Combat ended."
     action = engine.boss_actions + 1
@@ -37,10 +43,10 @@ def warning_for(engine):
 
 
 @lru_cache(maxsize=8)
-def stage_art(stage, cinematic=False, opening=False):
+def stage_art(stage: int, cinematic: bool = False, opening: bool = False) -> bytes:
     scene = "victory" if stage == 4 else "opening" if opening else "battle"
     base = ImageOps.pad(template(f"meyaya-{scene}-v3.png"), (960, 420), color=(27, 18, 35)).convert("RGB")
-    frames = []
+    frames: list[Image.Image] = []
     for tick in range(8 if cinematic else 1):
         frame = base.copy()
         if cinematic:
@@ -67,13 +73,20 @@ def stage_art(stage, cinematic=False, opening=False):
     return output.getvalue()
 
 
-def battle_layout(engine, *, media=None, guardian="", final=False, history_note=""):
+def battle_layout(
+    engine: Any,
+    *,
+    media: str | None = None,
+    guardian: str = "",
+    final: bool = False,
+    history_note: str = "",
+) -> discord.ui.LayoutView:
     state, player, boss = engine.state, engine.player, engine.boss
     title, interface, color = STAGES[stage_for(engine)]
     if final:
         title = ("A SOUL BEYOND EXPECTATION" if state.winner_id == player.user_id else
                  "THE BLOOM REMAINS" if state.winner_id == boss.user_id else "AN UNFINISHED BLOOM")
-    items = [discord.ui.TextDisplay(
+    items: list[discord.ui.Item[Any]] = [discord.ui.TextDisplay(
         f"-# {interface}\n# {title}\n**Meyaya · Bloom of Origin**\n"
         f"-# Move {state.moves} · Round {state.round} · Automatic battle")]
     if media:

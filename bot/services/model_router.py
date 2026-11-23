@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 import asyncio
+from typing import Any, cast
 
 from bot.logging.telemetry import current_model_context, event, record_route_deadline
 from bot.services.llm import ChatMessage, GroundedReply, LLMProvider
@@ -44,13 +45,15 @@ REASONING_FEATURES = frozenset(
 
 
 class ModelRouter(LLMProvider):
-    """Select a configured provider/model for each feature and operation."""
-
     provider_name = "router"
     model = "feature-routed"
 
     def __init__(
-        self, providers: dict[ModelTier, LLMProvider], *, guard=None, fallback=None
+        self,
+        providers: dict[ModelTier, LLMProvider],
+        *,
+        guard: Any = None,
+        fallback: LLMProvider | None = None,
     ) -> None:
         required = {ModelTier.FAST, ModelTier.BALANCED, ModelTier.REASONING, ModelTier.GROUNDED}
         missing = required.difference(providers)
@@ -59,8 +62,11 @@ class ModelRouter(LLMProvider):
         self.providers = providers
         self.guard = guard
         self.fallback = fallback
+        self.key_pool: Any = None
 
-    async def _safe_text(self, provider, *args, **kwargs):
+    async def _safe_text(
+        self, provider: LLMProvider, *args: Any, **kwargs: Any
+    ) -> str | None:
         try:
             return await provider.generate_text(*args, **kwargs)
         except AILimitReached:
@@ -103,7 +109,7 @@ class ModelRouter(LLMProvider):
         history: list[ChatMessage] | None = None,
         *,
         max_output_tokens: int | None = None,
-        timeout_seconds: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> str | None:
         # One wall-clock budget for primary attempts, backoff and model fallback.
         try:
@@ -116,7 +122,7 @@ class ModelRouter(LLMProvider):
                     timeout_seconds=timeout_seconds,
                 )
         except TimeoutError:
-            record_route_deadline()
+            cast(Any, record_route_deadline)()
             event(
                 "llm_route_deadline",
                 timeout_seconds=timeout_seconds if timeout_seconds is not None else 20,
@@ -125,12 +131,12 @@ class ModelRouter(LLMProvider):
 
     async def _generate_text_routed(
         self,
-        system_instruction,
-        user_message,
-        history=None,
+        system_instruction: str,
+        user_message: str,
+        history: list[ChatMessage] | None = None,
         *,
-        max_output_tokens=None,
-        timeout_seconds=None,
+        max_output_tokens: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> str | None:
         tier, provider = self.selected_provider()
         fallback_tier = ModelTier.REASONING if tier is ModelTier.BALANCED else ModelTier.BALANCED
@@ -179,7 +185,7 @@ class ModelRouter(LLMProvider):
     @guarded
     async def grounded_generate(
         self, system_instruction: str, user_message: str, *,
-        max_output_tokens: int = 1800, timeout_seconds: int = 45,
+        max_output_tokens: int = 1800, timeout_seconds: float = 45,
     ) -> GroundedReply:
         # Bound all credential, endpoint and model fallbacks together.
         try:
@@ -196,7 +202,7 @@ class ModelRouter(LLMProvider):
         user_message: str,
         *,
         max_output_tokens: int = 1800,
-        timeout_seconds: int = 45,
+        timeout_seconds: float = 45,
     ) -> GroundedReply:
         _, provider = self.selected_provider(grounded=True)
         fallback = self.fallback or self.providers[ModelTier.BALANCED]

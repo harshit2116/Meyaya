@@ -1,17 +1,24 @@
 """Small, bounded cache of completed profile reviews, keyed by current assets."""
 
+from __future__ import annotations
+
 from collections import OrderedDict
 import logging
 from time import monotonic
 
-from bot.services.profile_aesthetic import profilecheck_analysis
+from bot.services.profile_aesthetic import ProfileVisual, profilecheck_analysis
 from bot.services.profile_cards import profilecheck_media, PROFILE_MEDIA_BYTES
 from bot.utils.image_work import BoundedImageGate, animation_work
 
 logger = logging.getLogger(__name__)
 
+type _ProfileCheckResult = tuple[ProfileVisual, bytes, str]
+type _CacheKey = tuple[
+    str, int, int, int, int, str, tuple[str, ...], int, str
+]
 
-def _render(visual, max_bytes):
+
+def _render(visual: ProfileVisual, max_bytes: int) -> _ProfileCheckResult:
     started = monotonic()
     visual = profilecheck_analysis(visual)
     analyzed = monotonic()
@@ -21,14 +28,14 @@ def _render(visual, max_bytes):
 
 
 class ProfileCheckRenderer:
-    def __init__(self, max_bytes=8 * 1024 * 1024, ttl=300):
-        self.cache = OrderedDict()
+    def __init__(self, max_bytes: int = 8 * 1024 * 1024, ttl: int = 300) -> None:
+        self.cache: OrderedDict[_CacheKey, tuple[float, _ProfileCheckResult, int]] = OrderedDict()
         self.bytes = 0
         self.max_bytes = max_bytes
         self.ttl = ttl
         self.gate = BoundedImageGate()
 
-    def _cached(self, key):
+    def _cached(self, key: _CacheKey) -> _ProfileCheckResult | None:
         entry = self.cache.get(key)
         if entry is None:
             return None
@@ -40,7 +47,9 @@ class ProfileCheckRenderer:
         self.cache.move_to_end(key)
         return result
 
-    async def render(self, visual, *, max_bytes=PROFILE_MEDIA_BYTES):
+    async def render(
+        self, visual: ProfileVisual, *, max_bytes: int = PROFILE_MEDIA_BYTES
+    ) -> _ProfileCheckResult:
         # Fingerprint includes name, asset URLs, accent and scoring metadata.
         # Content hashes distinguish a failed download from a later recovery.
         max_bytes = min(max_bytes, PROFILE_MEDIA_BYTES)

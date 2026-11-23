@@ -4,20 +4,27 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
+from collections.abc import Iterable
 from time import monotonic
+from typing import Any
 
 import discord
 
 
 class MemberNames:
-    """Bound REST work and retain a small, short-lived identity cache."""
-
-    def __init__(self, bot):
+    def __init__(self, bot: Any) -> None:
         self.bot = bot
-        self._cache = OrderedDict()
+        self._cache: OrderedDict[tuple[int | None, int, bool], tuple[float, Any]] = OrderedDict()
         self._slots = asyncio.Semaphore(3)
 
-    async def resolve(self, guild, user_id, *, known=(), historical=False):
+    async def resolve(
+        self,
+        guild: Any,
+        user_id: int,
+        *,
+        known: Iterable[Any] = (),
+        historical: bool = False,
+    ) -> Any:
         for member in known:
             if member is not None and member.id == user_id:
                 return member

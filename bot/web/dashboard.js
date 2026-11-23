@@ -458,7 +458,13 @@ function renderServers() {
     const card = element("button", undefined, "server-tile"); card.type = "button";
     const icon = serverIcon(server), owner = element("p", `Owner · ${server.owner_name || (isFormerServer(server) ? "Not previously recorded" : "Loading…")}`, "server-owner");
     const activity = element("div", undefined, "server-tile-activity");
-    activity.append(metric("AI chats today", known(server.today_chats + (server.today_bonus_chats ?? 0))), metric("Commands today", known(server.today_commands)));
+    activity.append(
+      metric("AI chats today", known(server.today_chats + (server.today_bonus_chats ?? 0))),
+      metric("AI chats / 7 days", known(server.week_chats)),
+      metric("Voice sessions today", server.today_voice_sessions ?? 0),
+      metric("Voice sessions / 7 days", server.week_voice_sessions ?? 0),
+      metric("Commands today", known(server.today_commands))
+    );
     card.append(icon, element("h3", server.name), owner, activity, element("span", server.id, "id"), element("span", "View server →", "tile-link"));
     if (server.membership === "removed" || (server.local && server.available === false)) card.append(element("span", "No longer in server · saved records", "details"));
     card.setAttribute("aria-label", `View ${server.name}`);

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from hashlib import blake2b
+from typing import Any, cast
 
-from sqlalchemy import Select, case, delete, func, select
+from sqlalchemy import CursorResult, Select, case, delete, func, select
 import re
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from bot.models.memory import BotMemory, MemoryStatus
 from bot.repositories.base import Repository
@@ -130,7 +132,7 @@ class MemoryRepository(Repository):
             BotMemory.subject == subject,
             BotMemory.relation == relation,
         )
-        result = await self.session.execute(statement)
+        result = cast(CursorResult[Any], await self.session.execute(statement))
         return bool(result.rowcount)
 
     async def forget_id(
@@ -144,7 +146,7 @@ class MemoryRepository(Repository):
             BotMemory.guild_id == guild_id,
             BotMemory.user_id == user_id,
         )
-        result = await self.session.execute(statement)
+        result = cast(CursorResult[Any], await self.session.execute(statement))
         return bool(result.rowcount)
 
     async def forget_all(self, guild_id: int | None, user_id: int) -> int:
@@ -152,7 +154,7 @@ class MemoryRepository(Repository):
             BotMemory.guild_id == guild_id,
             BotMemory.user_id == user_id,
         )
-        result = await self.session.execute(statement)
+        result = cast(CursorResult[Any], await self.session.execute(statement))
         return int(result.rowcount or 0)
 
     async def get_owned_id_for_update(
@@ -185,6 +187,19 @@ class MemoryRepository(Repository):
             statuses.append(MemoryStatus.CONFLICTED)
         statement: Select[tuple[BotMemory]] = (
             select(BotMemory)
+            .options(
+                load_only(
+                    BotMemory.id,
+                    BotMemory.user_id,
+                    BotMemory.category,
+                    BotMemory.subject,
+                    BotMemory.relation,
+                    BotMemory.value,
+                    BotMemory.confidence,
+                    BotMemory.status,
+                    BotMemory.conflict_value,
+                )
+            )
             .where(
                 BotMemory.guild_id == guild_id,
                 BotMemory.user_id == user_id,
@@ -209,8 +224,9 @@ class MemoryRepository(Repository):
         record.lifecycle_reason = "confirmed"
         await self.session.flush()
 
-    async def recall(self, guild_id, user_id, query='', limit=24):
-        """Find relevant older facts as well as standing presentation preferences."""
+    async def recall(
+        self, guild_id: int | None, user_id: int, query: str = "", limit: int = 24
+    ) -> list[BotMemory]:
         words = list(dict.fromkeys(re.findall(r'[^\W_]{3,30}', query.casefold())))[:10]
         stop = {'the','and','you','your','that','this','what','about','remember','please','have','with','does','meyaya'}
         aliases = {'instrument':('guitar','piano','violin','drums'),
@@ -219,15 +235,39 @@ class MemoryRepository(Repository):
                    'hobbies':('hobby','interest'), 'hobby':('hobby','interest')}
         words = list(dict.fromkeys([word for word in words if word not in stop]
             + [alias for word in words for alias in aliases.get(word,())]))[:16]
-        relevance = sum((case((BotMemory.value.ilike('%' + word + '%'), 1), else_=0)
+        relevance: Any = sum((case((BotMemory.value.ilike('%' + word + '%'), 1), else_=0)
                          + case((BotMemory.relation.ilike('%' + word + '%'), 2), else_=0)
                          + case((BotMemory.category.ilike('%' + word + '%'), 1), else_=0)
                          for word in words), start=0)
         preferred = case((BotMemory.relation.in_(
             ['preferred_name','chat_capitalization','chat_style']), 1), else_=0)
-        statement = select(BotMemory).where(
-            BotMemory.guild_id == guild_id, BotMemory.user_id == user_id,
-            BotMemory.status.in_([MemoryStatus.ACTIVE, MemoryStatus.CONFLICTED]),
-        ).order_by(preferred.desc(), (relevance if not isinstance(relevance, int) else case((True,0),else_=0)).desc(),
-                   BotMemory.last_confirmed_at.desc(), BotMemory.updated_at.desc(), BotMemory.id.desc()).limit(limit)
+        order_clauses: list[Any] = [preferred.desc()]
+        if not isinstance(relevance, int):
+            order_clauses.append(relevance.desc())
+        order_clauses.extend(
+            (BotMemory.last_confirmed_at.desc(), BotMemory.updated_at.desc(), BotMemory.id.desc())
+        )
+        statement = (
+            select(BotMemory)
+            .options(
+                load_only(
+                    BotMemory.id,
+                    BotMemory.user_id,
+                    BotMemory.category,
+                    BotMemory.subject,
+                    BotMemory.relation,
+                    BotMemory.value,
+                    BotMemory.confidence,
+                    BotMemory.status,
+                    BotMemory.conflict_value,
+                )
+            )
+            .where(
+                BotMemory.guild_id == guild_id,
+                BotMemory.user_id == user_id,
+                BotMemory.status.in_([MemoryStatus.ACTIVE, MemoryStatus.CONFLICTED]),
+            )
+            .order_by(*order_clauses)
+            .limit(limit)
+        )
         return list((await self.session.scalars(statement)).all())

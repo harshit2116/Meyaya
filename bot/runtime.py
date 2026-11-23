@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 
-def restore_private_config():
+def restore_private_config() -> None:
     raw = os.getenv("MEYAYA_PRIVATE_CONFIG_JSON")
     if not raw:
         return

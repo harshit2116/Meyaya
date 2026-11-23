@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from importlib.resources import files
 import json
 from random import SystemRandom
+from typing import Any
 
 from sqlalchemy import func, select
 
@@ -29,7 +30,7 @@ class GameplayDraw:
     image_disabled: bool
 
 
-def load_curated_roster() -> list[dict]:
+def load_curated_roster() -> list[dict[str, Any]]:
     payload = json.loads(files("bot.data").joinpath("character_roster.json").read_text("utf-8"))
     entries = payload.get("characters", [])
     if len(entries) < 100:
@@ -42,11 +43,11 @@ def load_curated_roster() -> list[dict]:
         if provider_id in seen or rarity not in DRAW_RATES or weight < 1:
             raise RuntimeError("The curated summon roster contains invalid or duplicate entries.")
         seen.add(provider_id)
-    return entries
+    return list(entries)
 
 
 class CatalogService:
-    def __init__(self, bot):
+    def __init__(self, bot: Any) -> None:
         self.bot = bot
 
     async def seed_curated_roster(self) -> int:
@@ -192,7 +193,7 @@ class CatalogService:
                 )
             )
             await db.commit()
-            return row.id
+            return int(row.id)
 
     async def manage(self, action: str, target: str, value: str, actor: int) -> None:
         async with self.bot.session_factory() as db:
@@ -247,7 +248,7 @@ class CatalogService:
             )
             await db.commit()
 
-    async def status(self) -> dict:
+    async def status(self) -> dict[str, Any]:
         async with self.bot.session_factory() as db:
             total, enabled = (await db.execute(select(
                 func.count(),
@@ -262,7 +263,7 @@ class CatalogService:
             }
 
     @staticmethod
-    def _row_from_item(item: dict) -> CatalogCharacter:
+    def _row_from_item(item: dict[str, Any]) -> CatalogCharacter:
         return CatalogCharacter(
             provider="anilist",
             provider_character_id=str(int(item["anilist_id"])),

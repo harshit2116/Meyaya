@@ -23,6 +23,7 @@ from bot.web.cache import AsyncTTLCache
 from bot.web.security import DashboardSecurity, SESSION_SECONDS
 from bot.web.server_info import cached_server_info, cached_member_preview
 from bot.services.owner_health import OwnerHealth
+from bot.services.voice_usage import EMPTY_VOICE_TOTALS, report as voice_usage_report
 from bot.logging.health import health as health_telemetry, find_retained_error
 import re
 from datetime import UTC, datetime, timedelta
@@ -370,13 +371,12 @@ class Dashboard:
                     prefix='uwu', autoresponder=False, limit=limits.get(gid, 40), exempt=False, model_success_rate=0, model_failures=0, model_average_latency_ms=None, model_tokens=0,
                     **usage.get(gid, dict(today_chats=0, today_commands=0, week_chats=0, week_commands=0))))
         for row in rows:
-            row.update(voice_totals.get(int(row['id']), dict(today_voice_seconds=0,week_voice_seconds=0,total_voice_seconds=0)))
+            row.update(voice_totals.get(int(row['id']), EMPTY_VOICE_TOTALS))
         return {'ready': self.bot.is_ready(), 'servers': rows}
 
     async def _voice_totals(self):
-        from bot.services.voice_usage import report
         voice_cog = self.bot.get_cog('VoiceLiveCog')
-        return await report(self.bot.db_session, getattr(voice_cog, '_sessions', {}).values())
+        return await voice_usage_report(self.bot.db_session, getattr(voice_cog, '_sessions', {}).values())
 
     async def overview(self, request):
         from bot.web.insights import overview

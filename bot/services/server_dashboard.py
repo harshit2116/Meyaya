@@ -1,6 +1,10 @@
 """Small, guild-scoped queries for the in-Discord server dashboard."""
 
+from __future__ import annotations
+
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import discord
 from sqlalchemy import func, select
@@ -12,7 +16,7 @@ from bot.models.usage import GuildUsage
 from bot.utils.embeds import meyaya_embed
 
 
-async def server_overview(bot, guild_id):
+async def server_overview(bot: Any, guild_id: int) -> dict[str, Any]:
     now = datetime.now(UTC)
     today = now.date()
     async with bot.db_session() as session:
@@ -47,7 +51,7 @@ async def server_overview(bot, guild_id):
         }
 
 
-def dashboard_embed(guild, data):
+def dashboard_embed(guild: Any, data: Mapping[str, Any]) -> discord.Embed:
     embed = meyaya_embed("Server Dashboard", discord.utils.escape_markdown(guild.name), icon="📊")
     allowance = "Unlimited" if data["unlimited"] else str(data["limit"])
     remaining = "Unlimited" if data["unlimited"] else str(data["remaining"])

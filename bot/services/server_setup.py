@@ -1,5 +1,10 @@
 """Persist the guided setup using the existing server settings tables."""
 
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
 from sqlalchemy.dialects.postgresql import insert
 
 from bot.models.guild_settings import GuildSettings
@@ -9,7 +14,7 @@ from bot.repositories.guild_settings import GuildSettingsRepository
 MODERATION_FEATURES = ("probation", "cross_spam", "anti_invite")
 
 
-async def load_setup(bot, guild_id):
+async def load_setup(bot: Any, guild_id: int) -> dict[str, Any]:
     async with bot.db_session() as session:
         settings = await session.get(GuildSettings, guild_id)
         moderation = await session.get(ModerationSettings, guild_id)
@@ -20,7 +25,9 @@ async def load_setup(bot, guild_id):
         }
 
 
-async def save_setup(bot, guild_id, actor_id, choices):
+async def save_setup(
+    bot: Any, guild_id: int, actor_id: int, choices: Mapping[str, Any]
+) -> None:
     """Commit all choices together; leave quota, prefix and raid state untouched."""
     async with bot.db_session() as session:
         repository = GuildSettingsRepository(session)

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from bot.logging.telemetry import discord_context, event
 
-import logging
 import asyncio
+import logging
+from typing import Any
 
 import discord
 from discord.ext import commands
@@ -34,26 +35,26 @@ class SocialGamesCog(commands.Cog):
         self.judge = SocialGameJudge(bot.build_llm_provider())
         self._last_theme: dict[tuple[int, str], str] = {}
 
-    @commands.hybrid_command(name="showdown", description="Start an anonymous comparison showdown.")
+    @commands.hybrid_command(name="showdown", description="Start an anonymous comparison showdown.")  # type: ignore[arg-type]
     @commands.guild_only()
-    async def showdown(self, ctx: commands.Context) -> None:
+    async def showdown(self, ctx: commands.Context[Any]) -> None:
         await self._create_game(ctx, "showdown")
 
-    @commands.hybrid_command(name="excuse", description="Start an anonymous excuse battle.")
+    @commands.hybrid_command(name="excuse", description="Start an anonymous excuse battle.")  # type: ignore[arg-type]
     @commands.guild_only()
-    async def excuse(self, ctx: commands.Context) -> None:
+    async def excuse(self, ctx: commands.Context[Any]) -> None:
         await self._create_game(ctx, "excuse")
 
-    @commands.hybrid_command(name="survive", description="Start an anonymous survival challenge.")
+    @commands.hybrid_command(name="survive", description="Start an anonymous survival challenge.")  # type: ignore[arg-type]
     @commands.guild_only()
-    async def survive(self, ctx: commands.Context) -> None:
+    async def survive(self, ctx: commands.Context[Any]) -> None:
         await self._create_game(ctx, "survive")
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="endgame",
         description="End the active social game in this channel.",
     )
-    async def endgame(self, ctx: commands.Context) -> None:
+    async def endgame(self, ctx: commands.Context[Any]) -> None:
         if ctx.guild is None or ctx.channel is None:
             await ctx.send("This command can only be used inside a server game channel.")
             return
@@ -76,7 +77,7 @@ class SocialGamesCog(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    async def _create_game(self, ctx: commands.Context, game_type: str) -> None:
+    async def _create_game(self, ctx: commands.Context[Any], game_type: str) -> None:
         if ctx.guild is None or ctx.channel is None:
             await ctx.send("This game can only be started inside a server.")
             return
@@ -96,6 +97,8 @@ class SocialGamesCog(commands.Cog):
         except GameSessionError as exc:
             await ctx.send(str(exc))
             return
+        if len(self._last_theme) >= 1024 and scenario_key not in self._last_theme:
+            self._last_theme.pop(next(iter(self._last_theme)))
         self._last_theme[scenario_key] = scenario.theme
 
         view = GameLobbyView(

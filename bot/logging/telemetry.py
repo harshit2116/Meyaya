@@ -1,6 +1,9 @@
 """Task-local request metrics. Never log prompts, answers, credentials or evidence."""
 
+from __future__ import annotations
+
 from collections import deque
+from collections.abc import Awaitable, Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
@@ -8,12 +11,17 @@ from functools import wraps
 import json
 import logging
 import time
+from typing import Any, Protocol
 from uuid import uuid4
 
 logger = logging.getLogger("meyaya.telemetry")
-_context: ContextVar[dict | None] = ContextVar("llm_context", default=None)
-_metrics: ContextVar[dict | None] = ContextVar("llm_metrics", default=None)
-_diagnostic: ContextVar[dict | None] = ContextVar("llm_diagnostic", default=None)
+_context: ContextVar[dict[str, Any] | None] = ContextVar("llm_context", default=None)
+_metrics: ContextVar[dict[str, Any] | None] = ContextVar("llm_metrics", default=None)
+_diagnostic: ContextVar[dict[str, Any] | None] = ContextVar("llm_diagnostic", default=None)
+
+
+class _AsyncMethodDecorator(Protocol):
+    def __call__[F: Callable[..., Awaitable[Any]]](self, method: F) -> F: ...
 
 
 class OperationalTelemetry:
@@ -21,15 +29,16 @@ class OperationalTelemetry:
 
     def __init__(self, capacity: int = 2_000) -> None:
         self.started_at = datetime.now(UTC)
-        self._requests: deque[dict] = deque(maxlen=capacity)
-        self._commands: deque[dict] = deque(maxlen=capacity)
-        self._chat_turns: deque[dict] = deque(maxlen=capacity)
+        self._requests: deque[dict[str, Any]] = deque(maxlen=capacity)
+        self._commands: deque[dict[str, Any]] = deque(maxlen=capacity)
+        self._chat_turns: deque[dict[str, Any]] = deque(maxlen=capacity)
         self._failure_day = datetime.now(UTC).date()
         self._failure_count = 0
 
-    def record(self, payload: dict) -> None:
+    def record(self, payload: dict[str, Any]) -> None:
         from bot.logging.health import health
-        health.record(payload)
+        telemetry_health: Any = health
+        telemetry_health.record(payload)
         if payload.get('event') == 'chat_turn':
             self._chat_turns.append({key:payload.get(key) for key in
                 ('timestamp','guild_id','channel_id','turn_id','outcome','latency_ms')})
@@ -76,13 +85,13 @@ class OperationalTelemetry:
             }
         )
 
-    def failed_today(self):
+    def failed_today(self) -> int:
         today = datetime.now(UTC).date()
         if self._failure_day != today:
             self._failure_day, self._failure_count = today, 0
         return self._failure_count
 
-    def snapshot(self, guild_id: int | None = None) -> dict:
+    def snapshot(self, guild_id: int | None = None) -> dict[str, Any]:
         records = [
             item for item in self._requests if guild_id is None or item["guild_id"] == guild_id
         ]
@@ -115,19 +124,19 @@ class OperationalTelemetry:
             "chat_turns": self.chat_snapshot(guild_id),
         }
 
-    def chat_snapshot(self, guild_id=None):
+    def chat_snapshot(self, guild_id: int | None = None) -> dict[str, Any]:
         from collections import Counter
         rows = [row for row in self._chat_turns if guild_id is None or row['guild_id'] == guild_id]
-        values = sorted(row['latency_ms'] for row in rows if isinstance(row['latency_ms'], (int,float)))
+        values = sorted(float(row['latency_ms']) for row in rows if isinstance(row['latency_ms'], (int, float)))
         return {'turns':len(rows), 'outcomes':dict(Counter(row['outcome'] for row in rows)),
                 'p50_ms':self._percentile(values,.5), 'p95_ms':self._percentile(values,.95)}
 
-    def command_snapshot(self, guild_id=None):
+    def command_snapshot(self, guild_id: int | None = None) -> dict[str, Any]:
         records = [row for row in self._commands if guild_id is None or row['guild_id'] == guild_id]
-        groups = {}
+        groups: dict[str, list[dict[str, Any]]] = {}
         for row in records:
             groups.setdefault(row['command'], []).append(row)
-        result = []
+        result: list[dict[str, Any]] = []
         for name, rows in groups.items():
             times = sorted(row['total_ms'] for row in rows if row['total_ms'] is not None)
             stage_names = {key for row in rows for key in row['stages']}
@@ -140,13 +149,13 @@ class OperationalTelemetry:
         return {'groups': sorted(result, key=lambda row: row['average_ms'] or 0, reverse=True),
                 'recent': list(reversed(records[-30:]))}
 
-    def guild_summary(self, guild_id: int) -> dict:
+    def guild_summary(self, guild_id: int) -> dict[str, Any]:
         return self.guild_summaries((guild_id,))[guild_id]
 
-    def guild_summaries(self, guild_ids) -> dict[int, dict]:
+    def guild_summaries(self, guild_ids: Iterable[int]) -> dict[int, dict[str, Any]]:
         """Summarize every visible server in one pass over bounded request history."""
 
-        totals = {
+        totals: dict[int, dict[str, Any]] = {
             guild_id: {
                 "model_requests": 0,
                 "model_failures": 0,
@@ -182,8 +191,8 @@ class OperationalTelemetry:
         return totals
 
     @staticmethod
-    def _groups(records: list[dict], key: str) -> list[dict]:
-        groups: dict[str, dict] = {}
+    def _groups(records: list[dict[str, Any]], key: str) -> list[dict[str, Any]]:
+        groups: dict[str, dict[str, Any]] = {}
         for item in records:
             name = item[key]
             group = groups.setdefault(
@@ -215,7 +224,7 @@ class OperationalTelemetry:
         return sorted(result, key=lambda item: (-item["requests"], item["name"]))
 
     @staticmethod
-    def _public(item: dict) -> dict:
+    def _public(item: dict[str, Any]) -> dict[str, Any]:
         return {
             key: (value.isoformat() if isinstance(value, datetime) else value)
             for key, value in item.items()
@@ -230,11 +239,11 @@ class OperationalTelemetry:
         return round(values[index], 1)
 
     @staticmethod
-    def _integer(value) -> int:
+    def _integer(value: object) -> int:
         return value if isinstance(value, int) and not isinstance(value, bool) else 0
 
     @staticmethod
-    def _number(value) -> float | None:
+    def _number(value: object) -> float | None:
         return (
             float(value)
             if isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -245,8 +254,8 @@ class OperationalTelemetry:
 operations = OperationalTelemetry()
 
 
-def event(name: str, **fields) -> None:
-    payload = {
+def event(name: str, **fields: Any) -> None:
+    payload: dict[str, Any] = {
         "timestamp": datetime.now(UTC).isoformat(),
         "event": name,
         "feature": "unspecified",
@@ -265,8 +274,8 @@ def event(name: str, **fields) -> None:
 @contextmanager
 def model_context(
     feature: str, guild_id: int | None, channel_id: int | None, user_id: int | None = None,
-    *, turn_id=None,
-):
+    *, turn_id: object = None,
+) -> Iterator[None]:
     token = _context.set(
         {"feature": feature, "guild_id": guild_id, "channel_id": channel_id, "user_id": user_id,
          'turn_id':str(turn_id) if turn_id is not None else (_context.get() or {}).get('turn_id')}
@@ -279,17 +288,17 @@ def model_context(
         _diagnostic.reset(diagnostic_token)
 
 
-def current_model_context() -> dict:
+def current_model_context() -> dict[str, Any]:
     """Return a copy of the active request context for model routing."""
 
     return dict(_context.get() or {})
 
 
-def current_model_diagnostic() -> dict:
+def current_model_diagnostic() -> dict[str, Any]:
     return dict(_diagnostic.get() or {})
 
 
-def record_route_deadline():
+def record_route_deadline() -> None:
     from bot.services.chat_outcome import outcome
     outcome('provider_deadline')
     diagnostic = _diagnostic.get()
@@ -297,7 +306,7 @@ def record_route_deadline():
         diagnostic['fallback_reason'] = 'route_deadline'
 
 
-def record_response(payload: dict) -> None:
+def record_response(payload: dict[str, Any]) -> None:
     metrics = _metrics.get()
     if metrics is None:
         return
@@ -315,7 +324,7 @@ def record_response(payload: dict) -> None:
     metrics["returned_model"] = payload.get("modelVersion") or payload.get("model")
 
 
-def request_failure(reason: str, **fields) -> None:
+def request_failure(reason: str, **fields: Any) -> None:
     metrics = _metrics.get()
     if metrics is not None:
         metrics["fallback_reason"] = reason
@@ -325,13 +334,13 @@ def request_failure(reason: str, **fields) -> None:
     )
 
 
-def observe(operation: str):
+def observe(operation: str) -> _AsyncMethodDecorator:
     """Instrument adapter requests, including cancellations and empty results."""
 
-    def decorate(method):
+    def decorate[F: Callable[..., Awaitable[Any]]](method: F) -> F:
         @wraps(method)
-        async def wrapped(self, *args, **kwargs):
-            metrics = {
+        async def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
+            metrics: dict[str, Any] = {
                 "request_id": uuid4().hex,
                 "input_tokens": None,
                 "output_tokens": None,
@@ -374,17 +383,17 @@ def observe(operation: str):
                 )
                 _metrics.reset(token)
 
-        return wrapped
+        return wrapped  # type: ignore[return-value]
 
     return decorate
 
 
-def discord_context(feature: str):
+def discord_context(feature: str) -> _AsyncMethodDecorator:
     """Bind IDs from command contexts, messages or interactions for an entire callback."""
 
-    def decorate(method):
+    def decorate[F: Callable[..., Awaitable[Any]]](method: F) -> F:
         @wraps(method)
-        async def wrapped(self, *args, **kwargs):
+        async def wrapped(self: Any, *args: Any, **kwargs: Any) -> Any:
             source = next(
                 (
                     arg
@@ -399,8 +408,9 @@ def discord_context(feature: str):
             if feature == "social_games" and args:
                 game = self.sessions.get(args[0])
                 feature_name = game.game_type if game is not None else feature
-            if feature == "fun" and getattr(source, "command", None) is not None:
-                feature_name = source.command.qualified_name
+            command = getattr(source, "command", None)
+            if feature == "fun" and command is not None:
+                feature_name = command.qualified_name
             actor = getattr(source, "author", None) or getattr(source, "user", None)
             user_id = getattr(actor, "id", None) if not getattr(actor, "bot", False) else None
             if feature == "social_games":
@@ -414,6 +424,6 @@ def discord_context(feature: str):
             ):
                 return await method(self, *args, **kwargs)
 
-        return wrapped
+        return wrapped  # type: ignore[return-value]
 
     return decorate

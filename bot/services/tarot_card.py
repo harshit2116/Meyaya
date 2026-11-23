@@ -1,12 +1,40 @@
 """Reference-matched three-card tarot spread with cached local artwork."""
+from __future__ import annotations
+
+from collections.abc import Callable
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from typing import Protocol, cast
 
-from PIL import Image,ImageDraw,ImageOps
-from bot.services.aura_archive import _asset,_serif,_text
-from bot.services.card_renderer import font
-from bot.services.celestial import definitions
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+from bot.services.aura_archive import _asset as _raw_asset
+from bot.services.aura_archive import _serif as _raw_serif
+from bot.services.aura_archive import _text as _raw_text
+from bot.services.card_renderer import font as _raw_font
+from bot.services.celestial import CardResult, definitions
+
+type _Font = ImageFont.FreeTypeFont | ImageFont.ImageFont
+
+
+class _TextFn(Protocol):
+    def __call__(
+        self,
+        draw: ImageDraw.ImageDraw,
+        box: tuple[int, int, int, int],
+        value: object,
+        size: int,
+        color: str,
+        *,
+        minimum: int = 20,
+        serif: bool = True,
+    ) -> None: ...
+
+
+_asset = cast(Callable[[bytes], Image.Image | None], _raw_asset)
+_serif = cast(Callable[[int], _Font], _raw_serif)
+_text: _TextFn = _raw_text
+font = cast(Callable[[int], _Font], _raw_font)
 
 SIZE=(1536,1024)
 ASSETS=Path(__file__).resolve().parents[1]/'assets'/'celestial'/'tarot'
@@ -17,13 +45,13 @@ CENTERS=(325,768,1212)
 
 
 @lru_cache(maxsize=1)
-def _frame():
+def _frame() -> Image.Image:
     with Image.open(ASSETS/'spread-frame.png') as source:
         return source.convert('RGBA').resize(SIZE,Image.Resampling.LANCZOS)
 
 
 @lru_cache(maxsize=8)
-def _card_art(number):
+def _card_art(number: int) -> Image.Image | None:
     try:
         with Image.open(ASSETS/f'{number:02d}.jpg') as source:
             # A contained full card preserves its printed name and all artwork.
@@ -37,7 +65,7 @@ def _card_art(number):
 
 
 @lru_cache(maxsize=2)
-def _mask(size,radius):
+def _mask(size: tuple[int, int], radius: int | None) -> Image.Image:
     mask=Image.new('L',(size[0]*3,size[1]*3))
     d=ImageDraw.Draw(mask)
     if radius is None:
@@ -47,13 +75,22 @@ def _mask(size,radius):
     return mask.resize(size,Image.Resampling.LANCZOS)
 
 
-def _centered(draw,box,text,size,minimum=20,serif=True,color=INK):
+def _centered(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    text: object,
+    size: int,
+    minimum: int = 20,
+    serif: bool = True,
+    color: str = INK,
+) -> None:
     x,y,w,h=box
     value=' '.join(str(text).split())[:180]
     family=_serif if serif and all(ord(c)<0x3000 for c in value) else font
     while True:
         face=family(size)
-        rows=[];row=''
+        rows: list[str]=[]
+        row=''
         for word in value.split():
             candidate=(row+' '+word).strip()
             if row and draw.textlength(candidate,font=face)>w:
@@ -74,7 +111,16 @@ def _centered(draw,box,text,size,minimum=20,serif=True,color=INK):
         top+=size+7
 
 
-def _single_line(draw, box, text, size, *, serif=True, color=INK, minimum=20):
+def _single_line(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    text: object,
+    size: int,
+    *,
+    serif: bool = True,
+    color: str = INK,
+    minimum: int = 20,
+) -> None:
     """Fit a single label and centre its actual glyph bounds, including descenders."""
     x,y,w,h=box
     value=' '.join(str(text).split())[:180]
@@ -90,7 +136,7 @@ def _single_line(draw, box, text, size, *, serif=True, color=INK, minimum=20):
                y+(h-(bounds[3]-bounds[1]))/2-bounds[1]),value,font=face,fill=color)
 
 
-def render_tarot(result,name,avatar=b''):
+def render_tarot(result: CardResult, name: str, avatar: bytes = b'') -> bytes:
     image=_frame().copy();draw=ImageDraw.Draw(image)
     draw.text((54,46),f'TAROT  /  {str(result.day)[:16]}',font=font(23),fill=GOLD)
     _text(draw,(54,82,510,48),str(name)[:100],40,INK,minimum=22,serif=False)
@@ -112,7 +158,7 @@ def render_tarot(result,name,avatar=b''):
         draw.polygon(((cx,226),(cx+3,233),(cx+8,236),(cx+3,239),(cx,246),
                       (cx-3,239),(cx-8,236),(cx-3,233)),fill=GOLD)
     names=[card[0] for card in definitions()['tarot']]
-    for center,(position,title,meaning) in zip(CENTERS,result.panels[:3]):
+    for center,(position,title,meaning) in zip(CENTERS,result.panels[:3],strict=False):
         _centered(draw,(center-150,309,300,37),str(position).upper(),23,serif=False,color=GOLD)
         try:number=names.index(title.removesuffix(' (R)'))
         except ValueError:number=-1

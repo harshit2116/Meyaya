@@ -1,38 +1,47 @@
 """Bounded owner diagnostics, without exception messages or user content."""
 
+from __future__ import annotations
+
 from collections import OrderedDict
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 import secrets
 import time
 import traceback
+from typing import Any
 
 
 class ProviderUnavailable(Exception):
     """An AI call completed without a usable reply."""
 
 
-def exception_evidence(error):
+def exception_evidence(error: BaseException) -> list[dict[str, Any]]:
     """Keep bounded causal metadata, never exception messages or request bodies."""
-    chain, seen = [], set()
-    while isinstance(error, BaseException) and id(error) not in seen and len(chain) < 6:
-        seen.add(id(error))
-        item = {"exception": type(error).__name__}
+    chain: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while isinstance(current, BaseException) and id(current) not in seen and len(chain) < 6:
+        seen.add(id(current))
+        item: dict[str, Any] = {"exception": type(current).__name__}
         for key in ("status", "code"):
-            value = getattr(error, key, None)
+            value = getattr(current, key, None)
             if type(value) is int:
                 item[key] = value
-        frames = traceback.extract_tb(error.__traceback__)
+        frames = traceback.extract_tb(current.__traceback__)
         if frames:
             frame = frames[-1]
             item["location"] = f"{Path(frame.filename).name}:{frame.lineno} · {frame.name[:100]}"
         chain.append(item)
-        error = (getattr(error, "original", None) or error.__cause__ or
-                 (error.__context__ if not error.__suppress_context__ else None))
+        current = (
+            getattr(current, "original", None)
+            or current.__cause__
+            or (current.__context__ if not current.__suppress_context__ else None)
+        )
     return chain
 
 
-def explain_error(record):
+def explain_error(record: Mapping[str, Any]) -> dict[str, Any]:
     """Explain recorded evidence; suggestions are not a claimed root cause."""
     chain = record.get("causes") or [{"exception": record.get("exception", "Unknown")}]
     root = chain[-1]
@@ -58,22 +67,22 @@ def explain_error(record):
             "location": root.get("location")}
 
 
-def with_diagnosis(record):
+def with_diagnosis(record: Mapping[str, Any]) -> dict[str, Any]:
     return {**record, "diagnosis": explain_error(record)}
 
 
 class HealthTelemetry:
-    def __init__(self, capacity=500):
+    def __init__(self, capacity: int = 500) -> None:
         self.capacity = capacity
         self.started_at = time.time()
-        self.errors = OrderedDict()
-        self.buckets = {}
-        self.models = {}
-        self.host = {}
-        self.users = set()
+        self.errors: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self.buckets: dict[int, dict[str, int]] = {}
+        self.models: dict[str, dict[str, Any]] = {}
+        self.host: dict[str, Any] = {}
+        self.users: set[int] = set()
         self.users_capped = False
 
-    def count_error(self, category):
+    def count_error(self, category: str) -> None:
         if category not in {"gemini_429", "gemini_503", "discord_429", "db_errors"}:
             return
         minute = int(time.time() // 60)
@@ -81,13 +90,13 @@ class HealthTelemetry:
         bucket = self.buckets.setdefault(minute, {})
         bucket[category] = bucket.get(category, 0) + 1
 
-    def counts(self):
+    def counts(self) -> dict[str, int]:
         minute = int(time.time() // 60)
         return {category: sum(bucket.get(category, 0) for stamp, bucket in self.buckets.items()
                               if stamp > minute - 1440)
                 for category in ("gemini_429", "gemini_503", "discord_429", "db_errors")}
 
-    def record(self, payload):
+    def record(self, payload: Mapping[str, Any]) -> None:
         actor = payload.get("user_id")
         if isinstance(actor, int) and actor > 0:
             if len(self.users) < 10_000:
@@ -96,7 +105,8 @@ class HealthTelemetry:
                 self.users_capped = True
         name = payload.get("event")
         if name == "llm_attempt_failed":
-            category = {"http_429": "gemini_429", "http_503": "gemini_503"}.get(payload.get("reason"))
+            reason = payload.get("reason")
+            category = {"http_429": "gemini_429", "http_503": "gemini_503"}.get(reason) if isinstance(reason, str) else None
             if category:
                 self.count_error(category)
         elif name in {"database_error", "discord_rate_limit"}:
@@ -110,11 +120,24 @@ class HealthTelemetry:
             while len(self.models) > 32:
                 self.models.pop(next(iter(self.models)))
 
-    def capture(self, error, *, command="unknown", guild_id=None, channel_id=None,
-                invocation=None, stage=None, latency_ms=None, stages=None,
-                provider=None, model=None, request_id=None, reason=None):
+    def capture(
+        self,
+        error: BaseException,
+        *,
+        command: str = "unknown",
+        guild_id: int | None = None,
+        channel_id: int | None = None,
+        invocation: str | None = None,
+        stage: str | None = None,
+        latency_ms: float | None = None,
+        stages: Mapping[str, Any] | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        request_id: str | None = None,
+        reason: str | None = None,
+    ) -> str:
         previous = getattr(error, "_meyaya_error_id", None)
-        if previous in self.errors:
+        if isinstance(previous, str) and previous in self.errors:
             return previous
         error_id = "MY-" + secrets.token_hex(4).upper()
         while error_id in self.errors:
@@ -124,25 +147,28 @@ class HealthTelemetry:
         frames = [{"file": Path(frame.filename).name, "line": frame.lineno,
                    "function": frame.name[:100]}
                   for frame in traceback.extract_tb(error.__traceback__)[-12:]]
-        record = {"error_id": error_id, "timestamp": datetime.now(UTC).isoformat(),
-                  "command": str(command)[:80], "guild_id": guild_id, "channel_id": channel_id,
-                  "invocation": invocation, "stage": stage or (frames[-1]["function"] if frames else "unknown"),
-                  "exception": type(error).__name__, "latency_ms": latency_ms,
-                  "stages": dict(stages or {}), "provider": provider, "model": model,
-                  "request_id": request_id, "reason": reason,
-                  "frames": frames, "causes": exception_evidence(error)}
+        record: dict[str, Any] = {
+            "error_id": error_id, "timestamp": datetime.now(UTC).isoformat(),
+            "command": str(command)[:80], "guild_id": guild_id, "channel_id": channel_id,
+            "invocation": invocation, "stage": stage or (frames[-1]["function"] if frames else "unknown"),
+            "exception": type(error).__name__, "latency_ms": latency_ms,
+            "stages": dict(stages or {}), "provider": provider, "model": model,
+            "request_id": request_id, "reason": reason,
+            "frames": frames, "causes": exception_evidence(error),
+        }
         self.errors[error_id] = record
         while len(self.errors) > self.capacity:
             self.errors.popitem(last=False)
         try:
-            error._meyaya_error_id = error_id
+            error_obj: Any = error
+            error_obj._meyaya_error_id = error_id
         except (AttributeError, TypeError):
             pass
         from bot.logging.telemetry import event
         event("command_error", **record)
         return error_id
 
-    def search(self, error_id=""):
+    def search(self, error_id: str = "") -> list[dict[str, Any]]:
         if error_id:
             record = self.errors.get(error_id.upper())
             return [with_diagnosis(record)] if record else []
@@ -152,7 +178,7 @@ class HealthTelemetry:
 health = HealthTelemetry()
 
 
-def find_retained_error(error_id):
+def find_retained_error(error_id: str) -> dict[str, Any] | None:
     """Look up an exact ID in the existing bounded logs, never arbitrary files."""
     import json
     allowed = {'error_id', 'timestamp', 'command', 'guild_id', 'channel_id', 'invocation',

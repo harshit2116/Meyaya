@@ -1,7 +1,10 @@
 """On-demand AniList summons backed by Meyaya-owned gameplay configuration."""
 
+from __future__ import annotations
+
 from io import BytesIO
 import logging
+from typing import TYPE_CHECKING, Any, cast
 
 import discord
 from discord.ext import commands
@@ -16,30 +19,37 @@ from bot.services.character_provider import (
     CharacterProviderError,
 )
 
+if TYPE_CHECKING:
+    from bot.app import MeyayaBot
+
 log = logging.getLogger(__name__)
 
 
 class CharacterCatalogCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
         self.catalog = CatalogService(bot)
         self.provider: AniListCharacterProvider | None = None
         self.card_renderer = SummonCardRenderer(bot.http_session)
 
     async def cog_load(self) -> None:
-        self.provider = AniListCharacterProvider(self.bot.http_session)
+        self.provider = AniListCharacterProvider(cast(Any, self.bot.http_session))
         if self.bot.http_session is not None:
             try:
                 await self.catalog.seed_curated_roster()
             except SQLAlchemyError:
                 log.exception("Could not seed the gameplay summon roster")
 
-    @commands.hybrid_command(description="Summon a real anime character from Meyaya's roster.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        description="Summon a real anime character from Meyaya's roster."
+    )
     @commands.guild_only()
     @commands.cooldown(1, 5, commands.BucketType.member)
-    async def summon(self, ctx, member: discord.Member = None):
+    async def summon(
+        self, ctx: commands.Context[Any], member: discord.Member | None = None
+    ) -> None:
         await ctx.defer()
-        member = member or ctx.author
+        target: discord.Member | discord.User = member or ctx.author
         try:
             assert self.provider is not None
             gameplay = await self.catalog.draw()
@@ -56,11 +66,11 @@ class CharacterCatalogCog(commands.Cog):
             )
             return
 
-        rendered = await self.card_renderer.render(gameplay, display, member)
+        rendered = await self.card_renderer.render(gameplay, display, target)
         accent = int(RARITY_COLORS[gameplay.rarity_stars][1:], 16)
         view = discord.ui.LayoutView(timeout=180)
         summary = (
-            f"Summoned for {member.mention} · **{discord.utils.escape_markdown(display.name)}**\n"
+            f"Summoned for {target.mention} · **{discord.utils.escape_markdown(display.name)}**\n"
             f"{RARITY_NAMES[gameplay.rarity_stars]} · {gameplay.rarity_stars} stars · "
             f"Roster #{gameplay.internal_id:04d}"
         )
@@ -97,7 +107,9 @@ class CharacterCatalogCog(commands.Cog):
     @commands.command(hidden=True)
     @commands.check(private_owner)
     @commands.cooldown(1, 3, commands.BucketType.user)
-    async def catalogadmin(self, ctx, action: str, target: str = "", *, value: str = ""):
+    async def catalogadmin(
+        self, ctx: commands.Context[Any], action: str, target: str = "", *, value: str = ""
+    ) -> None:
         """Owner DM controls: add, disable, enable, setrarity, settraits, reload, status."""
         if ctx.guild:
             await ctx.send("Use catalogadmin in a DM.")
@@ -141,5 +153,5 @@ class CharacterCatalogCog(commands.Cog):
             )
 
 
-async def setup(bot):
+async def setup(bot: MeyayaBot) -> None:
     await bot.add_cog(CharacterCatalogCog(bot))

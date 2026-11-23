@@ -1,8 +1,11 @@
 """Atomic daily allowances shared by chat, roleplay and automatic replies."""
 
+from __future__ import annotations
+
 from datetime import UTC, date, datetime, timedelta
 from dataclasses import dataclass
 import re
+from typing import Any
 from sqlalchemy import select, update, func, case, cast, Integer, true
 from sqlalchemy.dialects.postgresql import insert, array
 from bot.models.usage import GuildUsage
@@ -27,12 +30,18 @@ def is_silence(text: str) -> bool:
 
 
 class UsageService:
-    def __init__(self, session_factory, exempt_guild_id, *, vote_rewards_enabled=False):
+    def __init__(
+        self,
+        session_factory: Any,
+        exempt_guild_id: int | None,
+        *,
+        vote_rewards_enabled: bool = False,
+    ) -> None:
         self.sessions = session_factory
         self.exempt_guild_id = exempt_guild_id
         self.vote_rewards_enabled = vote_rewards_enabled
 
-    async def reserve(self, guild_id, *, user_id=None):
+    async def reserve(self, guild_id: int, *, user_id: int | None = None) -> UsageReservation:
         now = datetime.now(UTC)
         day = now.date()
         async with self.sessions() as session:
@@ -43,13 +52,13 @@ class UsageService:
             unlimited = guild_id == self.exempt_guild_id
             if limit == 0 and not unlimited:
                 raise ChatLimitReached("Meyaya chat is disabled in this server.")
-            statement = insert(GuildUsage).values(guild_id=guild_id, day=day, chats=1)
-            statement = statement.on_conflict_do_update(
+            base_insert = insert(GuildUsage).values(guild_id=guild_id, day=day, chats=1)
+            upsert = base_insert.on_conflict_do_update(
                 index_elements=[GuildUsage.guild_id, GuildUsage.day],
                 set_={"chats": GuildUsage.chats + 1},
-                where=True if unlimited else GuildUsage.chats < limit,
+                where=true() if unlimited else GuildUsage.chats < limit,
             ).returning(GuildUsage.reset_generation)
-            count = await session.scalar(statement)
+            count = await session.scalar(upsert)
             vote_id = None
             if count is None and self.vote_rewards_enabled and user_id is not None:
                 vote_id = await TopggVoteService.reserve(session, user_id, now)
@@ -68,7 +77,7 @@ class UsageService:
             await session.commit()
         return UsageReservation(day, count, vote_id)
 
-    async def refund(self, guild_id, day):
+    async def refund(self, guild_id: int, day: date | UsageReservation) -> None:
         reservation = day if isinstance(day, UsageReservation) else None
         actual_day = reservation.day if reservation else day
         async with self.sessions() as session:
@@ -91,7 +100,7 @@ class UsageService:
             await session.commit()
 
     @staticmethod
-    async def reset_today(session, guild_id):
+    async def reset_today(session: Any, guild_id: int) -> dict[str, Any]:
         """Reset only this UTC day's chat quota, retaining all other records."""
         day = datetime.now(UTC).date()
         previous = await session.scalar(select(GuildUsage.chats).where(
@@ -102,11 +111,11 @@ class UsageService:
             set_={'chats': 0, 'reset_generation': GuildUsage.reset_generation + 1}))
         return {'day': day.isoformat(), 'previous_chats': previous or 0, 'chats': 0}
 
-    async def command_completed(self, guild_id, command_name=None):
+    async def command_completed(self, guild_id: int, command_name: str | None = None) -> None:
         name = str(command_name)[:100] if command_name else None
         async with self.sessions() as session:
-            values = dict(guild_id=guild_id, day=datetime.now(UTC).date(), commands=1)
-            changes = {"commands": GuildUsage.commands + 1}
+            values: dict[str, Any] = dict(guild_id=guild_id, day=datetime.now(UTC).date(), commands=1)
+            changes: dict[str, Any] = {"commands": GuildUsage.commands + 1}
             if name:
                 values['command_counts'] = {name: 1}
                 changes['command_counts'] = func.jsonb_set(
@@ -123,7 +132,7 @@ class UsageService:
                                   .values(last_activity_at=datetime.now(UTC)))
             await session.commit()
 
-    async def command_report(self, guild_id):
+    async def command_report(self, guild_id: int) -> dict[str, Any]:
         today = datetime.now(UTC).date()
         # Expand only this guild's compact daily maps; aggregate inside Postgres.
         daily = select(GuildUsage.day, GuildUsage.command_counts).where(
@@ -144,7 +153,7 @@ class UsageService:
                 'unclassified_total': max(0, total - tracked), 'day': today.isoformat(),
                 'scope': 'Successful command completions. Named counts start with this update; daily reset is midnight UTC.'}
 
-    async def report(self):
+    async def report(self) -> tuple[dict[int, dict[str, Any]], dict[int, int]]:
         today = datetime.now(UTC).date()
         async with self.sessions() as session:
             rows = (

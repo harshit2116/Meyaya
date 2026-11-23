@@ -1,5 +1,7 @@
 """Activity-based limits for unsolicited replies."""
 
+from __future__ import annotations
+
 import re
 
 
@@ -12,7 +14,9 @@ _CLOSINGS = {
 }
 
 
-def is_conversation_closing(text: str, *, previous_text: str | None = None, has_attachments=False) -> bool:
+def is_conversation_closing(
+    text: str, *, previous_text: str | None = None, has_attachments: bool = False
+) -> bool:
     """Only silence an entire acknowledgement, never a request containing one."""
     if has_attachments or "?" in text:
         return False

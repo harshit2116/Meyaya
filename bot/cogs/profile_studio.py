@@ -6,9 +6,9 @@ import asyncio
 import json
 import logging
 from collections import OrderedDict
-from time import monotonic
-from bot.utils.image_work import image_work
 from io import BytesIO
+from time import monotonic
+from typing import Any
 
 import discord
 from discord import app_commands
@@ -16,23 +16,29 @@ from discord.ext import commands
 
 from bot.app import MeyayaBot
 from bot.logging.telemetry import discord_context
+from bot.services.profile_aesthetic import (
+    ProfileVisual,
+    profile_affinity,
+    profile_class,
+    style_compatibility,
+)
 from bot.services.profile_cards import (
     aura_card,
+    aura_details,
     callingcard_card,
     duostyle_card,
-    aura_details,
     duostyle_feedback,
     duostyle_reason,
     profilecheck_feedback,
 )
-from bot.services.profile_aesthetic import profile_affinity, profile_class, style_compatibility
 from bot.services.profile_scoring import CATEGORIES, category_available, profilecheck_points
-from bot.utils.command_context import remember_command_result
-from bot.services.profiles import ProfileService
 from bot.services.profilecheck_render import ProfileCheckRenderer
+from bot.services.profiles import ProfileService
+from bot.utils.command_context import remember_command_result
+from bot.utils.image_work import image_work
 
 
-def profile_review_result(visual):
+def profile_review_result(visual: ProfileVisual) -> dict[str, Any]:
     """Summarize the finalized scores shown on the card, including unavailable categories."""
     grade, criticism, advice = profilecheck_feedback(visual)
     return {
@@ -59,10 +65,12 @@ class ProfileStudioCog(commands.Cog):
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
         self.aesthetics = bot.build_profile_aesthetic_service()
-        self._reviews = OrderedDict()
+        self._reviews: OrderedDict[tuple[int | None, int, int], tuple[float, dict[str, Any]]] = (
+            OrderedDict()
+        )
         self._profile_renderer = ProfileCheckRenderer()
 
-    def recent_review(self, message):
+    def recent_review(self, message: discord.Message) -> str | None:
         key = (getattr(message.guild, "id", None), message.channel.id, message.author.id)
         cached = self._reviews.get(key)
         if not cached:
@@ -74,7 +82,9 @@ class ProfileStudioCog(commands.Cog):
                 + json.dumps(cached[1], ensure_ascii=False)
                 + " Explain these scores only if relevant; do not assume the target is the speaker.")
 
-    async def _member(self, ctx: commands.Context, member: discord.Member | None):
+    async def _member(
+        self, ctx: commands.Context[Any], member: discord.Member | None
+    ) -> discord.Member | None:
         if ctx.guild is None:
             await ctx.send("This command only works inside a server.", ephemeral=True)
             return None
@@ -85,7 +95,7 @@ class ProfileStudioCog(commands.Cog):
         await ctx.defer()
         return target
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="profilecheck",
         description="Score a member's avatar, banner, decoration, and overall profile look.",
     )
@@ -94,11 +104,11 @@ class ProfileStudioCog(commands.Cog):
     @discord_context("profile_studio")
     async def profilecheck(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         member: discord.Member | None = None,
     ) -> None:
         target = await self._member(ctx, member)
-        if target is None:
+        if target is None or ctx.guild is None:
             return
         started = monotonic()
         visual = await self.aesthetics.inspect(target, refresh=True, animated=True)
@@ -122,13 +132,13 @@ class ProfileStudioCog(commands.Cog):
         while len(self._reviews) > 128:
             self._reviews.popitem(last=False)
 
-    @commands.hybrid_command(name="aura", description="Reveal a member's profile aura.")
+    @commands.hybrid_command(name="aura", description="Reveal a member's profile aura.")  # type: ignore[arg-type]
     @commands.cooldown(1, 10, commands.BucketType.member)
     @app_commands.describe(member="Member whose profile aura should be revealed")
     @discord_context("profile_studio")
     async def aura(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         member: discord.Member | None = None,
     ) -> None:
         target = await self._member(ctx, member)
@@ -145,7 +155,7 @@ class ProfileStudioCog(commands.Cog):
             "method": "Playful fantasy language derived from the visible profile palette.",
         })
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="duostyle",
         description="See how well two members' profile styles match.",
     )
@@ -154,7 +164,7 @@ class ProfileStudioCog(commands.Cog):
     @discord_context("profile_studio")
     async def duostyle(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         first: discord.Member,
         second: discord.Member,
     ) -> None:
@@ -182,7 +192,7 @@ class ProfileStudioCog(commands.Cog):
             "method": "Local comparison of profile palettes and styling; not a relationship assessment.",
         })
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="callingcard",
         description="Make a collectible card from a profile and Meyaya bond.",
     )
@@ -191,15 +201,21 @@ class ProfileStudioCog(commands.Cog):
     @discord_context("profile_studio")
     async def callingcard(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         member: discord.Member | None = None,
     ) -> None:
         target = await self._member(ctx, member)
-        if target is None:
+        if target is None or ctx.guild is None:
             return
-        async with self.bot.db_session() as session:
-            summary = await ProfileService(session).build(target.id, ctx.guild.id)
-        visual = await self.aesthetics.inspect(target)
+        visual_task = asyncio.create_task(self.aesthetics.inspect(target))
+        try:
+            async with self.bot.db_session() as session:
+                summary = await ProfileService(session).build(target.id, ctx.guild.id)
+            visual = await visual_task
+        except BaseException:
+            visual_task.cancel()
+            await asyncio.gather(visual_task, return_exceptions=True)
+            raise
         rendered = await image_work(
             callingcard_card,
             visual,
@@ -214,7 +230,13 @@ class ProfileStudioCog(commands.Cog):
         })
 
     @staticmethod
-    async def _send_card(ctx: commands.Context, image: bytes, filename: str, *, result=None) -> None:
+    async def _send_card(
+        ctx: commands.Context[Any],
+        image: bytes,
+        filename: str,
+        *,
+        result: dict[str, Any] | None = None,
+    ) -> None:
         if result is not None:
             remember_command_result(ctx, **result)
         await ctx.send(

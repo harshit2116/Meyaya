@@ -1,5 +1,7 @@
 """Bundled AI illustrations, composed locally with saved identity metadata."""
 
+from __future__ import annotations
+
 from functools import lru_cache
 from pathlib import Path
 
@@ -11,7 +13,7 @@ ART_DIR = Path(__file__).resolve().parents[1] / "assets" / "awakening"
 
 
 @lru_cache(maxsize=48)
-def asset_sprite(filename, size):
+def asset_sprite(filename: str, size: int) -> Image.Image | None:
     """Cache only immutable source sprites; callers receive their own copy."""
     try:
         with Image.open(ART_DIR / filename) as source:
@@ -24,7 +26,9 @@ def asset_sprite(filename, size):
         return None
 
 
-def weapon_sprite(family, design, accent, rarity, seed):
+def weapon_sprite(
+    family: str, design: int, accent: str, rarity: str, seed: int
+) -> Image.Image | None:
     """Name chooses the illustration; affinity, rarity and saved ID refine it."""
     names = WEAPONS.get(family, ("", ()))[1]
     if not names:
@@ -48,12 +52,13 @@ def weapon_sprite(family, design, accent, rarity, seed):
     for index in range(2 + tier * 3):
         x = 18 + (seed + index * 73) % 222
         y = 18 + (seed // 19 + index * 47) % 222
-        if alpha.getpixel((x, y)) > 200:
+        pixel = alpha.getpixel((x, y))
+        if isinstance(pixel, (int, float)) and pixel > 200:
             draw.ellipse((x - 1, y - 1, x + 1, y + 1), fill=rarity)
     return art
 
 
-def affinity_sprite(affinity_id):
+def affinity_sprite(affinity_id: str) -> Image.Image | None:
     if affinity_id not in AFFINITIES:
         return None
     source = asset_sprite(f"affinities/{affinity_id}.png", 174)

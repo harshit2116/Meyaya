@@ -1,12 +1,15 @@
 """Bounded, dated unfinished topics stored in the existing member memory system."""
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
 import json
+from typing import Any
 
 FOLLOWUP_PREFIX = "UNFINISHED_TOPIC "
 FOLLOWUP_COOLDOWN = 7 * 86400
 
 
-def normalize_followup(value: str, *, now=None) -> str | None:
+def normalize_followup(value: str, *, now: datetime | None = None) -> str | None:
     now = now or datetime.now(UTC)
     try:
         data = json.loads(value)
@@ -27,7 +30,7 @@ def normalize_followup(value: str, *, now=None) -> str | None:
         return None
 
 
-def eligible_followup(record, *, now=None) -> dict | None:
+def eligible_followup(record: Any, *, now: datetime | None = None) -> dict[str, Any] | None:
     now = now or datetime.now(UTC)
     normalized = normalize_followup(record.value, now=now)
     if normalized is None:

@@ -1,9 +1,13 @@
 """Short member cooldowns and resource limits; chat quotas live in usage.py."""
 
+from __future__ import annotations
+
 import asyncio
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from functools import wraps
 import time
+from typing import Any, cast
 from bot.logging.telemetry import current_model_context, event
 from bot.services.llm import GroundingError
 
@@ -13,18 +17,18 @@ class AILimitReached(Exception):
 
 
 class AIGuard:
-    def __init__(self, sessions, settings):
+    def __init__(self, sessions: Any, settings: Any) -> None:
         self.sessions, self.settings = sessions, settings
         self.active = 0
-        self.users = {}
-        self.voice_guilds = set()
+        self.users: dict[int, float] = {}
+        self.voice_guilds: set[int] = set()
         self.voice_lock = asyncio.Lock()
         self.condition = asyncio.Condition()
         self.waiting = 0
-        self.inflight_users = set()
+        self.inflight_users: set[int] = set()
 
     @asynccontextmanager
-    async def request(self):
+    async def request(self) -> AsyncIterator[None]:
         if not self.settings.ai_enabled:
             raise AILimitReached("Meyaya's AI features are temporarily paused.")
         now = time.monotonic()
@@ -74,7 +78,7 @@ class AIGuard:
                 async with self.condition:
                     self.condition.notify(1)
 
-    async def start_voice(self, guild_id):
+    async def start_voice(self, guild_id: int) -> None:
         async with self.voice_lock:
             if not self.settings.ai_enabled:
                 raise AILimitReached("Meyaya's AI features are temporarily paused.")
@@ -87,13 +91,15 @@ class AIGuard:
                 )
             self.voice_guilds.add(guild_id)
 
-    def end_voice(self, guild_id):
+    def end_voice(self, guild_id: int) -> None:
         self.voice_guilds.discard(guild_id)
 
 
-def guarded(method):
+def guarded[F: Callable[..., Any]](method: F) -> F:
     @wraps(method)
-    async def wrapped(self, system_instruction, user_message, *args, **kwargs):
+    async def wrapped(
+        self: Any, system_instruction: str, user_message: str, *args: Any, **kwargs: Any
+    ) -> Any:
         if self.guard is None:
             return await method(self, system_instruction, user_message, *args, **kwargs)
         try:
@@ -120,4 +126,4 @@ def guarded(method):
                 raise
             return None
 
-    return wrapped
+    return cast(F, wrapped)

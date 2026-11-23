@@ -1,7 +1,10 @@
 """Application-owned emojis, fetched once rather than on the reply hot path."""
+from __future__ import annotations
+
 import asyncio
 import logging
 import random
+from typing import Any
 
 import discord
 
@@ -9,7 +12,7 @@ logger = logging.getLogger(__name__)
 LOADING_EMOJI_NAMES = frozenset({'meyaya_loading', 'meyaya_loading_2', 'meyaya_loading_3'})
 
 
-async def load_application_emojis(bot):
+async def load_application_emojis(bot: Any) -> None:
     try:
         async with asyncio.timeout(5):
             emojis = await bot.fetch_application_emojis()
@@ -19,12 +22,12 @@ async def load_application_emojis(bot):
         logger.warning('Application emojis unavailable: %s', type(error).__name__)
 
 
-def application_emojis(bot):
+def application_emojis(bot: Any) -> tuple[Any, ...]:
     return tuple(item for item in getattr(bot, 'meyaya_application_emojis', ())
                  if item.name and item.available)
 
 
-def loading_emoji(bot):
+def loading_emoji(bot: Any) -> Any:
     choices = tuple(item for item in application_emojis(bot)
                     if item.name.casefold() in LOADING_EMOJI_NAMES)
     return random.choice(choices) if choices else None

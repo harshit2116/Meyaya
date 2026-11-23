@@ -1,9 +1,13 @@
 """Native V2 spectator HUD for the /bossfight Veyra presentation trial."""
 
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Sequence
 from functools import lru_cache
 from io import BytesIO
-import asyncio
 import sys
+from typing import Any, cast
 
 import discord
 from PIL import Image, ImageDraw, ImageOps
@@ -21,20 +25,20 @@ DELIVERY_SECONDS = 6
 ASSET_PREFIX = "veyra"
 
 
-def signature_for(engine):
-    return engine.boss.last_move == "World Sever"
+def signature_for(engine: Any) -> bool:
+    return bool(engine.boss.last_move == "World Sever")
 
 
-def safe(value):
+def safe(value: object) -> str:
     return discord.utils.escape_markdown(discord.utils.escape_mentions(str(value)))[:240]
 
 
-def stage_for(engine):
+def stage_for(engine: Any) -> int:
     # Presentation milestones reflect existing mechanics, not invented HP gates.
     return 2 if engine.boss.skills_used else 1 if engine.abyss_marks >= 2 else 0
 
 
-def warning_for(engine):
+def warning_for(engine: Any) -> str:
     if engine.state.finished:
         return "Combat ended."
     if (engine.boss_actions + 1) % 3 == 0 and engine.boss.mp >= 24:
@@ -43,13 +47,13 @@ def warning_for(engine):
 
 
 @lru_cache(maxsize=8)
-def stage_art(stage, cinematic=False, opening=False):
+def stage_art(stage: int, cinematic: bool = False, opening: bool = False) -> bytes:
     """Cache cosmetic art only. No HP, move numbers or player data are baked in."""
     scene = "victory" if stage == 4 else "opening" if opening else "battle"
     source = template(f"veyra-{scene}-v3.png")
     # Wide originals preserve the complete composition; never crop a portrait card.
     base = ImageOps.pad(source, (960, 420), color=(9, 5, 16)).convert("RGB")
-    frames = []
+    frames: list[Image.Image] = []
     accent = STAGES[min(stage, 2)][2] if stage != 3 else 0xD8B8FF
     color = ((accent >> 16) & 255, (accent >> 8) & 255, accent & 255)
     for tick in range(8 if cinematic else 1):
@@ -77,14 +81,21 @@ def stage_art(stage, cinematic=False, opening=False):
     return output.getvalue()
 
 
-def battle_layout(engine, *, media=None, guardian="", final=False, history_note=""):
+def battle_layout(
+    engine: Any,
+    *,
+    media: str | None = None,
+    guardian: str = "",
+    final: bool = False,
+    history_note: str = "",
+) -> discord.ui.LayoutView:
     state, player, boss = engine.state, engine.player, engine.boss
     stage = stage_for(engine)
     title, interface, color = STAGES[stage]
     if final:
         title = ("AN IMPOSSIBLE SURVIVOR" if state.winner_id == player.user_id else
                  "THE LAST SILENCE" if state.winner_id == boss.user_id else "AN UNWRITTEN ENDING")
-    items = [discord.ui.TextDisplay(f"-# {interface}\n# {title}\n**Veyra · Enemy of All**\n-# Move {state.moves} · Round {state.round} · Automatic battle")]
+    items: list[discord.ui.Item[Any]] = [discord.ui.TextDisplay(f"-# {interface}\n# {title}\n**Veyra · Enemy of All**\n-# Move {state.moves} · Round {state.round} · Automatic battle")]
     if media:
         items.append(discord.ui.MediaGallery(discord.MediaGalleryItem(media=media)))
     items.append(discord.ui.TextDisplay(
@@ -132,19 +143,34 @@ def battle_layout(engine, *, media=None, guardian="", final=False, history_note=
 
 
 class VeyraBossHud:
-    def __init__(self, cog, owner_view, channel, guardian="", *, presentation=None):
+    def __init__(
+        self,
+        cog: Any,
+        owner_view: Any,
+        channel: discord.abc.Messageable,
+        guardian: str = "",
+        *,
+        presentation: Any = None,
+    ) -> None:
         self.cog, self.owner_view, self.channel = cog, owner_view, channel
         self.guardian = guardian
-        self.message = None
-        self.media_key = None
+        self.message: discord.Message | None = None
+        self.media_key: tuple[str, bool] | None = None
         self.signature_shown = False
         self.art_failed = False
-        self.presentation = presentation or sys.modules[__name__]
+        self.presentation: Any = presentation or sys.modules[__name__]
         self.avatar = b""
-        self.cut_ins = {}
+        self.cut_ins: dict[tuple[str, bool], bytes] = {}
         self.player_signature_shown = False
 
-    async def update(self, engine, *, intro=False, final=False, history_note=""):
+    async def update(
+        self,
+        engine: Any,
+        *,
+        intro: bool = False,
+        final: bool = False,
+        history_note: str = "",
+    ) -> discord.Message:
         state = engine.state
         presentation = self.presentation
         if self.message is None:
@@ -164,7 +190,9 @@ class VeyraBossHud:
                 "opening" if intro else "player" if state.last_actor == engine.player.user_id else "boss")
         animated = bool(signature or player_signature)
         key = (pose, animated)
-        attachments = list(getattr(self.message, "attachments", ())) if self.message else []
+        attachments: list[discord.Attachment | discord.File] = (
+            list(getattr(self.message, "attachments", ())) if self.message else []
+        )
         media = f"attachment://{attachments[0].filename}" if attachments else None
         if key != self.media_key and not self.art_failed:
             try:
@@ -183,9 +211,16 @@ class VeyraBossHud:
             attachments, media = [], None
         layout = duel_layout(engine, presentation, media=media, guardian=self.guardian, final=final, intro=intro, history_note=history_note)
 
-        async def deliver(view, files):
+        async def deliver(
+            view: discord.ui.LayoutView,
+            files: Sequence[discord.Attachment | discord.File],
+        ) -> discord.Message:
             if self.message is None:
-                return await self.channel.send(view=view, files=files, allowed_mentions=discord.AllowedMentions.none())
+                return await self.channel.send(
+                    view=view,
+                    files=cast(Sequence[discord.File], files),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
             return await self.message.edit(view=view, attachments=files, allowed_mentions=discord.AllowedMentions.none())
 
         try:

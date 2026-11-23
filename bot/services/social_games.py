@@ -12,7 +12,8 @@ import json
 import logging
 import re
 from secrets import token_urlsafe
-from typing import Callable
+from collections.abc import Callable
+from typing import Any
 
 from bot.data.social_games import GameScenario
 from bot.services.llm import LLMProvider
@@ -513,7 +514,7 @@ class SocialGameJudge:
         return None
 
 
-def _load_json_object(raw: str) -> dict:
+def _load_json_object(raw: str) -> dict[str, Any]:
     cleaned = raw.strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\s*```$", "", cleaned)

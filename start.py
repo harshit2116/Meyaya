@@ -1,15 +1,18 @@
 """Application launcher for Python 3.12."""
 
+from __future__ import annotations
+
 import argparse
 import os
 from pathlib import Path
 import subprocess
 import sys
+from typing import Any, cast
 
 ROOT = Path(__file__).resolve().parent
 
 
-def prepare_environment():
+def prepare_environment() -> None:
     # Environment values take precedence over .env and application defaults.
     from dotenv import load_dotenv
 
@@ -29,7 +32,7 @@ def prepare_environment():
         os.environ.setdefault(key, value)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Validate configuration without connecting")
     parser.add_argument("--skip-migrations", action="store_true", help="Only if migrations were run separately")
@@ -42,7 +45,7 @@ def main():
     from pydantic import ValidationError
 
     try:
-        settings = Settings()
+        settings = cast(Any, Settings)()
     except ValidationError as error:
         # Pydantic's full error can include tokens or credential-bearing URLs.
         fields = sorted({str(item["loc"][0]) for item in error.errors()})

@@ -1,13 +1,19 @@
 """Local floral/prismatic boss UI; only bars can reveal resource progress."""
 
-from io import BytesIO
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
 from functools import lru_cache
-from pathlib import Path
+from io import BytesIO
 import math
+from pathlib import Path
+from typing import Any, cast
+
 from PIL import Image, ImageDraw, ImageOps
 from bot.services.card_renderer import font
-from bot.services.fantasy_render import portrait, flower, blend
-from bot.services.fantasy_duel_renderer import fit, DUEL_SIZE
+from bot.services.fantasy_duel import Battle
+from bot.services.fantasy_duel_renderer import DUEL_SIZE, fit
+from bot.services.fantasy_render import blend, flower, portrait
 
 PINK = "#f3b2dc"
 LILAC = "#c4a7ee"
@@ -16,12 +22,16 @@ ASSETS = Path(__file__).resolve().parents[1] / "assets" / "duels"
 
 
 @lru_cache(maxsize=3)
-def template(name):
+def template(name: str) -> Image.Image:
     with Image.open(ASSETS / name) as source:
         return source.convert("RGB")
 
 
-def render_boss_opening(state, portraits, palettes):
+def render_boss_opening(
+    state: Battle,
+    portraits: Sequence[bytes],
+    palettes: Sequence[Sequence[str]],
+) -> bytes:
     """Supplied illustrated backdrop; all challenger identity is rendered live."""
     image = ImageOps.fit(template("meyaya-challenge.png"), DUEL_SIZE, Image.Resampling.LANCZOS)
     accent = palettes[0][0] if palettes and palettes[0] else "#e9b38d"
@@ -78,7 +88,7 @@ def render_boss_opening(state, portraits, palettes):
     return encode(image)
 
 
-def prism_canvas(size):
+def prism_canvas(size: tuple[int, int]) -> Image.Image:
     image = Image.new("RGB", size, "#151223")
     d = ImageDraw.Draw(image)
     w, h = size
@@ -99,7 +109,16 @@ def prism_canvas(size):
     return image
 
 
-def masked_bar(draw, x, y, current, maximum, width=360, label="HP", color=None):
+def masked_bar(
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    current: int,
+    maximum: int,
+    width: int = 360,
+    label: str = "HP",
+    color: str | None = None,
+) -> None:
     color = color or (PINK if label == "HP" else LILAC)
     draw.text((x, y - 25), f"{label} // UNKNOWN", font=font(17), fill=color)
     draw.rounded_rectangle((x, y, x + width, y + 18), radius=6, fill="#261f36")
@@ -111,7 +130,7 @@ def masked_bar(draw, x, y, current, maximum, width=360, label="HP", color=None):
     draw.text((x + width, y - 25), "??? / ???", font=font(17), fill="#fff4fc", anchor="ra")
 
 
-def encode(image):
+def encode(image: Image.Image) -> bytes:
     output = BytesIO()
     image.save(output, "PNG")
     if output.tell() > 4 * 1024 * 1024:
@@ -119,11 +138,20 @@ def encode(image):
     return output.getvalue()
 
 
-def render_boss_duel(state, portraits, palettes, *, intro=False):
+def render_boss_duel(
+    state: Battle,
+    portraits: Sequence[bytes],
+    palettes: Sequence[Sequence[str]],
+    *,
+    intro: bool = False,
+) -> bytes:
     if not intro:
         from bot.services.boss_battle_cards import render_boss_arena, render_boss_defeat
 
-        renderer = render_boss_defeat if state.finished else render_boss_arena
+        renderer = cast(
+            Callable[[Battle, Sequence[bytes], Sequence[Sequence[str]]], bytes],
+            render_boss_defeat if state.finished else render_boss_arena,
+        )
         return renderer(state, portraits, palettes)
     try:
         if state.left.is_boss:
@@ -217,11 +245,18 @@ def render_boss_duel(state, portraits, palettes, *, intro=False):
     return encode(image)
 
 
-def render_boss_encounter(state, portraits, palettes, *, intro=False):
+def render_boss_encounter(
+    state: Battle,
+    portraits: Sequence[bytes],
+    palettes: Sequence[Sequence[str]],
+    *,
+    intro: bool = False,
+) -> bytes:
     if not state.left.is_boss and state.right.boss_key in {"meyaya", "veyra"}:
         from bot.services.boss_battle_cards import render_meyaya_scene
 
-        return render_meyaya_scene(state, portraits, intro=intro)
+        scene_renderer = cast(Callable[..., bytes], render_meyaya_scene)
+        return scene_renderer(state, portraits, intro=intro)
     player, boss = state.left, state.right
     erasure = boss.boss_key == "veyra"
     PINK, LILAC, CYAN = (
@@ -347,7 +382,7 @@ def render_boss_encounter(state, portraits, palettes, *, intro=False):
     return encode(image)
 
 
-def render_patron_clash(state, *, intro=False):
+def render_patron_clash(state: Battle, *, intro: bool = False) -> bytes:
     if intro:
         source = template("patron-clash-intro.png")
         image = ImageOps.fit(source, DUEL_SIZE, Image.Resampling.LANCZOS)
@@ -488,13 +523,13 @@ def render_patron_clash(state, *, intro=False):
     return encode(image)
 
 
-def render_boss_profile(profile, avatar=b""):
+def render_boss_profile(profile: Any, avatar: bytes = b"") -> bytes:
     # The new full illustration is authoritative, with no avatar overlay.
     return render_patron_profile("meyaya")
 
 
 @lru_cache(maxsize=2)
-def render_patron_profile(patron):
+def render_patron_profile(patron: str) -> bytes:
     if patron not in {"meyaya", "veyra"}:
         raise ValueError("Unknown patron profile")
     return encode(template(f"{patron}-profile.png"))

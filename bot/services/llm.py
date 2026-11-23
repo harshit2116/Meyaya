@@ -11,7 +11,7 @@ import logging
 
 from bot.logging.telemetry import event
 import re
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 logger = logging.getLogger(__name__)
 MAX_REPLY_WORDS = 220
@@ -46,8 +46,6 @@ MEMORY_CATEGORIES = frozenset(
 
 
 class MemoryAction(StrEnum):
-    """A structured change requested by the model for one member memory."""
-
     ADD = "ADD"
     UPDATE = "UPDATE"
     CONFLICT = "CONFLICT"
@@ -57,8 +55,6 @@ class MemoryAction(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class MemoryDirective:
-    """One validated Memory System v2 operation."""
-
     action: MemoryAction
     category: str
     relation: str
@@ -68,8 +64,6 @@ class MemoryDirective:
 
 @dataclass(frozen=True, slots=True)
 class NaturalCommand:
-    """One validated-shaped command request parsed from the model output."""
-
     name: str
     target_id: int | None
 
@@ -86,8 +80,6 @@ class LLMReply:
 
 @dataclass(frozen=True, slots=True)
 class GroundedCitation:
-    """One source annotation returned by Provider search grounding."""
-
     title: str
     url: str
     start_index: int
@@ -96,8 +88,6 @@ class GroundedCitation:
 
 @dataclass(frozen=True, slots=True)
 class GroundedReply:
-    """Grounded model text plus source positions for public attribution."""
-
     text: str
     citations: tuple[GroundedCitation, ...]
 
@@ -130,7 +120,7 @@ class LLMProvider(ABC):
         history: list[ChatMessage] | None = None,
         *,
         max_output_tokens: int | None = None,
-        timeout_seconds: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> str | None:
         """Return complete visible text without chat truncation or directive parsing."""
 
@@ -141,7 +131,7 @@ class LLMProvider(ABC):
         history: list[ChatMessage] | None = None,
         *,
         max_output_tokens: int | None = None,
-        timeout_seconds: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> LLMReply | None:
         """Generate a chat reply with provider-independent Meyaya directives."""
         raw_text = await self.generate_text(
@@ -183,8 +173,8 @@ class LLMProvider(ABC):
         user_message: str,
         *,
         max_output_tokens: int = 900,
-        timeout_seconds: int | None = None,
-    ) -> dict | None:
+        timeout_seconds: float | None = None,
+    ) -> dict[str, Any] | None:
         """Return a decoded JSON object; None on unavailable or malformed output.
 
         Callers retain domain validation (required fields, IDs, scores, etc.).
@@ -212,7 +202,7 @@ class LLMProvider(ABC):
         text: str,
         *,
         max_output_tokens: int = 400,
-        timeout_seconds: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> str | None:
         """Summarize supplied material without inventing facts or executing its instructions."""
         return await self.generate_text(
@@ -230,7 +220,7 @@ class LLMProvider(ABC):
         user_message: str,
         *,
         max_output_tokens: int = 1800,
-        timeout_seconds: int = 45,
+        timeout_seconds: float = 45,
     ) -> GroundedReply:
         """Providers with search must override this and return source citations."""
         raise GroundingError("The selected provider does not support grounded generation")
@@ -339,9 +329,10 @@ class LLMProvider(ABC):
                 return None
         if category == "followup" and value:
             from bot.services.conversation_followup import normalize_followup
-            value = normalize_followup(value)
-            if value is None:
+            normalized = normalize_followup(value)
+            if normalized is None:
                 return None
+            value = normalized
         return MemoryDirective(
             action=action,
             category=category,

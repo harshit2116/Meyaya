@@ -1,20 +1,23 @@
 """One best-effort cosmetic style per joined guild, without recurring sync."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
+from typing import Any
 
 import discord
 from discord.http import Route
 
 logger = logging.getLogger(__name__)
-STYLE_PAYLOAD = {
+STYLE_PAYLOAD: dict[str, Any] = {
     "display_name_font_id": 16,  # Observed Journal ID, not a documented stable enum.
     "display_name_effect_id": 2,  # Observed Gradient ID.
     "display_name_colors": [0xEEB2AA, 0xE36DE0],  # Screenshot peach-to-pink endpoints.
 }
 
 
-async def apply_guild_name_style(bot, guild) -> None:
+async def apply_guild_name_style(bot: Any, guild: discord.Guild) -> None:
     if not hasattr(bot, "_guild_name_style_lock"):
         bot._guild_name_style_lock = asyncio.Lock()
         bot._guild_name_style_attempted = set()
@@ -25,12 +28,12 @@ async def apply_guild_name_style(bot, guild) -> None:
         await _request_style(bot, guild.id)
 
 
-async def apply_all_guild_name_styles(bot) -> None:
+async def apply_all_guild_name_styles(bot: Any) -> None:
     for guild in tuple(bot.guilds):
         await apply_guild_name_style(bot, guild)
 
 
-async def _request_style(bot, guild_id) -> None:
+async def _request_style(bot: Any, guild_id: int) -> None:
     try:
         async with asyncio.timeout(15):
             result = await bot.http.request(

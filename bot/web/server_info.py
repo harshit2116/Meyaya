@@ -1,17 +1,25 @@
 """Read-only server metadata; never enumerate the full member roster."""
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 from itertools import islice
+from typing import Any
 
 
-def snowflake_date(value):
+def snowflake_date(value: int | str) -> str:
     return datetime.fromtimestamp(((int(value) >> 22) + 1420070400000) / 1000, UTC).isoformat()
 
 
-def rest_server_info(data, channels=None, owner=None):
+def rest_server_info(
+    data: Mapping[str, Any],
+    channels: Iterable[Mapping[str, Any]] | None = None,
+    owner: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Normalize REST metadata, preserving unavailable values as null."""
     owner_user = (owner or {}).get("user", owner or {})
     roles = data.get("roles")
-    info = {
+    info: dict[str, Any] = {
         "id": str(data["id"]), "name": data.get("name"),
         "description": data.get("description"),
         "owner_id": str(data["owner_id"]) if data.get("owner_id") else None,
@@ -41,10 +49,10 @@ def rest_server_info(data, channels=None, owner=None):
     return info
 
 
-def cached_server_info(guild):
+def cached_server_info(guild: Any) -> dict[str, Any]:
     """Use the hosted gateway cache without any Discord REST requests."""
     owner = guild.owner
-    data = {"id": str(guild.id), "name": guild.name, "owner_id": guild.owner_id,
+    data: dict[str, Any] = {"id": str(guild.id), "name": guild.name, "owner_id": guild.owner_id,
             "roles": [{"id": str(r.id), "name": r.name, "color": r.color.value,
                        "position": r.position, "managed": r.managed, "mentionable": r.mentionable} for r in guild.roles]}
     for field, attr in {
@@ -70,7 +78,9 @@ def cached_server_info(guild):
     return info
 
 
-def rest_member_preview(rows, roles):
+def rest_member_preview(
+    rows: Iterable[Mapping[str, Any]], roles: Iterable[Mapping[str, Any]] | None
+) -> list[dict[str, Any]]:
     """Return at most 50 display-only member records, not full Discord payloads."""
     role_names = {str(role['id']): role['name'] for role in roles or []}
     return [{
@@ -82,7 +92,7 @@ def rest_member_preview(rows, roles):
     } for row in islice((row for row in rows if not row['user'].get('bot')), 50)]
 
 
-def cached_member_preview(members):
+def cached_member_preview(members: Iterable[Any]) -> list[dict[str, Any]]:
     return [{
         'id': str(member.id), 'name': member.display_name, 'username': member.name,
         'bot': member.bot, 'joined_at': member.joined_at.isoformat() if member.joined_at else None,

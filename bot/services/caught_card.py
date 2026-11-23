@@ -1,7 +1,10 @@
 """Local, supersampled CCTV parody cards. No AI or remote scene assets."""
 
+from __future__ import annotations
+
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from functools import lru_cache
 from io import BytesIO
 from secrets import choice
@@ -36,38 +39,79 @@ INCIDENTS = (
 )
 
 
-def choose_incident():
+def choose_incident() -> Incident:
     return choice(INCIDENTS)
 
 
 class Canvas:
-    def __init__(self, image):
+    def __init__(self, image: Image.Image) -> None:
         self.image = image
         self.draw = ImageDraw.Draw(image)
 
-    def box(self, xy, fill, outline=None, radius=0, width=1):
-        xy = tuple(round(v * SCALE) for v in xy)
+    def box(
+        self,
+        xy: tuple[float, float, float, float],
+        fill: str | None,
+        outline: str | None = None,
+        radius: int = 0,
+        width: int = 1,
+    ) -> None:
+        coords = (
+            round(xy[0] * SCALE),
+            round(xy[1] * SCALE),
+            round(xy[2] * SCALE),
+            round(xy[3] * SCALE),
+        )
         if radius:
-            self.draw.rounded_rectangle(xy, radius=radius * SCALE, fill=fill,
-                                        outline=outline, width=width * SCALE)
+            self.draw.rounded_rectangle(
+                coords,
+                radius=radius * SCALE,
+                fill=fill,
+                outline=outline,
+                width=width * SCALE,
+            )
         else:
-            self.draw.rectangle(xy, fill=fill, outline=outline, width=width * SCALE)
+            self.draw.rectangle(coords, fill=fill, outline=outline, width=width * SCALE)
 
-    def polygon(self, points, fill):
+    def polygon(self, points: Sequence[tuple[float, float]], fill: str) -> None:
         self.draw.polygon([(x * SCALE, y * SCALE) for x, y in points], fill=fill)
 
-    def line(self, points, fill, width=1):
+    def line(self, points: Sequence[tuple[float, float]], fill: str, width: int = 1) -> None:
         self.draw.line([(x * SCALE, y * SCALE) for x, y in points], fill=fill, width=width * SCALE)
 
-    def ellipse(self, xy, fill, outline=None, width=1):
-        self.draw.ellipse(tuple(v * SCALE for v in xy), fill=fill, outline=outline, width=width * SCALE)
+    def ellipse(
+        self,
+        xy: tuple[float, float, float, float],
+        fill: str | None,
+        outline: str | None = None,
+        width: int = 1,
+    ) -> None:
+        self.draw.ellipse(
+            (xy[0] * SCALE, xy[1] * SCALE, xy[2] * SCALE, xy[3] * SCALE),
+            fill=fill,
+            outline=outline,
+            width=width * SCALE,
+        )
 
-    def text(self, xy, text, size=20, fill="#e7f8f4", anchor=None):
-        self.draw.text(tuple(v * SCALE for v in xy), text, font=font(size * SCALE), fill=fill, anchor=anchor)
+    def text(
+        self,
+        xy: tuple[float, float],
+        text: str,
+        size: int = 20,
+        fill: str = "#e7f8f4",
+        anchor: str | None = None,
+    ) -> None:
+        self.draw.text(
+            (xy[0] * SCALE, xy[1] * SCALE),
+            text,
+            font=font(size * SCALE),
+            fill=fill,
+            anchor=anchor,
+        )
 
 
 @lru_cache(maxsize=3)
-def scene_background(scene):
+def scene_background(scene: str) -> Image.Image:
     image = Image.new("RGB", (SIZE[0] * SCALE, SIZE[1] * SCALE), "#0b151c")
     c = Canvas(image)
     c.box((22, 78, 938, 461), "#142a32")
@@ -116,12 +160,17 @@ def scene_background(scene):
     return image
 
 
-def render_caught(name, avatar=b"", incident=None, timestamp=None):
+def render_caught(
+    name: object,
+    avatar: bytes = b"",
+    incident: Incident | None = None,
+    timestamp: datetime | None = None,
+) -> bytes:
     case = incident or choose_incident()
     if case.scene not in {"pantry", "arcade", "server"}:
         raise ValueError("Unknown caught scene")
-    name = " ".join(str(name).split())[:48] or "Member"
-    timestamp = timestamp or datetime.now(timezone.utc)
+    suspect = " ".join(str(name).split())[:48] or "Member"
+    when = timestamp or datetime.now(UTC)
     image = scene_background(case.scene).copy()
     c = Canvas(image)
     # A little illustrated suspect silhouette, not merely a pasted profile circle.
@@ -132,7 +181,7 @@ def render_caught(name, avatar=b"", incident=None, timestamp=None):
     c.line([(454, 294), (419, 330)], "#425e69", 18)
     c.line([(547, 294), (581, 315)], "#425e69", 18)
     portrait = Image.new("RGB", (104 * SCALE, 104 * SCALE), "#294552")
-    Canvas(portrait).text((52, 52), name[0].upper(), 44, anchor="mm")
+    Canvas(portrait).text((52, 52), suspect[0].upper(), 44, anchor="mm")
     if avatar and len(avatar) <= 1024 * 1024:
         try:
             with Image.open(BytesIO(avatar)) as source:
@@ -158,14 +207,14 @@ def render_caught(name, avatar=b"", incident=None, timestamp=None):
     c.text((85, 45), "MEYAYA / SECURITY ARCHIVE", 10, "#91aaa9")
     c.ellipse((843, 28, 853, 38), "#ee7f83")
     c.text((864, 24), "REC", 17)
-    c.text((42, 97), timestamp.astimezone(timezone.utc).strftime("%d %b %Y  %H:%M:%S UTC").upper(), 14, "#c0ded4")
+    c.text((42, 97), when.astimezone(UTC).strftime("%d %b %Y  %H:%M:%S UTC").upper(), 14, "#c0ded4")
     c.text((917, 433), "FICTIONAL INCIDENT", 11, "#a0b9b4", "ra")
     c.text((38, 485), "SUSPECT", 11, "#7ea4a2")
     # Name and prose are measured before drawing; long names cannot clip the HUD.
     for size in range(23, 5, -1):
-        if c.draw.textlength(name, font=font(size * SCALE)) <= 360 * SCALE:
+        if c.draw.textlength(suspect, font=font(size * SCALE)) <= 360 * SCALE:
             break
-    c.text((38, 507), name, size)
+    c.text((38, 507), suspect, size)
     c.text((420, 485), "INCIDENT REPORT", 11, "#7ea4a2")
     rows = lines(c.draw, case.incident, 20 * SCALE, 500 * SCALE)
     for i, row in enumerate(rows[:2]):

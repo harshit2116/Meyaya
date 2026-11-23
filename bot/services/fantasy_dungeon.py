@@ -1,23 +1,36 @@
 """Application-owned, transactional campaign state machine. No background work."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from hashlib import sha256
 import secrets
+from typing import Any, cast
 from uuid import uuid4
+
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.data.fantasy_dungeon import world_for
-from bot.data.fantasy_memory_world import OPENING, CORE, STORY_VERSION, CYCLE, ending_scenes, core_scene_index
-from bot.services.dungeon_finale import MemoryCoreBattle, advance_clash
 from bot.data.fantasy_dungeon_lore import lore_scenes
-from bot.models.fantasy_dungeon import FantasyDungeonRun, ACTIVE_PHASES
+from bot.data.fantasy_memory_world import (
+    CORE,
+    CYCLE,
+    OPENING,
+    STORY_VERSION,
+    core_scene_index,
+    ending_scenes,
+)
+from bot.data.private_identity import AYAYA_USER_ID
+from bot.models.fantasy_dungeon import ACTIVE_PHASES, FantasyDungeonRun
+from bot.models.fantasy_profile import FantasyProfile
+from bot.repositories.fantasy_duels import FantasyDuelRepository
 from bot.repositories.fantasy_dungeon import FantasyDungeonRepository
 from bot.repositories.fantasy_profiles import FantasyProfileRepository
-from bot.repositories.fantasy_duels import FantasyDuelRepository
-from bot.services.fantasy_duel import Fighter, RULES_VERSION
+from bot.services.dungeon_finale import MemoryCoreBattle, advance_clash
+from bot.services.fantasy_duel import Battle, Fighter, RULES_VERSION
 from bot.services.fantasy_dungeon_combat import DungeonCombat, enemy_fighter
 from bot.services.fantasy_progression import award_xp
-from bot.data.private_identity import AYAYA_USER_ID
 
 
 class DungeonUnavailable(ValueError):
@@ -29,12 +42,12 @@ class DungeonStale(DungeonUnavailable):
 
 
 class DungeonService:
-    def __init__(self, session):
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.profiles = FantasyProfileRepository(session)
         self.runs = FantasyDungeonRepository(session)
 
-    async def read(self, user_id):
+    async def read(self, user_id: int) -> tuple[FantasyProfile | None, FantasyDungeonRun | None]:
         for attempt in range(2):
             try:
                 return await self.runs.soul(user_id)
@@ -42,8 +55,11 @@ class DungeonService:
                 if attempt or not error.connection_invalidated:
                     raise
                 await self.session.rollback()
+        raise RuntimeError("Unreachable dungeon read retry state")
 
-    async def owner_control(self, user_id, action, *, guild_id):
+    async def owner_control(
+        self, user_id: int, action: str, *, guild_id: int
+    ) -> tuple[FantasyProfile, FantasyDungeonRun]:
         if user_id != AYAYA_USER_ID:
             raise DungeonUnavailable("These dungeon controls are owner-only.")
         if action not in {"restart", "skip", "skip floor"}:
@@ -94,7 +110,15 @@ class DungeonService:
             await self.session.flush()
             return profile, run
 
-    async def transition(self, user_id, action, *, token=None, revision=None, guild_id=0):
+    async def transition(
+        self,
+        user_id: int,
+        action: str,
+        *,
+        token: str | None = None,
+        revision: int | None = None,
+        guild_id: int = 0,
+    ) -> tuple[FantasyProfile, FantasyDungeonRun]:
         for attempt in range(2):
             try:
                 return await self._transition_once(user_id, action, token=token, revision=revision, guild_id=guild_id)
@@ -106,8 +130,17 @@ class DungeonService:
                 # reached Postgres, stale-action checks prevent a second turn
                 # or reward; never retry with a freshly fetched revision.
                 await self.session.rollback()
+        raise RuntimeError("Unreachable dungeon transition retry state")
 
-    async def _transition_once(self, user_id, action, *, token=None, revision=None, guild_id=0):
+    async def _transition_once(
+        self,
+        user_id: int,
+        action: str,
+        *,
+        token: str | None = None,
+        revision: int | None = None,
+        guild_id: int = 0,
+    ) -> tuple[FantasyProfile, FantasyDungeonRun]:
         async with self.session.begin():
             if action == "begin":
                 # A concurrent Begin may insert the first run while waiting for
@@ -153,7 +186,7 @@ class DungeonService:
                 if run.phase not in ACTIVE_PHASES:
                     raise DungeonStale("This run has ended. Open `/dungeon` again.")
                 if run.phase == "seal" and run.state.get("sequence", "core") == "core":
-                    run.state = dict(run.state, scene=core_scene_index(run), story_version=STORY_VERSION)
+                    run.state = dict(run.state, scene=cast(Any, core_scene_index)(run), story_version=STORY_VERSION)
                 if action == "abandon":
                     if profile.ending_route:
                         raise DungeonUnavailable("Your worldline is sealed. Continue the ending with `/dungeon`.")
@@ -179,6 +212,8 @@ class DungeonService:
                 elif run.phase == "seal" and run.state.get("sequence") == "clash":
                     if action != "witness":
                         raise DungeonUnavailable("You are the Witness here. Continue the clash.")
+                    if not profile.ending_route:
+                        raise DungeonUnavailable("Choose the worldline you stand with.")
                     advance_clash(run, profile.ending_route)
                 elif action == "continue":
                     self.advance(profile, run)
@@ -191,7 +226,7 @@ class DungeonService:
             await self.session.flush()
             return profile, run
 
-    def enter_combat(self, profile, run):
+    def enter_combat(self, profile: FantasyProfile, run: FantasyDungeonRun) -> None:
         if run.floor == 10:
             raise DungeonUnavailable("The Memory Core has its own story battles. Continue the saved scene.")
         player = Fighter.snapshot(profile, "Your soul")
@@ -206,7 +241,7 @@ class DungeonService:
         run.phase = "combat"
         run.state = dict(guild_id=run.state["guild_id"], battle=combat.export())
 
-    def advance(self, profile, run):
+    def advance(self, profile: FantasyProfile, run: FantasyDungeonRun) -> None:
         if run.state.get("sequence") == "opening":
             scene = run.state.get("scene", 0)
             if scene + 1 < len(OPENING):
@@ -216,7 +251,7 @@ class DungeonService:
         elif run.phase in {"intro", "story"}:
             beat = run.state.get("story_beat", 1)
             scene = run.state.get("lore_scene", 0)
-            scenes = lore_scenes(world_for(run.floor), run.phase, profile.alignment, beat)
+            scenes = cast(Any, lore_scenes)(cast(Any, world_for)(run.floor), run.phase, profile.alignment, beat)
             if scene + 1 < len(scenes):
                 run.state = dict(run.state, lore_scene=scene + 1)
             elif run.phase == "intro":
@@ -246,7 +281,7 @@ class DungeonService:
                 raise DungeonUnavailable("Choose the worldline you stand with.")
             if sequence in {"allied", "clash"}:
                 raise DungeonUnavailable("Finish the current finale battle first.")
-            scenes = ending_scenes(profile.ending_route, battle_played=bool(run.state.get("clash_winner"))) if sequence == "ending" else CORE
+            scenes = cast(Any, ending_scenes)(profile.ending_route, battle_played=bool(run.state.get("clash_winner"))) if sequence == "ending" else CORE
             if sequence == "core" and scenes[scene].id == "joint-battle":
                 combat = MemoryCoreBattle.begin(profile, run.seed)
                 run.hp, run.mp = combat.state.left.hp, combat.state.left.mp
@@ -273,7 +308,9 @@ class DungeonService:
         else:
             raise DungeonUnavailable("Finish this encounter before continuing.")
 
-    async def combat_turn(self, profile, run, action):
+    async def combat_turn(
+        self, profile: FantasyProfile, run: FantasyDungeonRun, action: str
+    ) -> None:
         if run.floor == 10:
             raise DungeonUnavailable("This old battle has ended. Open `/dungeon` for the Memory Core.")
         combat = DungeonCombat.restore(run.state["battle"], run.seed + run.floor * 100 + run.encounter,
@@ -293,13 +330,21 @@ class DungeonService:
             return
         await self.reward_victory(profile, run, state, guild_id)
 
-    async def reward_victory(self, profile, run, state, guild_id, *, owner_skip=False):
+    async def reward_victory(
+        self,
+        profile: FantasyProfile,
+        run: FantasyDungeonRun,
+        state: Battle,
+        guild_id: int,
+        *,
+        owner_skip: bool = False,
+    ) -> None:
         if run.floor == 10:
             raise DungeonUnavailable("The Memory Core concludes through the permanent worldline choice.")
         boss = run.encounter == 3
         if boss and profile.weapon_level != run.floor - 1:
             raise DungeonStale("This world's guardian reward was already claimed.")
-        world = world_for(run.floor)
+        world = cast(Any, world_for)(run.floor)
         amount = world.xp(run.encounter)
         reward = award_xp(profile, amount)
         if owner_skip:
@@ -320,12 +365,19 @@ class DungeonService:
         run.state = dict(guild_id=guild_id, reward=reward)
         await self.record_encounter(profile, run, state, guild_id, reward)
 
-    async def record_encounter(self, profile, run, state, guild_id, reward):
+    async def record_encounter(
+        self,
+        profile: FantasyProfile,
+        run: FantasyDungeonRun,
+        state: Battle,
+        guild_id: int,
+        reward: dict[str, Any],
+    ) -> None:
         battle_id = sha256(f"{run.token}:{run.floor}:{run.encounter}".encode()).hexdigest()[:32]
         await FantasyDuelRepository(self.session).record(dict(
             id=battle_id, guild_id=guild_id, challenger_id=profile.user_id,
             opponent_id=state.right.user_id, winner_id=state.winner_id, seed=state.seed,
-            rules_version=RULES_VERSION, rounds=max(1, min(6, state.round)), arena=world_for(run.floor).name,
+            rules_version=RULES_VERSION, rounds=max(1, min(60, state.round)), arena=cast(Any, world_for)(run.floor).name,
             summary=dict(encounter="dungeon", floor=run.floor, enemy=state.right.name,
                          actual_rounds=state.round, reward=reward),
         ))

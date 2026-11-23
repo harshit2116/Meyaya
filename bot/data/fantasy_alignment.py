@@ -1,8 +1,11 @@
 """Two authored patrons; alignment is a layer over the saved core identity."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 ALIGNMENT_ART = Path(__file__).resolve().parents[1] / "assets" / "duels" / "origin-erasure.png"
 
@@ -76,13 +79,13 @@ PATRON_PROFILES = {
 }
 
 
-def patron_for(profile):
+def patron_for(profile: Any) -> Patron | None:
     if getattr(profile, "is_meyaya_boss", False):
         return None
     return PATRONS.get(getattr(profile, "alignment", ""))
 
 
-def alignment_values(profile, choice):
+def alignment_values(profile: Any, choice: str) -> dict[str, str]:
     patron = PATRONS[choice]
     index = int.from_bytes(sha256(profile.class_id.encode()).digest()[:2], "big") % len(
         patron.titles

@@ -1,10 +1,14 @@
 """Cheap conversation style, timing and routing safeguards; no model calls."""
 
+from __future__ import annotations
+
 from collections import OrderedDict, deque
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 import json
 import re
 import time
+from typing import Any
 
 
 TIME_RULES = (
@@ -39,13 +43,13 @@ _ROLEPLAY = re.compile(r'\b(?:roleplay|role-play|act as|pretend (?:to be|you are
                        r'narrate|stage directions|in character)\b', re.IGNORECASE)
 
 
-def prose_only(text, transform):
+def prose_only(text: str, transform: Callable[[str], str]) -> str:
     """Preserve literal examples inside code while cleaning visible prose."""
     return ''.join(part if index % 2 else transform(part)
                    for index, part in enumerate(_CODE.split(text)))
 
 
-def theatrical_requested(text):
+def theatrical_requested(text: str) -> bool:
     # A negative request should never switch theatrical narration on.
     if re.search(r"\b(?:no|stop|without|avoid|don't|do not)\b.{0,30}" + _ROLEPLAY.pattern,
                  text, re.IGNORECASE):
@@ -53,23 +57,24 @@ def theatrical_requested(text):
     return bool(_ROLEPLAY.search(text))
 
 
-def plain_reply(text, *, theatrical=False):
+def plain_reply(text: str, *, theatrical: bool = False) -> str:
     if theatrical:
         return text
-    def clean(part):
+
+    def clean(part: str) -> str:
         part = _DIRECTION.sub('', part)
         part = re.sub(r'[ \t]{2,}', ' ', part)
         return re.sub(r'\n[ \t]+', '\n', part)
     return prose_only(text, clean).strip()
 
 
-def utc_time(value):
+def utc_time(value: object) -> datetime | None:
     if isinstance(value, datetime) and value.tzinfo is not None:
         return value.astimezone(UTC)
     return None
 
 
-def time_record(value, *, now=None):
+def time_record(value: object, *, now: datetime | None = None) -> dict[str, str | int | None]:
     stamp = utc_time(value)
     if stamp is None:
         return {'created_at_utc': None, 'age_seconds': None}
@@ -78,17 +83,19 @@ def time_record(value, *, now=None):
             'age_seconds': round(elapsed) if elapsed >= 0 else None}
 
 
-def temporal_context(message, reply=None):
+def temporal_context(message: Any, reply: Any = None) -> str:
     now = datetime.now(UTC)
-    evidence = {'now_utc': now.isoformat(timespec='seconds'),
-                'incoming_message': time_record(getattr(message, 'created_at', None), now=now)}
+    evidence: dict[str, Any] = {
+        'now_utc': now.isoformat(timespec='seconds'),
+        'incoming_message': time_record(getattr(message, 'created_at', None), now=now),
+    }
     if reply is not None:
         evidence['replied_message'] = dict(message_id=reply.message_id, author_id=reply.author_id,
             **time_record(reply.created_at, now=now))
     return 'VERIFIED MESSAGE TIMING (runtime metadata): ' + json.dumps(evidence)
 
 
-def external_command(text, bot_id, mentions=()):
+def external_command(text: str, bot_id: int | None, mentions: Iterable[Any] = ()) -> bool:
     """Skip command-shaped invocations, not natural questions or leading bot addresses."""
     text = text.lstrip()
     first = re.match(r'<@!?(\d+)>', text)
@@ -105,15 +112,16 @@ def external_command(text, bot_id, mentions=()):
         'which', 'can', 'could', 'would', 'kya', 'kyun', 'kaise', 'net', 'js', 'py'}
 
 
-def command_output(text, current_request, *, failed=False):
+def command_output(text: str, current_request: str, *, failed: bool = False) -> str:
     """Never interpret a visible slash line as successful dispatch."""
     if failed:
         return "I couldn't complete that command. Please use `/help` and try it directly."
     if re.search(r'\b(?:how|usage|syntax|example|explain|which command|what command)\b|'
                  r'\bshow\b.*(?:command|/)|\bwhy\b.*(?:command|/)', current_request, re.IGNORECASE):
         return text
-    commands = []
-    def inspect(part):
+    commands: list[str] = []
+
+    def inspect(part: str) -> str:
         commands.extend(re.findall(r'^\s*/([a-z][\w-]*)(?:[ \t]+[^\n]*)?\s*$', part, re.MULTILINE))
         return part
     prose_only(text, inspect)
@@ -125,11 +133,11 @@ def command_output(text, current_request, *, failed=False):
 class RecentReplyStyle:
     """Bounded channel-local delivered openings, never cross-server personal context."""
 
-    def __init__(self, capacity=512, ttl=1800):
+    def __init__(self, capacity: int = 512, ttl: float = 1800) -> None:
         self.capacity, self.ttl = capacity, ttl
-        self._channels = OrderedDict()
+        self._channels: OrderedDict[tuple[int | None, int], deque[tuple[float, str]]] = OrderedDict()
 
-    def remember(self, guild_id, channel_id, text):
+    def remember(self, guild_id: int | None, channel_id: int, text: str) -> None:
         key = (guild_id, channel_id)
         rows = self._recent(key)
         # Include the premise beyond the opening; bounded delivered bot text only.
@@ -141,14 +149,17 @@ class RecentReplyStyle:
         while len(self._channels) > self.capacity:
             self._channels.popitem(last=False)
 
-    def _recent(self, key):
+    def _recent(self, key: tuple[int | None, int]) -> deque[tuple[float, str]]:
         rows = self._channels.get(key, ())
-        rows = deque((item for item in rows if time.monotonic() - item[0] < self.ttl), maxlen=8)
-        if not rows:
+        filtered: deque[tuple[float, str]] = deque(
+            (item for item in rows if time.monotonic() - item[0] < self.ttl),
+            maxlen=8,
+        )
+        if not filtered:
             self._channels.pop(key, None)
-        return rows
+        return filtered
 
-    def instruction(self, guild_id, channel_id):
+    def instruction(self, guild_id: int | None, channel_id: int) -> str:
         openings = [opening for _, opening in self._recent((guild_id, channel_id))]
         if not openings:
             return ''

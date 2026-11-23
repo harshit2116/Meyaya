@@ -8,7 +8,7 @@ Behavior:
 
 from __future__ import annotations
 
-from bot.logging.telemetry import discord_context, event
+from bot.logging.telemetry import discord_context
 
 from bot.prompts.monitor import build_moderation_instruction
 
@@ -18,6 +18,7 @@ import random
 import re
 import time
 from datetime import timedelta
+from typing import Any
 from weakref import WeakValueDictionary
 
 import discord
@@ -76,7 +77,7 @@ class MonitorCog(commands.Cog):
         self._warning_counts: dict[tuple[int, int], tuple[int, float]] = {}
         self._nudge_cycle: list[str] = []
 
-    async def cog_load(self) -> None:  # type: ignore[override]
+    async def cog_load(self) -> None:
         # Merge channels persisted in Redis (if available).
         redis = getattr(self.bot, "redis", None)
         if redis is not None:
@@ -157,12 +158,12 @@ class MonitorCog(commands.Cog):
         # Use langdetect only for longer ASCII messages and require high
         # confidence. Gemini performs a second verification before any reply.
         try:
-            from langdetect import DetectorFactory, detect_langs
+            from langdetect import DetectorFactory, detect_langs  # type: ignore[import-untyped]
 
             DetectorFactory.seed = 0
             candidates = detect_langs(content)
             if candidates and candidates[0].prob >= 0.90:
-                return candidates[0].lang
+                return str(candidates[0].lang)
         except Exception:
             pass
         return "en"
@@ -188,13 +189,15 @@ class MonitorCog(commands.Cog):
             except Exception:
                 logger.warning("Could not persist English warning counter", exc_info=True)
 
-        key = (guild_id, user_id)
+        local_key = (guild_id, user_id)
         now = time.monotonic()
-        count, expires_at = self._warning_counts.get(key, (0, 0.0))
+        count, expires_at = self._warning_counts.get(local_key, (0, 0.0))
         if now >= expires_at:
             count = 0
         count = min(WARNING_LIMIT, count + 1)
-        self._warning_counts[key] = (count, now + WARNING_WINDOW_SECONDS)
+        if len(self._warning_counts) >= 2048 and local_key not in self._warning_counts:
+            self._warning_counts.pop(next(iter(self._warning_counts)))
+        self._warning_counts[local_key] = (count, now + WARNING_WINDOW_SECONDS)
         return count
 
     async def _clear_warnings(self, guild_id: int, user_id: int) -> None:
@@ -287,6 +290,8 @@ class MonitorCog(commands.Cog):
         # Reserve the server-wide member cooldown before any further await. Other
         # messages queued on this member's lock will observe it and cannot add a
         # second warning from the same burst.
+        if len(self._last_seen) >= 2048 and key not in self._last_seen:
+            self._last_seen.pop(next(iter(self._last_seen)))
         self._last_seen[key] = time.monotonic()
         warning_count = await self._increment_warning(message.guild.id, message.author.id)
         timed_out = False
@@ -324,7 +329,8 @@ class MonitorCog(commands.Cog):
     @discord_context("moderation")
     async def on_message(self, message: discord.Message) -> None:
         moderation = self.bot.get_cog("ModerationCog")
-        if moderation and await moderation.should_block(message):
+        should_block = getattr(moderation, "should_block", None)
+        if should_block is not None and await should_block(message):
             return
         # Ignore bot messages and DMs.
         if message.author is None or message.author.bot:
@@ -351,7 +357,7 @@ class MonitorCog(commands.Cog):
         async with self._decision_lock(message.guild.id, message.author.id):
             await self._process_non_english_candidate(message, content)
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="monitor_add",
         description="Enforce the English-only rule in a channel.",
         with_app_command=True,
@@ -359,8 +365,9 @@ class MonitorCog(commands.Cog):
     @commands.has_guild_permissions(manage_guild=True)
     @commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
-    async def monitor_add(self, ctx: commands.Context, channel: discord.abc.GuildChannel) -> None:
-        """Add a channel (text or voice) to the monitored list."""
+    async def monitor_add(
+        self, ctx: commands.Context[Any], channel: discord.abc.GuildChannel
+    ) -> None:
         cid = getattr(channel, "id", None)
         if cid is None or ctx.guild is None or getattr(getattr(channel, "guild", None), "id", None) != ctx.guild.id:
             await ctx.send("Choose a channel belonging to this server.")
@@ -382,7 +389,7 @@ class MonitorCog(commands.Cog):
             logger.exception("Failed to add channel to monitor set")
             await ctx.send("Failed to add channel to monitor list")
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="monitor_remove",
         description="Stop enforcing the English-only rule in a channel.",
         with_app_command=True,
@@ -391,9 +398,8 @@ class MonitorCog(commands.Cog):
     @commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
     async def monitor_remove(
-        self, ctx: commands.Context, channel: discord.abc.GuildChannel
+        self, ctx: commands.Context[Any], channel: discord.abc.GuildChannel
     ) -> None:
-        """Remove a channel from the monitored list."""
         cid = getattr(channel, "id", None)
         if cid is None or ctx.guild is None or getattr(getattr(channel, "guild", None), "id", None) != ctx.guild.id:
             await ctx.send("Choose a channel belonging to this server.")
@@ -415,7 +421,7 @@ class MonitorCog(commands.Cog):
             logger.exception("Failed to remove channel from monitor set")
             await ctx.send("Failed to remove channel from monitor list")
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="monitor_list",
         description="Show every channel with English-only monitoring enabled.",
         with_app_command=True,
@@ -423,8 +429,7 @@ class MonitorCog(commands.Cog):
     @commands.has_guild_permissions(manage_guild=True)
     @commands.guild_only()
     @app_commands.default_permissions(manage_guild=True)
-    async def monitor_list(self, ctx: commands.Context) -> None:
-        """List monitored channels."""
+    async def monitor_list(self, ctx: commands.Context[Any]) -> None:
         if ctx.guild is None:
             await ctx.send("Use this command inside a server.")
             return

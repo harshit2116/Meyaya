@@ -1,11 +1,14 @@
 """Fail-closed dashboard transport checks and short-lived owner sessions."""
 
+from __future__ import annotations
+
 from collections import deque
 from hashlib import sha256
-from ipaddress import ip_address, ip_network
+from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
 import secrets
 import time
-from urllib.parse import urlsplit
+from typing import Any
+from urllib.parse import SplitResult, urlsplit
 
 from aiohttp import web
 
@@ -14,12 +17,12 @@ LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 class DashboardSecurity:
-    def __init__(self, settings):
+    def __init__(self, settings: Any) -> None:
         self.settings = settings
-        self.sessions = {}
-        self.attempts = {}
+        self.sessions: dict[str, float] = {}
+        self.attempts: dict[str, deque[float]] = {}
 
-    def origin(self):
+    def origin(self) -> SplitResult | None:
         value = getattr(self.settings, "dashboard_public_url", "").strip()
         if not value:
             return None
@@ -32,8 +35,8 @@ class DashboardSecurity:
             raise ValueError("Remote dashboard access requires HTTPS")
         return parsed
 
-    def proxies(self):
-        networks = []
+    def proxies(self) -> list[IPv4Network | IPv6Network]:
+        networks: list[IPv4Network | IPv6Network] = []
         for value in getattr(self.settings, "dashboard_trusted_proxies", "").split(","):
             if value.strip():
                 network = ip_network(value.strip(), strict=False)
@@ -42,7 +45,7 @@ class DashboardSecurity:
                 networks.append(network)
         return networks
 
-    def validate_config(self):
+    def validate_config(self) -> None:
         origin = self.origin()
         remote = origin is not None and origin.hostname not in LOCAL_HOSTS
         if remote and not self.proxies():
@@ -50,7 +53,7 @@ class DashboardSecurity:
         if not remote and getattr(self.settings, "dashboard_host", "127.0.0.1") not in LOCAL_HOSTS:
             raise ValueError("A non-loopback dashboard listener requires an HTTPS public URL and trusted proxy")
 
-    def check_request(self, request):
+    def check_request(self, request: web.Request) -> None:
         self.validate_config()
         origin = self.origin()
         remote = origin is not None and origin.hostname not in LOCAL_HOSTS
@@ -58,6 +61,7 @@ class DashboardSecurity:
             peer = ip_address(request.remote or "")
             host = urlsplit("//" + request.host)
             if remote:
+                assert origin is not None
                 if not any(peer in network for network in self.proxies()):
                     raise ValueError()
                 # The configured proxy must overwrite this header and preserve Host.
@@ -78,7 +82,7 @@ class DashboardSecurity:
         except ValueError:
             raise web.HTTPForbidden(text="Dashboard origin or secure transport rejected") from None
 
-    def throttle(self, peer):
+    def throttle(self, peer: str) -> None:
         now = time.monotonic()
         self.attempts = {key: events for key, events in self.attempts.items() if events and now - events[-1] < 60}
         if peer not in self.attempts and len(self.attempts) >= 256:
@@ -90,7 +94,7 @@ class DashboardSecurity:
             raise web.HTTPTooManyRequests(text="Too many login attempts", headers={"Retry-After": "60"})
         events.append(now)
 
-    def issue_session(self):
+    def issue_session(self) -> str:
         now = time.monotonic()
         self.sessions = {key: expiry for key, expiry in self.sessions.items() if expiry > now}
         if len(self.sessions) >= 8:
@@ -99,7 +103,7 @@ class DashboardSecurity:
         self.sessions[sha256(token.encode()).hexdigest()] = now + SESSION_SECONDS
         return token
 
-    def authenticated(self, token):
+    def authenticated(self, token: str) -> bool:
         key = sha256(token.encode()).hexdigest()
         expiry = self.sessions.get(key, 0)
         if expiry <= time.monotonic():
@@ -107,5 +111,5 @@ class DashboardSecurity:
             return False
         return True
 
-    def revoke(self, token):
+    def revoke(self, token: str) -> None:
         self.sessions.pop(sha256(token.encode()).hexdigest(), None)

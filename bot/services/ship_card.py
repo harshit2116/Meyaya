@@ -1,6 +1,11 @@
 """Validated avatar decoding and routing for local social cards."""
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from io import BytesIO
+from typing import cast
+
 from PIL import Image
 
 
@@ -17,12 +22,20 @@ def valid_avatar(data: bytes) -> bool:
 
 
 def render_ship_card(
-    first, second, name_one, name_two, percentage=50, verdict="A cute little maybe", *, theme="ship"
-):
+    first: bytes,
+    second: bytes,
+    name_one: str,
+    name_two: str,
+    percentage: int = 50,
+    verdict: str = "A cute little maybe",
+    *,
+    theme: str = "ship",
+) -> bytes:
     if theme == "besties":
         from bot.services.bestie_scrapbook import render_scrapbook
 
-        return render_scrapbook(first, second, name_one, name_two, percentage, verdict)
+        renderer = cast(Callable[[bytes, bytes, str, str, int, str], bytes], render_scrapbook)
+        return renderer(first, second, name_one, name_two, percentage, verdict)
     from bot.services.ship_letter import render_letter
 
     return render_letter(first, second, name_one, name_two, percentage, verdict)

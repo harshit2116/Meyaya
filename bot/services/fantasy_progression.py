@@ -1,21 +1,25 @@
 """Total soul XP and deterministic class-weighted growth, shared across rerolls."""
 
+from __future__ import annotations
+
+from typing import Any
+
 from bot.data.fantasy import CLASSES, STAT_NAMES
 from bot.services.fantasy_generation import resource_totals
 
 LEVEL_CAP = 100
 
 
-def xp_for_level(level):
+def xp_for_level(level: int) -> int:
     steps = max(0, level - 1)
     return 100 * steps + 25 * steps * (steps - 1) // 2
 
 
-def level_for_xp(xp):
+def level_for_xp(xp: int) -> int:
     return next((level - 1 for level in range(2, LEVEL_CAP + 1) if xp < xp_for_level(level)), LEVEL_CAP)
 
 
-def xp_progress(profile):
+def xp_progress(profile: Any) -> str:
     level = profile.level
     if level >= LEVEL_CAP:
         return "MAX SOUL LEVEL · " + str(profile.xp) + " total XP"
@@ -25,7 +29,7 @@ def xp_progress(profile):
     return f"{'█' * filled}{'░' * (14 - filled)} {current:,} / {needed:,} XP"
 
 
-def growth_values(identity, level):
+def growth_values(identity: Any, level: int) -> dict[str, int]:
     """Rebuild from the original roll, never add growth to already-grown stats."""
     rule = CLASSES[identity.class_id] if hasattr(identity, "class_id") else CLASSES[identity["class_id"]]
     base = identity.base_stats if hasattr(identity, "base_stats") else identity["base_stats"]
@@ -42,7 +46,7 @@ def growth_values(identity, level):
     return dict(**stats, max_hp=hp, max_mp=mp)
 
 
-def award_xp(profile, amount):
+def award_xp(profile: Any, amount: int) -> dict[str, Any]:
     if amount < 0:
         raise ValueError("XP rewards cannot be negative")
     old_level = profile.level

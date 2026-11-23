@@ -3,26 +3,30 @@
 from __future__ import annotations
 
 import asyncio
-import aiohttp
-from bot.utils.typing import background_typing
-from bot.utils.image_work import image_work
 from dataclasses import dataclass
 import io
 import logging
-import time
 from secrets import SystemRandom
+import time
+from typing import TYPE_CHECKING, Any
 from weakref import WeakValueDictionary
 
+import aiohttp
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-
 from bot.app import MeyayaBot
 from bot.services.ship import ShipService
 from bot.services.ship_card import render_ship_card, valid_avatar
-from bot.utils.embeds import build_ship_embed
 from bot.utils.command_context import remember_command_result
+from bot.utils.embeds import build_ship_embed
+from bot.utils.image_work import image_work
+from bot.utils.typing import background_typing
+
+if TYPE_CHECKING:
+    from bot.cogs.daily import DailyCog
+    from bot.utils.components_v2 import MeyayaView
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +45,16 @@ class ByteCacheEntry:
     expires_at: float
 
 
-class RandomShipCommand(commands.HybridCommand):
+class RandomShipCommand(commands.HybridCommand[Any, ..., Any]):
     """Accept a prefix-only random pair shortcut without changing slash member options."""
 
-    async def _parse_arguments(self, ctx):
+    async def _parse_arguments(self, ctx: commands.Context[Any]) -> None:
         index = ctx.view.index
         argument = ctx.view.read_rest().strip()
         ctx.view.index = index
         if argument.casefold() != "random":
-            return await super()._parse_arguments(ctx)
+            await super()._parse_arguments(ctx)
+            return
         async with background_typing(ctx.channel):
             first, second = await self.cog._random_ship_pair(ctx)
         ctx.view.read_rest()
@@ -65,27 +70,30 @@ class ShipCog(commands.Cog):
         self.service = ShipService()
         self._avatar_cache: dict[object, ByteCacheEntry] = {}
         self._card_cache: dict[object, ByteCacheEntry] = {}
-        self._avatar_locks = WeakValueDictionary()
-        self._random_picker = None
-        self.pair_views = set()
+        self._avatar_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+        self._random_picker: DailyCog | None = None
+        self.pair_views: set[MeyayaView] = set()
 
-    async def cog_unload(self):
+    async def cog_unload(self) -> None:
         for view in tuple(self.pair_views):
             view.stop()
 
-    async def _random_ship_pair(self, ctx):
+    async def _random_ship_pair(
+        self, ctx: commands.Context[Any]
+    ) -> tuple[discord.Member, discord.Member]:
         if ctx.guild is None:
             raise commands.NoPrivateMessage()
-        picker = self.bot.get_cog("DailyCog")
+        picker: Any = self.bot.get_cog("DailyCog")
         if picker is None:
             from bot.cogs.daily import DailyCog
+
             if self._random_picker is None:
                 self._random_picker = DailyCog(self.bot)
             picker = self._random_picker
         try:
             candidates = list(dict.fromkeys(await picker._candidate_ids(ctx.guild)))
             rng = SystemRandom()
-            selected = []
+            selected: list[discord.Member] = []
             # Cached IDs can include members who left. Recheck the selected
             # members, retrying a bounded number without rescanning the server.
             async with asyncio.timeout(15):
@@ -101,19 +109,20 @@ class ShipCog(commands.Cog):
                     if not member.bot:
                         selected.append(member)
                     if len(selected) == 2:
-                        return tuple(selected)
+                        return (selected[0], selected[1])
         except (discord.HTTPException, discord.ClientException, TimeoutError) as error:
             raise commands.BadArgument("I couldn't load the server members. Please try again shortly.") from error
         raise commands.BadArgument("I need two different human members in this server to ship randomly.")
 
-    @commands.command(cls=RandomShipCommand,
+    @commands.command(  # type: ignore[arg-type]
+        cls=RandomShipCommand,
         name="ship",
         description="Measure the romantic chemistry between two members.",
     )
     @app_commands.describe(user_one="First member", user_two="Second member")
     async def ship(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         user_one: discord.Member,
         user_two: discord.Member,
     ) -> None:
@@ -124,18 +133,28 @@ class ShipCog(commands.Cog):
             async with background_typing(ctx.channel):
                 embed, file = await self._build_ship_response(user_one, user_two, ctx=ctx)
         from bot.views.random_pair import RandomPairView
-        view = RandomPairView(self, getattr(ctx.guild, 'id', None), 'ship')
-        payload = dict(embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none())
+
+        view = RandomPairView(self, getattr(ctx.guild, "id", None), "ship")
         if file is not None:
-            payload['file'] = file
-        view.message = await ctx.send(**payload)
+            view.message = await ctx.send(
+                embed=embed,
+                file=file,
+                view=view,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        else:
+            view.message = await ctx.send(
+                embed=embed,
+                view=view,
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
 
     async def _build_ship_response(
         self,
         user_one: discord.Member,
         user_two: discord.Member,
         *,
-        ctx: commands.Context | None = None,
+        ctx: commands.Context[Any] | None = None,
     ) -> tuple[discord.Embed, discord.File | None]:
         result = self.service.ship(user_one.id, user_two.id)
         image_bytes: bytes | None = None
@@ -236,7 +255,7 @@ class ShipCog(commands.Cog):
         async with lock:
             return await self._download_avatar(asset, key)
 
-    async def _download_avatar(self, asset, key) -> bytes:
+    async def _download_avatar(self, asset: discord.Asset, key: str) -> bytes:
         cached = self._get_cached(self._avatar_cache, key)
         if cached is not None:
             return cached
@@ -248,12 +267,12 @@ class ShipCog(commands.Cog):
                 if session is not None and not session.closed:
                     async with session.get(key) as response:
                         response.raise_for_status()
-                        data = bytearray()
+                        buf = bytearray()
                         async for chunk in response.content.iter_chunked(65536):
-                            data.extend(chunk)
-                            if len(data) > 2 * 1024 * 1024:
+                            buf.extend(chunk)
+                            if len(buf) > 2 * 1024 * 1024:
                                 raise ValueError("Avatar exceeds download limit")
-                        data = bytes(data)
+                        data = bytes(buf)
                 else:
                     data = await asset.read()
                     if len(data) > 2 * 1024 * 1024:

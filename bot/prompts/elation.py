@@ -4,6 +4,12 @@ Inspiration: https://wiki.hoyolab.com/pc/hsr/entry/970
 These are original playful adaptations, not claims about HSR canon.
 """
 
+from __future__ import annotations
+
+from collections.abc import Mapping
+from random import Random
+from typing import Any
+
 MASKS = (
     {"name": "The Comedian", "emoji": "🎭", "nickname": "Meyaya, The Comedian", "motif": "meet serious arguments with increasingly absurd counterarguments"},
     {"name": "The Fool", "emoji": "🃏", "nickname": "Meyaya, The Fool", "motif": "deliberately make terrible arguments and defend them with comically impressive confidence"},
@@ -66,7 +72,7 @@ APPROACHES = frozenset({"logic", "empathy", "humor", "absurd"})
 VICTORY_CONDITIONS = ("logic", "empathy", "humor", "absurd", "combo", "unwinnable")
 
 
-def new_round(state, rng):
+def new_round(state: dict[str, Any], rng: Random) -> None:
     choices = [mask for mask in MASKS if mask["name"] != state.get("mask", {}).get("name")]
     state["mask"] = dict(rng.choice(choices))
     previous = state.get("round", {})
@@ -75,22 +81,22 @@ def new_round(state, rng):
                           condition=rng.choice([c for c in VICTORY_CONDITIONS if c != previous.get("condition")]), turns=0, seen=[])
 
 
-def judge_round(state, decree):
+def judge_round(state: Mapping[str, Any], decree: Mapping[str, Any]) -> tuple[bool, bool]:
     """Model proposes approach labels; code enforces hidden conditions and hard turn bounds."""
     current = state.get("round")
     if current is None:  # Compatibility with events saved before debates were introduced.
-        return decree["convinced"], False
+        return bool(decree["convinced"]), False
     current["turns"] += 1
     approaches = set(decree.get("approaches", ())) & APPROACHES
     current["seen"] = sorted(set(current["seen"]) | approaches)
     condition = current["condition"]
     matched = ({"logic", "humor"} <= set(current["seen"]) if condition == "combo" else condition in approaches)
-    won = condition != "unwinnable" and matched and decree["convinced"]
+    won = bool(condition != "unwinnable" and matched and decree["convinced"])
     return won, won or current["turns"] >= 3
 
 
 
-def performance_context(state):
+def performance_context(state: Mapping[str, Any]) -> str:
     mask = state.get("mask", MASKS[0])
     progress = sum(state["persuasion"].values())
     stage = ("Opening act: extravagant confidence, invite members into the joke." if progress == 0 else

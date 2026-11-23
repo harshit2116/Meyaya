@@ -1,8 +1,12 @@
 """A brief welcome card that can resume the member's original chat request."""
 
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Awaitable, Callable
 import logging
 import time
+from typing import Any, cast
 
 import discord
 from discord.ext import commands
@@ -17,10 +21,17 @@ from bot.views.help import HelpView
 logger = logging.getLogger(__name__)
 
 
-def first_use_embed(bot, guild_id, *, can_continue=False, page=0, command_name=None):
+def first_use_embed(
+    bot: Any,
+    guild_id: int | None,
+    *,
+    can_continue: bool = False,
+    page: int = 0,
+    command_name: str | None = None,
+) -> discord.Embed:
     enabled = getattr(bot, "feature_enabled", lambda *_: True)
     if page == 1:
-        lines = []
+        lines: list[str] = []
         if enabled(guild_id, "Voice Chat"):
             lines.append(
                 "**🎙️ Join VC and talk with me**\n"
@@ -85,26 +96,33 @@ def first_use_embed(bot, guild_id, *, can_continue=False, page=0, command_name=N
 
 class FirstUseView(MeyayaView):
     def __init__(
-        self, bot, owner_id, *, chat=None, source=None, guild_id=None, command_context=None
-    ):
+        self,
+        bot: Any,
+        owner_id: int,
+        *,
+        chat: Any = None,
+        source: Any = None,
+        guild_id: int | None = None,
+        command_context: Any = None,
+    ) -> None:
         super().__init__(timeout=180)
-        self.bot = bot
+        self.bot: Any = bot
         self.owner_id = owner_id
-        self.chat = chat
-        self.source = source
-        self.command_context = command_context
-        self.command_name = (
+        self.chat: Any = chat
+        self.source: Any = source
+        self.command_context: Any = command_context
+        self.command_name: str | None = (
             command_context.command.qualified_name if command_context is not None else None
         )
-        self.message = None
+        self.message: discord.Message | None = None
         self._continued = False
         self._finished_guide = False
         self._guide_page = 0
         self._state_lock = asyncio.Lock()
         self._profile_busy = False
         self._last_profile = float("-inf")
-        self.guild_id = source.guild.id if source is not None else guild_id
-        self.continue_button = discord.ui.Button(
+        self.guild_id: int | None = source.guild.id if source is not None else guild_id
+        self.continue_button: discord.ui.Button[Any] = discord.ui.Button(
             label=(
                 "Continue command"
                 if command_context is not None
@@ -112,18 +130,26 @@ class FirstUseView(MeyayaView):
             ),
             style=discord.ButtonStyle.primary,
         )
-        self.continue_button.callback = self.continue_chat
+        continue_obj: Any = self.continue_button
+        continue_obj.callback = self.continue_chat
         self._build_controls()
 
-    def _button(self, label, callback, *, primary=False):
-        button = discord.ui.Button(
+    def _button(
+        self,
+        label: str,
+        callback: Callable[[discord.Interaction], Awaitable[None]],
+        *,
+        primary: bool = False,
+    ) -> None:
+        button: discord.ui.Button[Any] = discord.ui.Button(
             label=label,
             style=discord.ButtonStyle.primary if primary else discord.ButtonStyle.secondary,
         )
-        button.callback = callback
+        button_obj: Any = button
+        button_obj.callback = callback
         self.add_item(button)
 
-    def _build_controls(self):
+    def _build_controls(self) -> None:
         self.clear_items()
         if self._finished_guide:
             if self._continued:
@@ -142,7 +168,7 @@ class FirstUseView(MeyayaView):
             self._button("Back", self.previous_page)
             self._button("All commands", self.open_help)
 
-    async def _show_page(self, interaction, page):
+    async def _show_page(self, interaction: discord.Interaction, page: int) -> None:
         if not await self.interaction_check(interaction):
             return
         async with self._state_lock:
@@ -165,13 +191,13 @@ class FirstUseView(MeyayaView):
                 view=self,
             )
 
-    async def next_page(self, interaction):
+    async def next_page(self, interaction: discord.Interaction) -> None:
         await self._show_page(interaction, 1)
 
-    async def previous_page(self, interaction):
+    async def previous_page(self, interaction: discord.Interaction) -> None:
         await self._show_page(interaction, 0)
 
-    async def interaction_check(self, interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
                 "Use /guide to open your own quick guide.", ephemeral=True
@@ -190,7 +216,7 @@ class FirstUseView(MeyayaView):
             return False
         return True
 
-    def _chat_target(self, interaction):
+    def _chat_target(self, interaction: discord.Interaction) -> Any:
         guild_id = self.source.guild.id if self.source is not None else interaction.guild_id
         channel = self.source.channel if self.source is not None else interaction.channel
         chat = self.chat or self.bot.get_cog("ChatCog")
@@ -207,7 +233,7 @@ class FirstUseView(MeyayaView):
             return None
         return chat
 
-    async def continue_chat(self, interaction):
+    async def continue_chat(self, interaction: discord.Interaction) -> None:
         if not await self.interaction_check(interaction):
             return
         chat = self._chat_target(interaction) if self.command_context is None else None
@@ -248,6 +274,8 @@ class FirstUseView(MeyayaView):
         if self.command_context is not None:
             await self._resume_command(interaction)
             return
+        if chat is None:
+            return
         if self.source is None:
             await chat.on_message(GuideInputMessage(self.bot, interaction), immediate=True)
             return
@@ -270,8 +298,10 @@ class FirstUseView(MeyayaView):
         else:
             await chat.on_message(message, immediate=True)
 
-    async def _resume_command(self, interaction):
+    async def _resume_command(self, interaction: discord.Interaction) -> None:
         original = self.command_context
+        if original is None or self.command_name is None:
+            return
         if self.bot.get_command(self.command_name) is not original.command:
             await interaction.followup.send(
                 "That command has changed. Please run it again.", ephemeral=True
@@ -344,14 +374,15 @@ class FirstUseView(MeyayaView):
             await self.bot.invoke(context)
         except discord.app_commands.AppCommandError as error:
             context.command_failed = True
-            context.interaction.command_failed = True
-            await self.bot.on_app_command_error(context.interaction, error)
+            if context.interaction is not None:
+                context.interaction.command_failed = True
+                await self.bot.on_app_command_error(context.interaction, error)
         if context.interaction is not None and not context.command_failed:
             self.bot.dispatch(
                 "app_command_completion", context.interaction, context.command.app_command
             )
 
-    async def skip_guide(self, interaction):
+    async def skip_guide(self, interaction: discord.Interaction) -> None:
         if not await self.interaction_check(interaction):
             return
         if self.command_context is not None or self._chat_target(interaction) is not None:
@@ -374,7 +405,7 @@ class FirstUseView(MeyayaView):
                 view=self,
             )
 
-    async def open_profile(self, interaction):
+    async def open_profile(self, interaction: discord.Interaction) -> None:
         if not await self.interaction_check(interaction):
             return
         if interaction.guild_id is None:
@@ -415,7 +446,7 @@ class FirstUseView(MeyayaView):
         finally:
             self._profile_busy = False
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         for item in self.children:
             if isinstance(item, discord.ui.Button):
                 item.disabled = True
@@ -426,7 +457,7 @@ class FirstUseView(MeyayaView):
             except (discord.HTTPException, TimeoutError, OSError):
                 pass
 
-    async def open_help(self, interaction):
+    async def open_help(self, interaction: discord.Interaction) -> None:
         if not await self.interaction_check(interaction):
             return
         prefix = self.bot.prefix_for_guild(interaction.guild_id)
@@ -443,46 +474,60 @@ class FirstUseView(MeyayaView):
 class GuideInputMessage:
     """Explicit button input through the existing chat and command paths."""
 
-    def __init__(self, bot, interaction, *, content=None):
+    def __init__(
+        self,
+        bot: Any,
+        interaction: discord.Interaction,
+        *,
+        content: str | None = None,
+    ) -> None:
         self._origin = interaction.message
         self._state = interaction._state
         self.id = interaction.id
         # An interaction ID identifies the event, not a fetchable Discord post.
-        self._meyaya_source_message_id = None
+        self._meyaya_source_message_id: int | None = None
         self.author = interaction.user
         self.guild = interaction.guild
         self.channel = interaction.channel
         self.content = content or f"<@{bot.user.id}> Hello Meyaya!"
-        self.mentions = [bot.user]
-        self.role_mentions = []
-        self.channel_mentions = []
-        self.attachments = []
-        self.stickers = []
+        self.mentions: list[Any] = [bot.user]
+        self.role_mentions: list[Any] = []
+        self.channel_mentions: list[Any] = []
+        self.attachments: list[Any] = []
+        self.stickers: list[Any] = []
         self.reference = None
         self.mention_everyone = False
         self.edited_at = None
         self.created_at = interaction.created_at
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         origin = self.__dict__.get("_origin")
         if origin is None:
             raise AttributeError(name)
         return getattr(origin, name)
 
-    async def reply(self, content=None, **kwargs):
+    async def reply(self, content: str | None = None, **kwargs: Any) -> discord.Message:
         kwargs.pop("mention_author", None)
         kwargs["allowed_mentions"] = discord.AllowedMentions.none()
         # Application follow-ups become V2 command cards in the shared transport.
         # A greeting is ordinary chat, so use the normal channel delivery path.
-        return await self.channel.send(content=content, **kwargs)
+        channel: Any = self.channel
+        if channel is None:
+            raise RuntimeError("Guide channel is unavailable.")
+        return cast(discord.Message, await channel.send(content=content, **kwargs))
 
 
-class GuideProfileContext(commands.Context):
+class GuideProfileContext(commands.Context[Any]):
     """Invoke /profilecheck with its real checks and cooldown, privately."""
 
-    def __init__(self, bot, interaction, command):
+    def __init__(
+        self,
+        bot: Any,
+        interaction: discord.Interaction,
+        command: commands.Command[Any, Any, Any],
+    ) -> None:
         super().__init__(
-            message=GuideInputMessage(bot, interaction, content="/profilecheck"),
+            message=cast(discord.Message, GuideInputMessage(bot, interaction, content="/profilecheck")),
             bot=bot,
             view=StringView(""),
             prefix="/",
@@ -493,12 +538,13 @@ class GuideProfileContext(commands.Context):
         # Hybrid parsing supplies keyword arguments from the interaction's empty
         # namespace; prefix invocation still needs the bound callback arguments.
         self.args = [command.cog, self] if command.cog is not None else [self]
-        interaction._baton = self
+        interaction_obj: Any = interaction
+        interaction_obj._baton = self
 
-    async def defer(self, *, ephemeral=True):
-        if not self.interaction.response.is_done():
+    async def defer(self, *, ephemeral: bool = True) -> None:
+        if self.interaction is not None and not self.interaction.response.is_done():
             await self.interaction.response.defer(ephemeral=True, thinking=True)
 
-    async def send(self, *args, **kwargs):
+    async def send(self, *args: Any, **kwargs: Any) -> discord.Message:
         kwargs["ephemeral"] = True
         return await super().send(*args, **kwargs)

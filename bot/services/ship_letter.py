@@ -1,16 +1,64 @@
 """The Love Letter layout; scoring remains owned by ShipService."""
 
+from __future__ import annotations
+
+from collections.abc import Callable
 from functools import lru_cache
 from io import BytesIO
 import math
 from pathlib import Path
+from typing import Protocol, cast
 import unicodedata
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
-from bot.services.aura_archive import _asset, _serif, _spark, _text
-from bot.services.card_renderer import font
-from bot.services.duostyle_archive import _centred, _mix
+from bot.services.aura_archive import _asset as _raw_asset
+from bot.services.aura_archive import _serif as _raw_serif
+from bot.services.aura_archive import _spark as _raw_spark
+from bot.services.aura_archive import _text as _raw_text
+from bot.services.card_renderer import font as _raw_font
+from bot.services.duostyle_archive import _centred as _raw_centred
+from bot.services.duostyle_archive import _mix as _raw_mix
+
+type _Font = ImageFont.FreeTypeFont | ImageFont.ImageFont
+
+
+class _TextFn(Protocol):
+    def __call__(
+        self,
+        draw: ImageDraw.ImageDraw,
+        box: tuple[int, int, int, int],
+        value: object,
+        size: int,
+        color: str,
+        *,
+        minimum: int = 20,
+        serif: bool = True,
+    ) -> None: ...
+
+
+class _CentredFn(Protocol):
+    def __call__(
+        self,
+        draw: ImageDraw.ImageDraw,
+        text: object,
+        cx: int,
+        y: int,
+        width: int,
+        size: int,
+        color: str,
+        *,
+        serif: bool = False,
+    ) -> None: ...
+
+
+_asset = cast(Callable[[bytes], Image.Image | None], _raw_asset)
+_serif = cast(Callable[[int], _Font], _raw_serif)
+_spark = cast(Callable[[ImageDraw.ImageDraw, float, float, float, str], None], _raw_spark)
+_text: _TextFn = _raw_text
+font = cast(Callable[[int], _Font], _raw_font)
+_centred = cast(_CentredFn, _raw_centred)
+_mix = cast(Callable[[tuple[int, int, int], tuple[int, int, int], float], tuple[int, int, int]], _raw_mix)
 
 SIZE = (1600, 866)
 PORTRAIT_SIZE = 328
@@ -19,13 +67,13 @@ PORTRAIT_Y = 180
 PINK, BLUE = "#f196b6", "#a4b9f6"
 
 
-def ship_breakdown(percentage):
+def ship_breakdown(percentage: int) -> dict[str, int]:
     """Playful display derivatives, not additional relationship measurements."""
     p = max(0, min(100, int(percentage)))
     return {"chemistry": min(100, p + 4), "chaos": min(100, 139 - p), "harmony": max(0, p - 2)}
 
 
-def ship_description(percentage):
+def ship_description(percentage: int) -> str:
     if percentage >= 95:
         return "Even the stars are taking notes. This pairing has main-character energy."
     if percentage >= 85:
@@ -43,11 +91,11 @@ def ship_description(percentage):
     return "The universe may need another draft. There is always room for a good friendship arc."
 
 
-def _clean(value):
+def _clean(value: str) -> str:
     return "".join(c for c in value if unicodedata.category(c) not in {"So", "Mn", "Cf"}).strip()
 
 
-def _flower(draw, x, y, r, color):
+def _flower(draw: ImageDraw.ImageDraw, x: float, y: float, r: float, color: str) -> None:
     for i in range(5):
         a = i * math.tau / 5
         cx, cy = x + math.sin(a) * r * 0.55, y + math.cos(a) * r * 0.55
@@ -56,14 +104,14 @@ def _flower(draw, x, y, r, color):
 
 
 @lru_cache(maxsize=1)
-def _emblem():
+def _emblem() -> Image.Image:
     path = Path(__file__).resolve().parents[1] / "assets/celestial/ship/linked-hearts.png"
     with Image.open(path) as art:
         return ImageOps.contain(art.convert("RGBA"), (300, 200), Image.Resampling.LANCZOS)
 
 
 @lru_cache(maxsize=1)
-def _score_font():
+def _score_font() -> _Font:
     for path in (
         "C:/Windows/Fonts/georgiai.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf",
@@ -74,7 +122,7 @@ def _score_font():
 
 
 @lru_cache(maxsize=1)
-def _base():
+def _base() -> Image.Image:
     image = Image.new("RGBA", SIZE, "#15121b")
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle(
@@ -100,7 +148,7 @@ def _base():
 
 
 @lru_cache(maxsize=1)
-def _portrait_mask():
+def _portrait_mask() -> Image.Image:
     size = PORTRAIT_SIZE
     mask = Image.new("L", (size * 3, size * 3))
     ImageDraw.Draw(mask).ellipse((0, 0, size * 3 - 1, size * 3 - 1), fill=255)
@@ -108,7 +156,7 @@ def _portrait_mask():
 
 
 @lru_cache(maxsize=1)
-def _panel_mask():
+def _panel_mask() -> Image.Image:
     mask = Image.new("L", (500, 245))
     draw = ImageDraw.Draw(mask)
     draw.rounded_rectangle((0, 0, 499, 244), radius=18, fill=170)
@@ -119,7 +167,14 @@ def _panel_mask():
     return ImageChops.multiply(mask, fade.resize(mask.size))
 
 
-def _portrait(image, data, name, cx, color, mirrored=False):
+def _portrait(
+    image: Image.Image,
+    data: bytes,
+    name: str,
+    cx: int,
+    color: str,
+    mirrored: bool = False,
+) -> None:
     art = _asset(data)
     if art is None:
         art = Image.new("RGBA", (328, 328), "#292030")
@@ -158,8 +213,8 @@ def _portrait(image, data, name, cx, color, mirrored=False):
         )
     for degree in range(196, 333, 4):
         angle = math.radians(degree)
-        px, py = cx + 194 * math.cos(angle), 342 + 194 * math.sin(angle)
-        draw.ellipse((px - 1, py - 1, px + 1, py + 1), fill="#82667d")
+        dot_x, dot_y = cx + 194 * math.cos(angle), 342 + 194 * math.sin(angle)
+        draw.ellipse((dot_x - 1, dot_y - 1, dot_x + 1, dot_y + 1), fill="#82667d")
     portrait = ImageOps.fit(art, (328, 328), Image.Resampling.LANCZOS)
     flattened = Image.new("RGBA", portrait.size, "#291e31")
     flattened.alpha_composite(portrait)
@@ -178,9 +233,9 @@ def _portrait(image, data, name, cx, color, mirrored=False):
     _flower(draw, bx, 455, 20, color)
 
 
-def _metric_icon(draw, x, y, kind, color):
+def _metric_icon(draw: ImageDraw.ImageDraw, x: int, y: int, kind: str, color: str) -> None:
     if kind == "chemistry":
-        points = []
+        points: list[tuple[float, float]] = []
         for i in range(81):
             t = i * math.tau / 80
             points.append(
@@ -206,7 +261,14 @@ def _metric_icon(draw, x, y, kind, color):
         draw.arc((x, y + 2, x + 18, y + 18), 180, 360, fill=color, width=2)
 
 
-def render_letter(first, second, name_one, name_two, percentage, verdict):
+def render_letter(
+    first: bytes,
+    second: bytes,
+    name_one: str,
+    name_two: str,
+    percentage: int,
+    verdict: str,
+) -> bytes:
     percentage = max(0, min(100, int(percentage)))
     image = _base().copy()
     _portrait(image, first, name_one, CENTERS[0], PINK)

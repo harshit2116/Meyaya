@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 import logging
 from urllib.parse import urlsplit
 
@@ -21,7 +21,7 @@ from bot.views.help import HelpView, can_attach_help_art
 logger = logging.getLogger(__name__)
 
 
-def log_reaction_media(command, invocation, gif_url):
+def log_reaction_media(command: str, invocation: str, gif_url: str | None) -> None:
     """Report image selection without logging keys, URL queries, or member text."""
     try:
         host = urlsplit(gif_url).hostname if gif_url else None
@@ -36,14 +36,12 @@ class InteractionsCog(commands.Cog):
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self._app_commands: list[app_commands.Command] = []
-        self._text_commands: list[commands.Command] = []
-        self._text_help_command: commands.Command | None = None
-        self._text_gif_command: commands.Command | None = None
+        self._app_commands: list[app_commands.Command[Any, ..., Any]] = []
+        self._text_commands: list[commands.Command[Any, ..., Any]] = []
+        self._text_help_command: commands.Command[Any, ..., Any] | None = None
+        self._text_gif_command: commands.Command[Any, ..., Any] | None = None
 
     async def cog_load(self) -> None:
-        """Register the generated commands with both the tree and the text command router."""
-
         for definition in INTERACTION_DEFINITIONS:
             app_command = self._build_app_command(definition)
             self.bot.tree.add_command(app_command)
@@ -62,13 +60,11 @@ class InteractionsCog(commands.Cog):
         self.bot.add_command(self._text_gif_command)
         self.bot.add_command(self._text_help_command)
 
-    def cog_unload(self) -> None:
-        """Remove generated commands during reload."""
-
-        for command in self._app_commands:
-            self.bot.tree.remove_command(command.name)
-        for command in self._text_commands:
-            self.bot.remove_command(command.name)
+    def cog_unload(self) -> None:  # type: ignore[override]
+        for app_cmd in self._app_commands:
+            self.bot.tree.remove_command(app_cmd.name)
+        for text_cmd in self._text_commands:
+            self.bot.remove_command(text_cmd.name)
         if self._text_gif_command is not None:
             self.bot.remove_command(self._text_gif_command.name)
         if self._text_help_command is not None:
@@ -76,7 +72,7 @@ class InteractionsCog(commands.Cog):
 
     def _build_app_command(
         self, definition: InteractionDefinition
-    ) -> app_commands.Command[commands.Cog, ..., None]:
+    ) -> app_commands.Command[Any, ..., None]:
         async def callback(
             interaction: discord.Interaction,
             target: discord.Member | None = None,
@@ -103,9 +99,11 @@ class InteractionsCog(commands.Cog):
                     bot, definition, interaction.user, chosen_target, result
                 )
                 # Webhook.send rejects view=None; omit it for buttonless reactions.
-                kwargs = {"view": view} if view is not None else {}
                 log_reaction_media(definition.name, "slash", result.gif_url)
-                await interaction.followup.send(embed=embed, **kwargs)
+                if view is not None:
+                    await interaction.followup.send(embed=embed, view=view)
+                else:
+                    await interaction.followup.send(embed=embed)
 
         return app_commands.Command(
             name=definition.name,
@@ -113,7 +111,9 @@ class InteractionsCog(commands.Cog):
             callback=callback,
         )
 
-    def _build_text_command(self, definition: InteractionDefinition) -> commands.Command:
+    def _build_text_command(
+        self, definition: InteractionDefinition
+    ) -> commands.Command[Any, ..., Any]:
         async def callback(
             ctx: commands.Context[commands.Bot],
             target: discord.Member | None = None,
@@ -137,7 +137,7 @@ class InteractionsCog(commands.Cog):
                     bot, definition, ctx.author, chosen_target, result
                 )
                 log_reaction_media(definition.name, "prefix", result.gif_url)
-                await ctx.send(embed=embed, view=view)
+                await ctx.send(embed=embed, view=view or discord.utils.MISSING)
 
         return commands.Command(
             callback,
@@ -145,7 +145,7 @@ class InteractionsCog(commands.Cog):
             help=f"Send a {definition.name} interaction.",
         )
 
-    def _build_text_gif_command(self) -> commands.Command:
+    def _build_text_gif_command(self) -> commands.Command[Any, ..., Any]:
         async def callback(
             ctx: commands.Context[commands.Bot],
             *,
@@ -172,7 +172,7 @@ class InteractionsCog(commands.Cog):
             help="Fetch a GIF from Klipy with uwu gif <query>.",
         )
 
-    def _build_app_gif_command(self) -> app_commands.Command:
+    def _build_app_gif_command(self) -> app_commands.Command[Any, ..., Any]:
         async def callback(interaction: discord.Interaction, query: str) -> None:
             await interaction.response.defer()
             bot = cast(MeyayaBot, interaction.client)
@@ -196,7 +196,7 @@ class InteractionsCog(commands.Cog):
             callback=callback,
         )
 
-    def _build_app_help_command(self) -> app_commands.Command:
+    def _build_app_help_command(self) -> app_commands.Command[Any, ..., Any]:
         async def command_autocomplete(
             _: discord.Interaction,
             current: str,
@@ -226,13 +226,13 @@ class InteractionsCog(commands.Cog):
             bot_mention = interaction.client.user.mention if interaction.client.user else "@Meyaya"
             bot = cast(MeyayaBot, interaction.client)
             command_prefix = bot.prefix_for_guild(interaction.guild_id)
-            view = HelpView(
+            view = cast(Any, HelpView)(
                 owner_id=interaction.user.id,
                 bot_mention=bot_mention,
                 command_prefix=command_prefix,
                 bot=bot,
                 command_name=command,
-                illustrated=can_attach_help_art(interaction.channel, interaction.guild),
+                illustrated=cast(Any, can_attach_help_art)(interaction.channel, interaction.guild),
             )
             await interaction.response.send_message(
                 view=view, files=view.files(), allowed_mentions=discord.AllowedMentions.none(),
@@ -245,7 +245,7 @@ class InteractionsCog(commands.Cog):
             callback=callback,
         )
 
-    def _build_text_help_command(self) -> commands.Command:
+    def _build_text_help_command(self) -> commands.Command[Any, ..., Any]:
         async def callback(
             ctx: commands.Context[commands.Bot],
             command: str | None = None,
@@ -254,13 +254,13 @@ class InteractionsCog(commands.Cog):
             bot = cast(MeyayaBot, ctx.bot)
             guild_id = ctx.guild.id if ctx.guild is not None else None
             command_prefix = bot.prefix_for_guild(guild_id)
-            view = HelpView(
+            view = cast(Any, HelpView)(
                 owner_id=ctx.author.id,
                 bot_mention=bot_mention,
                 command_prefix=command_prefix,
                 bot=bot,
                 command_name=command,
-                illustrated=can_attach_help_art(ctx.channel, ctx.guild),
+                illustrated=cast(Any, can_attach_help_art)(ctx.channel, ctx.guild),
             )
             view.message = await ctx.send(
                 view=view, files=view.files(), allowed_mentions=discord.AllowedMentions.none(),
@@ -276,8 +276,8 @@ class InteractionsCog(commands.Cog):
         self,
         bot: MeyayaBot,
         definition: InteractionDefinition,
-        actor: discord.Member,
-        target: discord.Member,
+        actor: discord.abc.User,
+        target: discord.abc.User,
         result: InteractionResult,
     ) -> tuple[discord.Embed, InteractionResponseView | None]:
         embed = build_interaction_embed(

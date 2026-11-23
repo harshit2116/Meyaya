@@ -13,9 +13,18 @@
 /tests/
 **/tests/
 conftest.py
+**/conftest.py
 /scripts/
 /test_*.py
+**/test_*.py
 /*_test.py
+/test-results/
+/reports/
+junit.xml
+pytest-report.*
+bandit-report.*
+pip-audit*.json
+*.sarif
 /init_db.py
 /Launch Dashboard.cmd
 /neon.ts
@@ -92,6 +101,15 @@ node_modules/
 
 # Local agent integrations and deployment bundles
 /.agents/
+/.agent/
+/_agents/
+/_agent/
+/.claude/
+/.cursor/
+AGENTS.md
+GEMINI.md
+CLAUDE.md
+CURSOR.md
 /skills-lock.json
 /archive/
 /feature_archive/
@@ -111,15 +129,16 @@ node_modules/
 /bot/assets/duels/clash-victory-prompts.json
 /bot/assets/fantasy/dungeon/manifest.json
 
-# Keep only the main project README in Git; other documentation stays local.
+# Documentation stays local and out of the public repository.
 *.[mM][dD]
 *.[mM][aA][rR][kK][dD][oO][wW][nN]
 [rR][eE][aA][dD][mM][eE]
 [rR][eE][aA][dD][mM][eE].*
-!/README.md
 
 # Local listing publishing sources and previews
 /branding/
+/bot/assets/listing/topgg/*.html
+/bot/assets/listing/topgg/*.css
 
 # Durable temporary-event rollback records (keep on the deployment host)
 /runtime/

@@ -1,7 +1,11 @@
 """Controlled local generation. Only the first insert persists this snapshot."""
 
+from __future__ import annotations
+
+from collections.abc import Mapping
 from datetime import UTC, datetime
-from random import SystemRandom
+from random import Random, SystemRandom
+from typing import Any
 
 from bot.data.fantasy import (
     AFFINITIES,
@@ -22,14 +26,20 @@ from bot.data.fantasy import (
 )
 
 
-def resource_totals(stats, rule):
+def resource_totals(stats: Mapping[str, int], rule: Any) -> tuple[int, int]:
     return (
-        HP_BASE + stats["vitality"] * HP_VIT_SCALE + rule.hp_modifier,
-        MP_BASE + stats["intelligence"] * MP_INT_SCALE + rule.mp_modifier,
+        HP_BASE + stats["vitality"] * HP_VIT_SCALE + int(rule.hp_modifier),
+        MP_BASE + stats["intelligence"] * MP_INT_SCALE + int(rule.mp_modifier),
     )
 
 
-def generate_identity(user_id, *, rng=None, now=None, class_id=None):
+def generate_identity(
+    user_id: int,
+    *,
+    rng: Random | None = None,
+    now: datetime | None = None,
+    class_id: str | None = None,
+) -> dict[str, Any]:
     if not isinstance(user_id, int) or user_id <= 0:
         raise ValueError("A positive Discord user ID is required")
     rng = rng or SystemRandom()

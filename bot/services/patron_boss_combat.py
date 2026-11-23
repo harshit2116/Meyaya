@@ -1,11 +1,13 @@
 """Temporary Veyra encounters and a seeded Origin-versus-Erasure spectacle."""
 
-from bot.services.fantasy_duel import DuelEngine, MIN_MOVES
+from __future__ import annotations
+
+from bot.services.fantasy_duel import Battle, DuelEngine, Fighter, MIN_MOVES
 from bot.services.meyaya_boss_combat import BossDuelEngine
 
 
 class VeyraDuelEngine(BossDuelEngine):
-    def __init__(self, player, boss, seed):
+    def __init__(self, player: Fighter, boss: Fighter, seed: int) -> None:
         super().__init__(player, boss, seed)
         boss.class_name = self.state.boss_form = "Void Revenant"
         boss.subclass = "Erasure Active"
@@ -13,7 +15,8 @@ class VeyraDuelEngine(BossDuelEngine):
         self.state.dialogue = "There is no ending here. Only absence."
         self.abyss_marks = 0
 
-    def attack(self, attacker, defender, signature=False):
+    def attack(self, a: Fighter, b: Fighter, signature: bool = False) -> None:
+        attacker, defender = a, b
         if attacker is self.player:
             DuelEngine.attack(self, attacker, defender, signature)
             self.state.log = [
@@ -53,7 +56,7 @@ class VeyraDuelEngine(BossDuelEngine):
 
 
 class PatronClashEngine(DuelEngine):
-    def __init__(self, origin, erasure, seed):
+    def __init__(self, origin: Fighter, erasure: Fighter, seed: int) -> None:
         super().__init__(origin, erasure, seed)
         self.state.arena = ("Origin / Erasure · Worldfall", "#0c0916", "#ff617e", "prism")
         self.state.boss_form = "ORIGIN VERSUS ERASURE"
@@ -63,9 +66,10 @@ class PatronClashEngine(DuelEngine):
             fighter.hp = fighter.max_hp = 2400
             fighter.mp = fighter.max_mp = 800
             fighter.passive = fighter.signature = fighter.alignment = ""
-        self.used_phases = set()
+        self.used_phases: set[int] = set()
 
-    def attack(self, attacker, defender, signature=False):
+    def attack(self, a: Fighter, b: Fighter, signature: bool = False) -> None:
+        attacker, defender = a, b
         phase = min(2, self.state.moves // 4)
         phases = ("THE FIRST FRACTURE", "REALITY UNRAVELS", "THE LAST POSSIBLE WORLD")
         self.state.boss_form = phases[phase]
@@ -103,11 +107,11 @@ class PatronClashEngine(DuelEngine):
         if not defender.hp:
             self.state.finisher = skill
 
-    def advance_move(self):
+    def advance_move(self) -> Battle:
         self.state.dialogue = ""
         return super().advance_move()
 
-    def end_round(self):
+    def end_round(self) -> None:
         super().end_round()
         if not self.state.finished and self.state.round >= 8:
             self.state.finished = True

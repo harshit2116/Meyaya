@@ -1,27 +1,29 @@
 """Owner-checked confirmation and working read-only Soul Interface tabs."""
 
+from __future__ import annotations
+
 import asyncio
-import logging
 from io import BytesIO
+import logging
+from typing import Any, cast
 
 import discord
-from bot.utils.components_v2 import MeyayaView
-
 from bot.data.fantasy import RARITIES
+from bot.data.fantasy_alignment import ALIGNMENT_ART, PATRON_PROFILES, PATRONS, patron_for
+from bot.data.fantasy_dungeon import ROMAN
 from bot.logging.health import health
-from bot.services.fantasy_render import theme_for
-from bot.utils.application_emojis import application_emojis
-from bot.utils.embeds import meyaya_embed
-from bot.utils.loading import loading_indicator
-from bot.data.fantasy_alignment import PATRONS, PATRON_PROFILES, patron_for, ALIGNMENT_ART
 from bot.services.fantasy_profile import AlignmentUnavailable
 from bot.services.fantasy_progression import xp_progress
-from bot.data.fantasy_dungeon import ROMAN
+from bot.services.fantasy_render import theme_for
+from bot.utils.application_emojis import application_emojis
+from bot.utils.components_v2 import MeyayaView
+from bot.utils.embeds import meyaya_embed
+from bot.utils.loading import loading_indicator
 
 logger = logging.getLogger(__name__)
 
 
-def patron_profile_embed(patron_key, *, image=True):
+def patron_profile_embed(patron_key: str, *, image: bool = True) -> discord.Embed:
     patron = PATRONS[patron_key]
     lore = PATRON_PROFILES[patron_key]
     embed = discord.Embed(title=lore["header"], colour=int(patron.color.lstrip("#"), 16))
@@ -36,7 +38,14 @@ def patron_profile_embed(patron_key, *, image=True):
     return embed
 
 
-def soul_embed(profile, name, *, tab="character", image=False, bot=None):
+def soul_embed(
+    profile: Any,
+    name: str,
+    *,
+    tab: str = "character",
+    image: bool = False,
+    bot: Any = None,
+) -> discord.Embed:
     if getattr(profile, "is_meyaya_boss", False):
         if image:
             return patron_profile_embed("meyaya", image=True)
@@ -67,7 +76,7 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
             embed.set_image(url="attachment://meyaya-soul.png")
         embed.set_footer(text="An unwritten spell has chosen its author.")
         return embed
-    theme = theme_for(profile)
+    theme = cast(Any, theme_for)(profile)
     safe_name = discord.utils.escape_markdown(discord.utils.escape_mentions(name))[:100]
     embed = meyaya_embed(
         "Soul Interface",
@@ -79,7 +88,7 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
     embed.add_field(
         name="Rebirths", value=str(getattr(profile, "rebirth_count", 0) or 0), inline=True
     )
-    patron = patron_for(profile)
+    patron = cast(Any, patron_for)(profile)
     if patron:
         embed.add_field(
             name="Alignment",
@@ -113,7 +122,7 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
     elif tab == "details":
         from bot.services.fantasy_guardian import bound_guardian
 
-        companion = bound_guardian(profile)
+        companion = cast(Any, bound_guardian)(profile)
         embed.add_field(
             name="Soul-bound guardian",
             value=f"{companion.name} · {companion.affinity_name}\nView `/guardian`",
@@ -131,7 +140,7 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
         )
         embed.add_field(
             name="Growth",
-            value=f"✦ Soul Level {profile.level}\n{xp_progress(profile)}\n{profile.xp:,} total XP\n"
+            value=f"✦ Soul Level {profile.level}\n{cast(Any, xp_progress)(profile)}\n{profile.xp:,} total XP\n"
                   f"⚔ Weapon Level +{getattr(profile, 'weapon_level', 0)}\n"
                   f"Highest Floor {ROMAN[getattr(profile, 'highest_floor', 0)] or '-'}\n"
                   "Dungeon progression follows this soul across servers and rebirths.",
@@ -196,14 +205,15 @@ def soul_embed(profile, name, *, tab="character", image=False, bot=None):
 class OwnedFantasyView(MeyayaView):
     command_name = "awaken"
 
-    def __init__(self, cog, owner, *, timeout=180):
+    def __init__(self, cog: Any, owner: int, *, timeout: float | None = 180) -> None:
         super().__init__(timeout=timeout)
-        self.cog, self.owner = cog, owner
-        self.message = None
+        self.cog: Any = cog
+        self.owner = owner
+        self.message: discord.Message | None = None
         self.lock = asyncio.Lock()
         self.closed = False
 
-    async def interaction_check(self, interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id == self.owner:
             return True
         await interaction.response.send_message(
@@ -212,17 +222,18 @@ class OwnedFantasyView(MeyayaView):
         )
         return False
 
-    def disable(self):
+    def disable(self) -> None:
         for button in self.children:
-            button.disabled = True
+            if isinstance(button, (discord.ui.Button, discord.ui.Select)):
+                button.disabled = True
 
-    def finish(self):
+    def finish(self) -> None:
         self.closed = True
         self.disable()
         self.stop()
         self.cog.release_view(self)
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         async with self.lock:
             if self.closed:
                 return
@@ -233,7 +244,12 @@ class OwnedFantasyView(MeyayaView):
                 except discord.HTTPException:
                     pass
 
-    async def on_error(self, interaction, error, item):
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        item: discord.ui.Item[Any],
+    ) -> None:
         error_id = health.capture(
             error,
             command=self.command_name,
@@ -257,9 +273,19 @@ class OwnedFantasyView(MeyayaView):
 class FantasyProfileView(OwnedFantasyView):
     image_first = True
 
-    def __init__(self, cog, owner, profile, name, *, image=False):
+    def __init__(
+        self,
+        cog: Any,
+        owner: int,
+        profile: Any,
+        name: str,
+        *,
+        image: bool = False,
+    ) -> None:
         super().__init__(cog, owner)
-        self.profile, self.name, self.image = profile, name, image
+        self.profile: Any = profile
+        self.name = name
+        self.image = image
         self.tab = "character"
         if getattr(profile, "is_meyaya_boss", False):
             # Her dedicated artwork is the whole profile, with no redundant tabs.
@@ -270,7 +296,7 @@ class FantasyProfileView(OwnedFantasyView):
             ("abilities", "Abilities"),
             ("details", "Details"),
         ):
-            button = discord.ui.Button(
+            button: discord.ui.Button[Any] = discord.ui.Button(
                 label=label,
                 style=(
                     discord.ButtonStyle.primary
@@ -279,14 +305,15 @@ class FantasyProfileView(OwnedFantasyView):
                 ),
             )
 
-            async def callback(interaction, tab=key):
+            async def callback(interaction: discord.Interaction, tab: str = key) -> None:
                 await self.switch(interaction, tab)
 
-            button.callback = callback
-            button.tab = key
+            button_obj: Any = button
+            button_obj.callback = callback
+            button_obj.tab = key
             self.add_item(button)
 
-    async def switch(self, interaction, tab):
+    async def switch(self, interaction: discord.Interaction, tab: str) -> None:
         await interaction.response.defer()
         if self.lock.locked():
             return
@@ -297,11 +324,11 @@ class FantasyProfileView(OwnedFantasyView):
             old = self.tab
             self.tab = tab
             for button in self.children:
-                if not hasattr(button, "tab"):
+                if not isinstance(button, discord.ui.Button) or not hasattr(button, "tab"):
                     continue
                 button.style = (
                     discord.ButtonStyle.primary
-                    if button.tab == tab
+                    if getattr(button, "tab", None) == tab
                     else discord.ButtonStyle.secondary
                 )
             try:
@@ -311,23 +338,26 @@ class FantasyProfileView(OwnedFantasyView):
             except BaseException:
                 self.tab = old
                 for button in self.children:
-                    if not hasattr(button, "tab"):
+                    if not isinstance(button, discord.ui.Button) or not hasattr(button, "tab"):
                         continue
                     button.style = (
                         discord.ButtonStyle.primary
-                        if button.tab == old
+                        if getattr(button, "tab", None) == old
                         else discord.ButtonStyle.secondary
                     )
                 raise
 
 
 class AlreadyAwakenedView(OwnedFantasyView):
-    def __init__(self, cog, owner, profile, member):
+    def __init__(self, cog: Any, owner: int, profile: Any, member: Any) -> None:
         super().__init__(cog, owner)
-        self.profile, self.member = profile, member
+        self.profile: Any = profile
+        self.member: Any = member
 
     @discord.ui.button(label="View Character", style=discord.ButtonStyle.primary)
-    async def character(self, interaction, button):
+    async def character(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await interaction.response.defer()
         if self.lock.locked():
             return
@@ -346,14 +376,15 @@ class AwakeningRevealView(OwnedFantasyView):
 
     LABELS = ("Reveal weapon", "Choose your alignment", "Choose a presence below")
 
-    def __init__(self, cog, owner, profile, member):
+    def __init__(self, cog: Any, owner: int, profile: Any, member: Any) -> None:
         super().__init__(cog, owner, timeout=300)
-        self.profile, self.member = profile, member
+        self.profile: Any = profile
+        self.member: Any = member
         self.step = 0
-        self.weapon_gif = None
+        self.weapon_gif: bytes | None = None
         self.refresh_buttons()
 
-    def refresh_buttons(self):
+    def refresh_buttons(self) -> None:
         self.advance.label = self.LABELS[self.step]
         self.back.disabled = self.step == 0
         self.clear_items()
@@ -364,13 +395,13 @@ class AwakeningRevealView(OwnedFantasyView):
             self.add_item(self.erasure)
         self.add_item(self.back)
 
-    def finish(self):
+    def finish(self) -> None:
         self.weapon_gif = None
         super().finish()
 
-    def embed(self):
+    def embed(self) -> discord.Embed:
         profile = self.profile
-        theme = theme_for(profile)
+        theme = cast(Any, theme_for)(profile)
         if self.step == 2:
             embed = meyaya_embed(
                 "A Call Beyond the Soul Interface",
@@ -408,7 +439,7 @@ class AwakeningRevealView(OwnedFantasyView):
         )
         return embed
 
-    async def move(self, interaction, direction):
+    async def move(self, interaction: discord.Interaction, direction: int) -> None:
         await interaction.response.defer()
         if self.lock.locked():
             return
@@ -423,7 +454,7 @@ class AwakeningRevealView(OwnedFantasyView):
                     if self.step == 1 and self.weapon_gif is None:
                         self.weapon_gif = await self.cog.weapon_bytes(self.profile)
                     embed = self.embed()
-                    files = []
+                    files: list[discord.File] = []
                     if self.step == 1 and self.weapon_gif:
                         embed.set_image(url="attachment://meyaya-weapon.gif")
                         files = [
@@ -457,16 +488,20 @@ class AwakeningRevealView(OwnedFantasyView):
                 raise
 
     @discord.ui.button(label="Reveal weapon", style=discord.ButtonStyle.primary)
-    async def advance(self, interaction, button):
+    async def advance(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.move(interaction, 1)
 
     @discord.ui.button(
         label="Previous discovery", style=discord.ButtonStyle.secondary, disabled=True
     )
-    async def back(self, interaction, button):
+    async def back(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.move(interaction, -1)
 
-    async def choose(self, interaction, choice):
+    async def choose(self, interaction: discord.Interaction, choice: str) -> None:
         # Enforce ownership even when invoked outside discord.py's dispatch.
         if not await self.interaction_check(interaction):
             return
@@ -491,19 +526,25 @@ class AwakeningRevealView(OwnedFantasyView):
     @discord.ui.button(
         label="Answer Meyaya - Bloom of Origin", emoji="🌸", style=discord.ButtonStyle.primary
     )
-    async def origin(self, interaction, button):
+    async def origin(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.choose(interaction, "meyaya")
 
     @discord.ui.button(
         label="Answer Veyra - Enemy of All", emoji="🩸", style=discord.ButtonStyle.danger
     )
-    async def erasure(self, interaction, button):
+    async def erasure(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.choose(interaction, "veyra")
 
 
 class AwakeningView(OwnedFantasyView):
     @discord.ui.button(label="Awaken", style=discord.ButtonStyle.primary, emoji="🌸")
-    async def awaken(self, interaction, button):
+    async def awaken(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await interaction.response.defer()
         if self.lock.locked():
             return
@@ -533,7 +574,9 @@ class AwakeningView(OwnedFantasyView):
                             pass
 
     @discord.ui.button(label="Not yet", style=discord.ButtonStyle.secondary)
-    async def decline(self, interaction, button):
+    async def decline(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await interaction.response.defer()
         if self.lock.locked():
             return

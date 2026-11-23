@@ -1,16 +1,21 @@
 """Acknowledge orphaned game buttons after timeout/restart, without replaying moves."""
 
+from __future__ import annotations
+
+from typing import Any
+
 import discord
 
 
-async def reply_to_expired_game(bot, interaction):
+async def reply_to_expired_game(bot: Any, interaction: discord.Interaction[Any]) -> None:
     if interaction.type != discord.InteractionType.component:
         return
     message = getattr(interaction, "message", None)
     user = getattr(bot, "user", None)
     if not message or not user or message.author.id != user.id:
         return
-    custom_id = (interaction.data or {}).get("custom_id", "")
+    data: dict[str, Any] = dict(interaction.data or {})
+    custom_id = str(data.get("custom_id") or "")
     footer = " ".join(embed.footer.text or "" for embed in message.embeds)
     recognized = custom_id.startswith(("meyaya:scramble:", "meyaya:solo:", "meyaya:duel:", "meyaya:rebirth:", "meyaya:pair:")) or (
         "Only the player who started this puzzle" in footer

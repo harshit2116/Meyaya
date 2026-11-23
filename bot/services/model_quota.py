@@ -1,11 +1,14 @@
 """Small per-model attempt budgets; Redis preserves counts across restarts."""
 
+from __future__ import annotations
+
 import asyncio
 from collections import deque
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from hashlib import sha256
 import logging
 import time
+from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -38,26 +41,35 @@ return {0, 0}
 """
 
 
-def quota_day():
-    now = datetime.now(timezone.utc)
+def quota_day() -> tuple[str, float]:
+    now = datetime.now(UTC)
     local = now.astimezone(PACIFIC)
     reset = datetime.combine(local.date() + timedelta(days=1), datetime.min.time(), PACIFIC)
-    return local.date().isoformat(), (reset.astimezone(timezone.utc) - now).total_seconds()
+    return local.date().isoformat(), (reset.astimezone(UTC) - now).total_seconds()
 
 
 class ModelQuota:
-    def __init__(self, rpm=5, rpd=20, *, redis=None, namespace='meyaya', model='', max_wait=6):
+    def __init__(
+        self,
+        rpm: int = 5,
+        rpd: int = 20,
+        *,
+        redis: Any = None,
+        namespace: str = 'meyaya',
+        model: str = '',
+        max_wait: float = 6,
+    ) -> None:
         self.rpm, self.rpd = rpm, rpd
         self.redis, self.max_wait = redis, max_wait
         identity = sha256(f'{namespace}:{model}'.encode()).hexdigest()[:24]
         self.prefix = f'meyaya:model-quota:{{{identity}}}'
         self.lock = asyncio.Lock()
-        self.recent = deque(maxlen=rpm)
+        self.recent: deque[float] = deque(maxlen=rpm)
         self.day, self.daily = '', 0
-        self.blocked_until = 0
-        self.redis_retry_at = 0
+        self.blocked_until = 0.0
+        self.redis_retry_at = 0.0
 
-    def _local_reserve(self, day):
+    def _local_reserve(self, day: str) -> tuple[int, float]:
         now = time.monotonic()
         if self.day != day:
             self.day, self.daily = day, 0
@@ -67,7 +79,7 @@ class ModelQuota:
             return 2, 0
         while self.recent and self.recent[0] <= now - 60:
             self.recent.popleft()
-        wait = max(0, self.recent[-1] + 60 / self.rpm - now) if self.recent else 0
+        wait = max(0.0, self.recent[-1] + 60 / self.rpm - now) if self.recent else 0.0
         if len(self.recent) >= self.rpm:
             wait = max(wait, self.recent[0] + 60 - now)
         if wait > 0:
@@ -76,7 +88,7 @@ class ModelQuota:
         self.daily += 1
         return 0, 0
 
-    async def acquire(self, *, optional=False):
+    async def acquire(self, *, optional: bool = False) -> str | None:
         if time.time() < self.blocked_until:
             return 'model_rate_backoff'
         if optional:
@@ -87,7 +99,7 @@ class ModelQuota:
         except TimeoutError:
             return 'model_pacing_busy'
 
-    async def _acquire(self, *, optional=False):
+    async def _acquire(self, *, optional: bool = False) -> str | None:
         # Admission is already bounded by AIGuard. No background workers or
         # unbounded per-message timers; the router deadline includes this wait.
         deadline = time.monotonic() + (0 if optional else self.max_wait)
@@ -127,7 +139,7 @@ class ModelQuota:
                     return 'model_pacing_busy'
                 await asyncio.sleep(wait)
 
-    async def block(self, seconds):
+    async def block(self, seconds: float) -> None:
         until = time.time() + max(1, seconds)
         self.blocked_until = max(self.blocked_until, until)
         if self.redis is not None and time.monotonic() >= self.redis_retry_at:
@@ -140,7 +152,7 @@ class ModelQuota:
             except (RedisError, TimeoutError):
                 self.redis_retry_at = time.monotonic() + 60
 
-    async def snapshot(self):
+    async def snapshot(self) -> dict[str, Any]:
         """Read-only budget view; opening the dashboard must not reserve quota."""
         day, reset_seconds = quota_day()
         daily = self.daily if self.day == day else 0

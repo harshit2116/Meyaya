@@ -73,11 +73,10 @@ VOICE_DESCRIPTIONS = dict(
             "Knowledgeable",
             "Warm",
         ),
+        strict=True,
     )
 )
 
 
 def canonical_voice_name(value: str) -> str | None:
-    """Return the official capitalization for a supported voice name."""
-
     return _VOICE_BY_CASEFOLD.get(value.strip().casefold())

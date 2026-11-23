@@ -1,28 +1,44 @@
 """Opponent consent, cancellable challenges and bounded participant-only results."""
 
+from __future__ import annotations
+
 import asyncio
+from typing import Any, cast
 from uuid import uuid4
+
 import discord
 from bot.utils.components_v2 import MeyayaView
 from bot.utils.embeds import meyaya_embed
 
 
 class DuelView(MeyayaView):
-    def __init__(self, cog, left, right, profiles, *, timeout=90):
+    def __init__(
+        self,
+        cog: Any,
+        left: Any,
+        right: Any,
+        profiles: dict[int, Any],
+        *,
+        timeout: float | None = 90,
+    ) -> None:
         super().__init__(timeout=timeout)
-        self.cog, self.left, self.right, self.profiles = cog, left, right, profiles
-        self.owner = left.id
-        self.participant_ids = (left.id, right.id)
-        self.message = None
+        self.cog: Any = cog
+        self.left: Any = left
+        self.right: Any = right
+        self.profiles = profiles
+        self.owner: int = left.id
+        self.participant_ids: tuple[int, int] = (left.id, right.id)
+        self.message: discord.Message | None = None
         self.lock = asyncio.Lock()
         self.closed = False
-        self.task = None
+        self.task: asyncio.Task[Any] | None = None
         self.running = False
         self.token = uuid4().hex
         for index, child in enumerate(self.children):
-            child.custom_id = f"meyaya:duel:{self.token}:{index}"
+            if isinstance(child, (discord.ui.Button, discord.ui.Select)):
+                child.custom_id = f"meyaya:duel:{self.token}:{index}"
 
-    async def interaction_check(self, interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id in self.participant_ids:
             return True
         await interaction.response.send_message(
@@ -31,10 +47,11 @@ class DuelView(MeyayaView):
         )
         return False
 
-    def finish(self):
+    def finish(self) -> None:
         self.closed = True
         for child in self.children:
-            child.disabled = True
+            if isinstance(child, (discord.ui.Button, discord.ui.Select)):
+                child.disabled = True
         self.stop()
         self.cog.release_view(self)
         for user_id in self.participant_ids:
@@ -43,7 +60,7 @@ class DuelView(MeyayaView):
         if self.task and not self.task.done() and self.task is not asyncio.current_task():
             self.task.cancel()
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         if self.running:
             return
         async with self.lock:
@@ -66,26 +83,29 @@ class DuelView(MeyayaView):
                 except discord.HTTPException:
                     pass
 
-    async def on_error(self, interaction, error, item):
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        item: discord.ui.Item[Any],
+    ) -> None:
         self.finish()
         error_id = self.cog.report(error, "fantasy_duel_ui")
         try:
-            sender = (
-                interaction.followup.send
-                if interaction.response.is_done()
-                else interaction.response.send_message
-            )
-            await sender(
-                f"The duel was interrupted; both identities are safe. Error ID: `{error_id}`",
-                ephemeral=True,
-            )
+            notice = f"The duel was interrupted; both identities are safe. Error ID: `{error_id}`"
+            if interaction.response.is_done():
+                await interaction.followup.send(notice, ephemeral=True)
+            else:
+                await interaction.response.send_message(notice, ephemeral=True)
         except discord.HTTPException:
             pass
 
 
 class DuelChallengeView(DuelView):
     @discord.ui.button(label="Accept Duel", style=discord.ButtonStyle.success, emoji="⚔️")
-    async def accept(self, interaction, button):
+    async def accept(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         if interaction.user.id != self.right.id:
             await interaction.response.send_message(
                 "Only the challenged member can accept.", ephemeral=True
@@ -99,7 +119,8 @@ class DuelChallengeView(DuelView):
                 return
             self.running = True
             for child in self.children:
-                child.disabled = True
+                if isinstance(child, (discord.ui.Button, discord.ui.Select)):
+                    child.disabled = True
             self.task = asyncio.current_task()
             try:
                 async with asyncio.timeout(75):
@@ -107,7 +128,9 @@ class DuelChallengeView(DuelView):
             finally:
                 self.finish()
 
-    async def close_challenge(self, interaction, allowed_id, reason):
+    async def close_challenge(
+        self, interaction: discord.Interaction, allowed_id: int, reason: str
+    ) -> None:
         if interaction.user.id != allowed_id:
             await interaction.response.send_message(
                 "That decision belongs to the other fighter.", ephemeral=True
@@ -128,32 +151,45 @@ class DuelChallengeView(DuelView):
             )
 
     @discord.ui.button(label="Decline", style=discord.ButtonStyle.secondary)
-    async def decline(self, interaction, button):
+    async def decline(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.close_challenge(interaction, self.right.id, "Challenge declined")
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction, button):
+    async def cancel(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.close_challenge(interaction, self.left.id, "Challenge cancelled")
 
 
 class DuelResultView(DuelView):
-    def __init__(self, cog, left, right, profiles, battle):
+    def __init__(
+        self,
+        cog: Any,
+        left: Any,
+        right: Any,
+        profiles: dict[int, Any],
+        battle: Any,
+    ) -> None:
         super().__init__(cog, left, right, profiles, timeout=180)
-        self.battle = battle
+        self.battle: Any = battle
         self.rematching = False
         if getattr(profiles.get(right.id), "is_meyaya_boss", False):
             self.rematch.disabled = True
             self.rematch.label = "Rematch with /versus @Meyaya"
 
     @discord.ui.button(label="Rematch", style=discord.ButtonStyle.primary)
-    async def rematch(self, interaction, button):
+    async def rematch(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         if not await self.interaction_check(interaction):
             return
         await interaction.response.defer(ephemeral=True)
         if self.lock.locked():
             return
         async with self.lock:
-            if self.closed or self.rematching:
+            if self.closed or self.rematching or interaction.guild is None:
                 return
             left = interaction.guild.get_member(interaction.user.id)
             other_id = self.right.id if interaction.user.id == self.left.id else self.left.id
@@ -173,7 +209,11 @@ class DuelResultView(DuelView):
                 await interaction.followup.send(str(error), ephemeral=True)
                 return
             try:
-                view.message = await interaction.channel.send(
+                channel: Any = interaction.channel
+                if channel is None:
+                    view.finish()
+                    return
+                view.message = await channel.send(
                     embed=embed, view=view, allowed_mentions=discord.AllowedMentions.none()
                 )
             except BaseException:
@@ -181,10 +221,13 @@ class DuelResultView(DuelView):
                 raise
             self.rematching = True
             button.disabled = True
-            await interaction.message.edit(view=self)
+            if interaction.message is not None:
+                await interaction.message.edit(view=self)
 
     @discord.ui.button(label="My Fantasy Profile", style=discord.ButtonStyle.secondary)
-    async def profile(self, interaction, button):
+    async def profile(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         if not await self.interaction_check(interaction):
             return
         await interaction.response.defer(ephemeral=True, thinking=True)
@@ -203,7 +246,7 @@ class DuelResultView(DuelView):
             try:
                 from io import BytesIO
 
-                kwargs = dict(embed=embed, view=view, ephemeral=True, wait=True)
+                kwargs: dict[str, Any] = dict(embed=embed, view=view, ephemeral=True, wait=True)
                 if png:
                     kwargs["file"] = discord.File(BytesIO(png), filename="meyaya-soul.png")
                 try:
@@ -224,7 +267,9 @@ class DuelResultView(DuelView):
                 raise
 
     @discord.ui.button(label="Battle Details", style=discord.ButtonStyle.secondary)
-    async def details(self, interaction, button):
+    async def details(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         if not await self.interaction_check(interaction):
             return
         from bot.services.fantasy_duel import element_multiplier, RULES_VERSION, MAX_ROUNDS
@@ -239,7 +284,8 @@ class DuelResultView(DuelView):
             if other.is_boss:
                 text += f"\n**{name}**\nCriticals: {f.critical_hits} · Dodges: {f.dodges} · Skills: {f.skills_used}\nHP {f.hp}/{f.max_hp} · MP {f.mp}/{f.max_mp}\n"
                 continue
-            text += f"\n**{name}**\nDamage dealt/taken: {f.damage_dealt}/{f.damage_taken}\nCriticals: {f.critical_hits} · Dodges: {f.dodges} · Skills: {f.skills_used}\nElement: {element_multiplier(f.affinity, other.affinity):.2f}× · Passive: {f.passive_name if f.passive else 'No mapped effect'}\n"
+            mult = cast(Any, element_multiplier)(f.affinity, other.affinity)
+            text += f"\n**{name}**\nDamage dealt/taken: {f.damage_dealt}/{f.damage_taken}\nCriticals: {f.critical_hits} · Dodges: {f.dodges} · Skills: {f.skills_used}\nElement: {mult:.2f}× · Passive: {f.passive_name if f.passive else 'No mapped effect'}\n"
         await interaction.response.send_message(
             embed=meyaya_embed("Battle Details", text, icon="⚔"), ephemeral=True
         )

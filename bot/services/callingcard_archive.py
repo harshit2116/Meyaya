@@ -1,8 +1,12 @@
 """Palette-driven calling cards; all member content is composed locally."""
 
+from __future__ import annotations
+
+from collections.abc import Iterable
 from functools import lru_cache
 import math
 from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
@@ -14,7 +18,7 @@ SIZE = (1600, 900)
 AVATAR = (150, 157, 480)
 
 
-def _flower(draw, x, y, radius, color):
+def _flower(draw: ImageDraw.ImageDraw, x: float, y: float, radius: float, color: str) -> None:
     for i in range(5):
         angle = i * math.tau / 5
         cx, cy = x + math.sin(angle) * radius * 0.6, y + math.cos(angle) * radius * 0.6
@@ -24,7 +28,7 @@ def _flower(draw, x, y, radius, color):
 
 
 @lru_cache(maxsize=1)
-def _frame_source():
+def _frame_source() -> tuple[Image.Image, Image.Image]:
     path = Path(__file__).resolve().parents[1] / "assets/profile/callingcard/portrait-frame.png"
     with Image.open(path) as art:
         frame = art.convert("RGBA").resize((640, 640), Image.Resampling.LANCZOS)
@@ -32,7 +36,7 @@ def _frame_source():
 
 
 @lru_cache(maxsize=4)
-def _portrait_frame(accent, secondary):
+def _portrait_frame(accent: str, secondary: str) -> Image.Image:
     gray, alpha = _frame_source()
     layer = ImageOps.colorize(
         gray,
@@ -46,7 +50,7 @@ def _portrait_frame(accent, secondary):
 
 
 @lru_cache(maxsize=3)
-def _background(palette):
+def _background(palette: tuple[str, ...]) -> Image.Image:
     """Only three member-free backgrounds; callers always receive a copy."""
     accent, secondary = theme(palette)
     base = _hex(_mix(_rgb(palette[3]), (12, 10, 16), 0.96))
@@ -88,13 +92,13 @@ def _background(palette):
 
 
 @lru_cache(maxsize=1)
-def _avatar_mask():
+def _avatar_mask() -> Image.Image:
     mask = Image.new("L", (AVATAR[2], AVATAR[2]))
     ImageDraw.Draw(mask).ellipse((0, 0, AVATAR[2] - 1, AVATAR[2] - 1), fill=255)
     return mask
 
 
-def _portrait(image, visual, accent, secondary):
+def _portrait(image: Image.Image, visual: Any, accent: str, secondary: str) -> None:
     x, y, size = AVATAR
     art = _asset(visual.avatar)
     if art is None:
@@ -114,13 +118,13 @@ def _portrait(image, visual, accent, secondary):
         )
 
 
-def _clean_title(value):
-    value = " ".join(str(value).split())
-    return value[next((i for i, char in enumerate(value) if char.isalnum()), len(value)) :][:100]
+def _clean_title(value: object) -> str:
+    text = " ".join(str(value).split())
+    return text[next((i for i, char in enumerate(text) if char.isalnum()), len(text)) :][:100]
 
 
 @lru_cache(maxsize=32)
-def _icon(kind, color):
+def _icon(kind: str, color: str) -> Image.Image:
     layer = Image.new("RGBA", (120, 120))
     draw = ImageDraw.Draw(layer)
     if kind == "crown":
@@ -134,7 +138,7 @@ def _icon(kind, color):
         draw.rounded_rectangle((10, 68, 72, 102), radius=16, fill=color)
         draw.rounded_rectangle((75, 68, 108, 102), radius=13, fill=color)
     elif kind == "heart":
-        points = []
+        points: list[tuple[float, float]] = []
         for i in range(121):
             t = i * math.tau / 120
             points.append(
@@ -161,17 +165,19 @@ def _icon(kind, color):
     return layer.resize((40, 40), Image.Resampling.LANCZOS)
 
 
-def _badges(image, titles, accent, secondary):
-    titles = tuple(filter(None, (_clean_title(title) for title in titles)))
-    if not titles:
-        titles = ("New Face",)
+def _badges(
+    image: Image.Image, titles: Iterable[object], accent: str, secondary: str
+) -> None:
+    cleaned = tuple(filter(None, (_clean_title(title) for title in titles)))
+    if not cleaned:
+        cleaned = ("New Face",)
     # Normal profiles supply at most three titles. Wrap additional callers'
     # titles inside this fixed region rather than silently dropping them.
-    columns = min(3, len(titles))
-    rows = math.ceil(len(titles) / columns)
-    height = min(68, 106 / rows - 8)
+    columns = min(3, len(cleaned))
+    rows = math.ceil(len(cleaned) / columns)
+    height = min(68.0, 106 / rows - 8)
     width = (810 - (columns - 1) * 14) / columns
-    for index, title in enumerate(titles):
+    for index, title in enumerate(cleaned):
         x, y = round(710 + (index % columns) * (width + 14)), round(
             548 + (index // columns) * (height + 8)
         )
@@ -205,7 +211,9 @@ def _badges(image, titles, accent, secondary):
         draw.text((text_x, text_y), title, font=face, fill="#faedf2")
 
 
-def render_callingcard(visual, *, nickname, relationship, titles):
+def render_callingcard(
+    visual: Any, *, nickname: str | None, relationship: object, titles: Iterable[object]
+) -> Image.Image:
     accent, secondary = theme(visual.palette)
     image = _background(tuple(visual.palette)).copy()
     if visual.banner_swatch:

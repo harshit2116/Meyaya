@@ -1,5 +1,7 @@
 """Best-effort Linux container metrics, without credentials or external calls."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 import sys
@@ -8,7 +10,7 @@ import time
 from bot.logging.health import health
 
 
-def memory_limit_mb():
+def memory_limit_mb() -> float | None:
     for path in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
         try:
             value = int(Path(path).read_text().strip())
@@ -21,7 +23,7 @@ def memory_limit_mb():
 logger = logging.getLogger(__name__)
 
 
-def cpu_counters():
+def cpu_counters() -> tuple[int, float] | None:
     # cgroup v2 uses microseconds; v1 reports throttle time in nanoseconds.
     for path, divisor in (("/sys/fs/cgroup/cpu.stat", 1000),
                           ("/sys/fs/cgroup/cpu/cpu.stat", 1_000_000)):
@@ -35,10 +37,10 @@ def cpu_counters():
 
 
 class HostMetrics:
-    def __init__(self):
-        self.previous = None
+    def __init__(self) -> None:
+        self.previous: tuple[float, tuple[int, float]] | None = None
 
-    def record(self, wake_lag):
+    def record(self, wake_lag: float) -> None:
         if not sys.platform.startswith("linux"):
             health.host = {'observed_at': time.time(), 'rss_mb': None,
                            'memory_limit_mb': None, 'wake_lag_ms': round(wake_lag * 1000, 1),

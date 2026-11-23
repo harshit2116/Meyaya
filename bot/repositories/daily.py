@@ -12,14 +12,10 @@ from bot.repositories.base import Repository
 
 
 class DailyRepository(Repository):
-    """Repository for server-scoped daily outcomes."""
-
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
     async def get_or_create(self, guild_id: int, day: date) -> DailyResult:
-        """Return the stored daily result row for a guild and day."""
-
         statement: Select[tuple[DailyResult]] = select(DailyResult).where(
             DailyResult.guild_id == guild_id,
             DailyResult.day == day,

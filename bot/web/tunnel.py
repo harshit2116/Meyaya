@@ -1,11 +1,14 @@
 """Own an encrypted SSH or Session Manager forward for the local console."""
+from __future__ import annotations
+
 import asyncio
+import json
 import os
+from pathlib import Path
+import shutil
 import socket
 import subprocess
-import json
-import shutil
-from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 
@@ -13,7 +16,7 @@ class TunnelError(RuntimeError):
     """A credential-free connection diagnosis suitable for the launcher."""
 
 
-async def start_tunnel(settings):
+async def start_tunnel(settings: Any) -> asyncio.subprocess.Process:
     target = urlsplit(settings.dashboard_remote_url)
     if target.scheme != 'http' or target.hostname != '127.0.0.1' or not target.port:
         raise ValueError('Tunnel mode requires http://127.0.0.1:<local tunnel port>')
@@ -26,7 +29,10 @@ async def start_tunnel(settings):
     if ssm_instance:
         process = await _start_ssm(settings, target.port)
     else:
-        key = Path(settings.dashboard_ssh_key).expanduser().resolve(strict=True)
+        key = await asyncio.to_thread(
+            lambda: Path(settings.dashboard_ssh_key).expanduser().resolve(strict=True)
+        )
+        extra: dict[str, Any] = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
         process = await asyncio.create_subprocess_exec(
             'ssh', '-N', '-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
             '-o', 'ExitOnForwardFailure=yes', '-o', 'ConnectTimeout=15',
@@ -34,7 +40,7 @@ async def start_tunnel(settings):
             '-i', str(key), '-L', f'127.0.0.1:{target.port}:127.0.0.1:8080',
             settings.dashboard_ssh_host,
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
-            **({'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}))
+            **extra)
     try:
         for _ in range(60):
             if process.returncode is not None:
@@ -53,7 +59,7 @@ async def start_tunnel(settings):
         raise
 
 
-async def stop_tunnel(process):
+async def stop_tunnel(process: asyncio.subprocess.Process | None) -> None:
     if process is not None and process.returncode is None:
         process.terminate()
         try:
@@ -62,8 +68,9 @@ async def stop_tunnel(process):
             process.kill()
             await process.wait()
     session = getattr(process, '_meyaya_ssm', None)
-    if session is not None:
-        process._meyaya_ssm = None
+    if session is not None and process is not None:
+        process_obj: Any = process
+        process_obj._meyaya_ssm = None
         client, session_id = session
         try:
             await asyncio.to_thread(client.terminate_session, SessionId=session_id)
@@ -71,36 +78,42 @@ async def stop_tunnel(process):
             pass  # Local cleanup must still finish if AWS connectivity was lost.
 
 
-async def _start_ssm(settings, local_port):
+async def _start_ssm(settings: Any, local_port: int) -> asyncio.subprocess.Process:
     """Forward with IAM authentication; no public inbound SSH port is required."""
     plugin = getattr(settings, 'dashboard_ssm_plugin', '') or shutil.which('session-manager-plugin')
-    if not plugin or not Path(plugin).is_file():
+    if not plugin or not await asyncio.to_thread(Path(plugin).is_file):
         raise TunnelError('Install the AWS Session Manager plugin and set DASHBOARD_SSM_PLUGIN to its executable.')
     try:
-        import boto3
-        from botocore.config import Config
+        import boto3  # type: ignore[import-untyped]
+        from botocore.config import Config  # type: ignore[import-untyped]
     except ImportError:
         raise TunnelError('Install local dashboard dependencies: python -m pip install ".[dashboard]"') from None
     region = settings.dashboard_aws_region
-    parameters = dict(Target=settings.dashboard_ssm_instance,
-                      DocumentName='AWS-StartPortForwardingSession',
-                      Parameters={'portNumber': ['8080'], 'localPortNumber': [str(local_port)]})
-    def connect():
+    parameters: dict[str, Any] = dict(
+        Target=settings.dashboard_ssm_instance,
+        DocumentName='AWS-StartPortForwardingSession',
+        Parameters={'portNumber': ['8080'], 'localPortNumber': [str(local_port)]},
+    )
+
+    def connect() -> tuple[Any, dict[str, Any]]:
         session = boto3.Session(profile_name=settings.dashboard_aws_profile or None, region_name=region)
         client = session.client('ssm', config=Config(connect_timeout=8, read_timeout=12, retries={'max_attempts': 1}))
         return client, client.start_session(**parameters)
+
     try:
         client, session = await asyncio.to_thread(connect)
     except Exception:
         raise TunnelError('Cannot start AWS Session Manager. Check your AWS profile login, region, and instance permissions.') from None
     try:
+        extra: dict[str, Any] = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}
         process = await asyncio.create_subprocess_exec(
             str(plugin), json.dumps(session), region, 'StartSession', settings.dashboard_aws_profile,
             json.dumps(parameters), client.meta.endpoint_url,
             stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
-            **({'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {}))
+            **extra)
     except BaseException:
         await asyncio.to_thread(client.terminate_session, SessionId=session['SessionId'])
         raise
-    process._meyaya_ssm = (client, session['SessionId'])
+    process_obj: Any = process
+    process_obj._meyaya_ssm = (client, session['SessionId'])
     return process

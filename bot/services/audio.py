@@ -5,11 +5,12 @@ from __future__ import annotations
 try:
     import audioop  # Python <= 3.12
 except Exception:  # pragma: no cover - fallback for newer Python versions
-    import audioop_lts as audioop
+    import audioop_lts as audioop  # type: ignore[import-not-found,no-redef]
 import queue
 import threading
 from dataclasses import dataclass
-from typing import Callable
+from collections.abc import Callable
+from typing import Any
 
 import discord
 
@@ -27,8 +28,8 @@ GEMINI_OUTPUT_RATE = 24_000
 
 @dataclass
 class ResampleState:
-    to_16k: object | None = None
-    from_24k: object | None = None
+    to_16k: Any = None
+    from_24k: Any = None
 
 
 class PcmStreamAudioSource(discord.AudioSource):

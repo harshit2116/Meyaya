@@ -1,25 +1,30 @@
 """One native profile card, composed without fetching images or member data."""
 
+from __future__ import annotations
+
+from typing import Any
+
 import discord
 
 
-def safe(value, limit=350):
+def safe(value: Any, limit: int = 350) -> str:
     return discord.utils.escape_mentions(
         discord.utils.escape_markdown(" ".join(str(value).split())[:limit])
     )
 
 
-def meter(value):
+def meter(value: int | float) -> str:
     value = max(0, min(100, int(value)))
     filled = round(value / 20)
     return f'`{"▰"*filled}{"▱"*(5-filled)}` **{value}%**'
 
 
-def build_profile_card(target, summary, visual, *, media=True):
-    """Keep artwork, live stats and metadata inside a single V2 container."""
+def build_profile_card(
+    target: Any, summary: Any, visual: Any, *, media: bool = True
+) -> discord.ui.Container[Any]:
     accent = int(visual.palette[0][1:], 16)
     state = summary.meyaya
-    parts = []
+    parts: list[Any] = []
     if media:
         parts.append(
             discord.ui.MediaGallery(

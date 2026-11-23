@@ -1,23 +1,28 @@
 """Deterministic moderation with durable, reversible channel lockdowns."""
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import logging
 import time
-from typing import Literal
+from typing import Any, Literal
+
 import discord
 from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
-from bot.models.moderation import ModerationSettings, ChannelLock
+
+from bot.app import MeyayaBot
+from bot.models.moderation import ChannelLock, ModerationSettings
 from bot.services.moderation import (
     INVITE,
-    probation_blocked_link,
-    SpamWindow,
     LockdownService,
+    SpamWindow,
     on_probation,
+    probation_blocked_link,
     text_fingerprint,
 )
 
@@ -25,37 +30,37 @@ logger = logging.getLogger(__name__)
 
 
 class ModerationCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
         self.lockdown_service = LockdownService(bot)
         self.spam = SpamWindow()
-        self._settings = {}
-        self._settings_locks = [asyncio.Lock() for _ in range(16)]
-        self._checks = {}
+        self._settings: dict[int, tuple[float, dict[str, bool]]] = {}
+        self._settings_locks: list[asyncio.Lock] = [asyncio.Lock() for _ in range(16)]
+        self._checks: dict[tuple[int, str], tuple[float, asyncio.Task[bool]]] = {}
         self._next_check_cleanup = 0.0
-        self._invites = {}
-        self._notices = {}
+        self._invites: dict[str, tuple[float, int | None]] = {}
+        self._notices: dict[tuple[int, int], float] = {}
         self._downloads = asyncio.Semaphore(3)
 
-    async def settings(self, guild_id):
+    async def settings(self, guild_id: int) -> dict[str, bool]:
         # Coalesce expired settings reads from simultaneous message listeners.
         async with self._settings_locks[guild_id % len(self._settings_locks)]:
             return await self._load_settings(guild_id)
 
-    async def _load_settings(self, guild_id):
+    async def _load_settings(self, guild_id: int) -> dict[str, bool]:
         cached = self._settings.get(guild_id)
         if cached and time.monotonic() - cached[0] < 60:
             return cached[1]
         async with self.bot.db_session() as session:
             row = await session.get(ModerationSettings, guild_id)
             value = {
-                name: getattr(row, name) if row else name != "raid_active"
+                name: bool(getattr(row, name)) if row else name != "raid_active"
                 for name in ("probation", "cross_spam", "anti_invite", "raid_active")
             }
         self._settings[guild_id] = (time.monotonic(), value)
         return value
 
-    async def set_setting(self, guild_id, name, value):
+    async def set_setting(self, guild_id: int, name: str, value: bool) -> None:
         async with self.bot.db_session() as session:
             await session.execute(
                 insert(ModerationSettings)
@@ -67,14 +72,14 @@ class ModerationCog(commands.Cog):
             await session.commit()
         self._settings.pop(guild_id, None)
 
-    async def should_block(self, message):
+    async def should_block(self, message: discord.Message) -> bool:
         if (
             message.guild is None
             or message.author.bot
             or not isinstance(message.author, discord.Member)
         ):
             return False
-        if message.author.guild_permissions.manage_guild:
+        if getattr(getattr(message.author, "guild_permissions", None), "manage_guild", False):
             return False
         now = time.monotonic()
         if now >= self._next_check_cleanup or len(self._checks) >= 2000:
@@ -89,13 +94,15 @@ class ModerationCog(commands.Cog):
             self._checks[key] = (now, asyncio.create_task(self._check(message)))
         return await asyncio.shield(self._checks[key][1])
 
-    async def _check(self, message):
+    async def _check(self, message: discord.Message) -> bool:
+        if message.guild is None:
+            return False
         try:
             settings = await self.settings(message.guild.id)
             reason = None
             if (
                 settings["probation"]
-                and on_probation(message.author.joined_at)
+                and on_probation(getattr(message.author, "joined_at", None))
                 and (
                     message.attachments
                     or probation_blocked_link(message.content)
@@ -121,22 +128,31 @@ class ModerationCog(commands.Cog):
                         reason = "Invites to other servers aren't allowed here."
                         break
             if reason is None and settings["cross_spam"]:
-                fingerprints = set()
+                fingerprints: set[str] = set()
                 fingerprint = text_fingerprint(message.content)
                 if fingerprint:
                     fingerprints.add("text:" + fingerprint)
-                for attachment in message.attachments[:3]:
-                    if attachment.size > 8 * 1024 * 1024 or not (
-                        attachment.content_type or ""
-                    ).startswith("image/"):
-                        continue
-                    try:
-                        async with self._downloads:
-                            async with asyncio.timeout(8):
-                                content = await attachment.read()
-                        fingerprints.add("image:" + hashlib.sha256(content).hexdigest())
-                    except (discord.HTTPException, TimeoutError):
-                        continue
+                eligible_attachments = [
+                    attachment
+                    for attachment in message.attachments[:3]
+                    if attachment.size <= 8 * 1024 * 1024
+                    and (attachment.content_type or "").startswith("image/")
+                ]
+                if eligible_attachments:
+
+                    async def _hash_attachment(attachment: discord.Attachment) -> str | None:
+                        try:
+                            async with self._downloads:
+                                async with asyncio.timeout(8):
+                                    content = await attachment.read()
+                            return "image:" + hashlib.sha256(content).hexdigest()
+                        except (discord.HTTPException, TimeoutError):
+                            return None
+
+                    hashes = await asyncio.gather(
+                        *(_hash_attachment(attachment) for attachment in eligible_attachments)
+                    )
+                    fingerprints.update(item for item in hashes if item is not None)
                 if self.spam.record(
                     message.guild.id, message.author.id, message.channel.id, fingerprints
                 ):
@@ -170,21 +186,23 @@ class ModerationCog(commands.Cog):
             return False
 
     @commands.Cog.listener()
-    async def on_message_edit(self, before, after):
+    async def on_message_edit(self, before: discord.Message, after: discord.Message) -> None:
         if before.content != after.content or before.attachments != after.attachments:
             await self.should_block(after)
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="moderation", description="Show or change Meyaya's moderation settings."
     )
     @commands.has_guild_permissions(manage_guild=True)
     @app_commands.default_permissions(manage_guild=True)
     async def moderation(
         self,
-        ctx,
+        ctx: commands.Context[Any],
         feature: Literal["probation", "cross_spam", "anti_invite"] = "probation",
         enabled: bool | None = None,
-    ):
+    ) -> None:
+        if ctx.guild is None:
+            return
         await ctx.defer(ephemeral=True)
         if enabled is not None:
             await self.set_setting(ctx.guild.id, feature, enabled)
@@ -196,7 +214,14 @@ class ModerationCog(commands.Cog):
             ephemeral=True,
         )
 
-    async def _lock_command(self, ctx, channel, *, raid=False, unlock=False):
+    async def _lock_command(
+        self,
+        ctx: commands.Context[Any],
+        channel: discord.TextChannel | None,
+        *,
+        raid: bool = False,
+        unlock: bool = False,
+    ) -> None:
         await ctx.defer(ephemeral=True)
         guild = ctx.guild
         if guild is None:
@@ -206,6 +231,7 @@ class ModerationCog(commands.Cog):
             return
         results = []
         async with self.lockdown_service.guild_lock(guild.id):
+            channels: list[object]
             if raid:
                 await self.set_setting(guild.id, "raid_active", not unlock)
                 channels = list(guild.text_channels)
@@ -219,7 +245,9 @@ class ModerationCog(commands.Cog):
                             )
                         ).all()
                     channels = [
-                        guild.get_channel(cid) for cid in ids if guild.get_channel(cid) is not None
+                        resolved
+                        for cid in ids
+                        if (resolved := guild.get_channel(cid)) is not None
                     ]
             else:
                 channels = [channel or ctx.channel]
@@ -243,44 +271,48 @@ class ModerationCog(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="lockdown", description="Lock one text channel until it is unlocked again."
     )
     @commands.has_guild_permissions(manage_channels=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
     @app_commands.default_permissions(manage_channels=True)
-    async def lockdown(self, ctx, channel: discord.TextChannel | None = None):
+    async def lockdown(
+        self, ctx: commands.Context[Any], channel: discord.TextChannel | None = None
+    ) -> None:
         await self._lock_command(ctx, channel)
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="unlock", description="Unlock a channel and restore its permissions."
     )
     @commands.has_guild_permissions(manage_channels=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
     @app_commands.default_permissions(manage_channels=True)
-    async def unlock(self, ctx, channel: discord.TextChannel | None = None):
+    async def unlock(
+        self, ctx: commands.Context[Any], channel: discord.TextChannel | None = None
+    ) -> None:
         await self._lock_command(ctx, channel, unlock=True)
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="raidlockdown", description="Lock every text channel in this server."
     )
     @commands.has_guild_permissions(manage_guild=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
     @app_commands.default_permissions(manage_guild=True)
-    async def raidlockdown(self, ctx):
+    async def raidlockdown(self, ctx: commands.Context[Any]) -> None:
         await self._lock_command(ctx, None, raid=True)
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="raidunlock", description="End a raid lockdown and restore channel permissions."
     )
     @commands.has_guild_permissions(manage_guild=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
     @app_commands.default_permissions(manage_guild=True)
-    async def raidunlock(self, ctx):
+    async def raidunlock(self, ctx: commands.Context[Any]) -> None:
         await self._lock_command(ctx, None, raid=True, unlock=True)
 
     @commands.Cog.listener()
-    async def on_guild_channel_create(self, channel):
+    async def on_guild_channel_create(self, channel: discord.abc.GuildChannel) -> None:
         if not isinstance(channel, discord.TextChannel):
             return
         try:
@@ -290,12 +322,12 @@ class ModerationCog(commands.Cog):
         except (discord.HTTPException, SQLAlchemyError):
             logger.exception("Could not raid-lock new channel=%s", channel.id)
 
-    async def cog_unload(self):
+    async def cog_unload(self) -> None:
         tasks = [task for _, task in self._checks.values() if not task.done()]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-async def setup(bot):
+async def setup(bot: MeyayaBot) -> None:
     await bot.add_cog(ModerationCog(bot))

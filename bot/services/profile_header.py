@@ -1,18 +1,61 @@
 """Small cached profile illustrations; live relationship data stays native text."""
 
+from __future__ import annotations
+
 from collections import OrderedDict
+from collections.abc import Callable, Sequence
 from io import BytesIO
 from time import monotonic
+from typing import Protocol, cast
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from bot.services.aura_archive import _asset, _text, _serif
-from bot.services.callingcard_archive import _clean_title, _icon, _portrait_frame
-from bot.services.duostyle_archive import _rgb, _hex, _mix, theme
+from bot.services.aura_archive import _asset as _raw_asset
+from bot.services.aura_archive import _serif as _raw_serif
+from bot.services.aura_archive import _text as _raw_text
+from bot.services.callingcard_archive import _clean_title as _raw_clean_title
+from bot.services.callingcard_archive import _icon as _raw_icon
+from bot.services.callingcard_archive import _portrait_frame as _raw_portrait_frame
+from bot.services.duostyle_archive import _hex as _raw_hex
+from bot.services.duostyle_archive import _mix as _raw_mix
+from bot.services.duostyle_archive import _rgb as _raw_rgb
+from bot.services.duostyle_archive import theme as _raw_theme
+from bot.services.profile_aesthetic import ProfileVisual
 from bot.utils.image_work import BoundedImageGate, image_work
 
+type _Font = ImageFont.FreeTypeFont | ImageFont.ImageFont
 
-def render_header(visual, titles):
+
+class _TextFn(Protocol):
+    def __call__(
+        self,
+        draw: ImageDraw.ImageDraw,
+        box: tuple[int, int, int, int],
+        value: object,
+        size: int,
+        color: str,
+        *,
+        minimum: int = 20,
+        serif: bool = True,
+    ) -> None: ...
+
+
+_asset = cast(Callable[[bytes | None], Image.Image | None], _raw_asset)
+_serif = cast(Callable[[int], _Font], _raw_serif)
+_text: _TextFn = _raw_text
+_clean_title = cast(Callable[[str], str], _raw_clean_title)
+_icon = cast(Callable[[str, str], Image.Image], _raw_icon)
+_portrait_frame = cast(Callable[[str, str], Image.Image], _raw_portrait_frame)
+_rgb = cast(Callable[[str], tuple[int, int, int]], _raw_rgb)
+_hex = cast(Callable[[tuple[int, int, int]], str], _raw_hex)
+_mix = cast(
+    Callable[[tuple[int, int, int], tuple[int, int, int], float], tuple[int, int, int]],
+    _raw_mix,
+)
+theme = cast(Callable[[tuple[str, ...]], tuple[str, str]], _raw_theme)
+
+
+def render_header(visual: ProfileVisual, titles: Sequence[str]) -> bytes:
     accent, secondary = theme(visual.palette)
     background = _hex(_mix(_rgb(visual.palette[3]), (12, 13, 19), 0.95))
     image = Image.new("RGBA", (1140, 400), background)
@@ -78,15 +121,15 @@ def render_header(visual, titles):
 class ProfileHeaderRenderer:
     """Coalesce repeated renders; retain at most 16 PNGs and 4 MiB for 5 minutes."""
 
-    def __init__(self, max_bytes=4 * 1024 * 1024, ttl=300):
-        self.cache = OrderedDict()
+    def __init__(self, max_bytes: int = 4 * 1024 * 1024, ttl: int = 300) -> None:
+        self.cache: OrderedDict[tuple[object, ...], tuple[float, bytes]] = OrderedDict()
         self.bytes = 0
         self.max_bytes = max_bytes
         self.ttl = ttl
         self.gate = BoundedImageGate()
 
-    async def render(self, visual, titles):
-        key = (
+    async def render(self, visual: ProfileVisual, titles: Sequence[str]) -> bytes:
+        key: tuple[object, ...] = (
             visual.asset_fingerprint,
             visual.name,
             visual.palette,

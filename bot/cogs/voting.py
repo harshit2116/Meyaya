@@ -1,15 +1,19 @@
 """Vote links and on-demand claims through Top.gg's read-only API."""
 
+from __future__ import annotations
+
 import asyncio
 import logging
+from typing import Any
 
 import discord
 from discord.ext import commands
 from sqlalchemy.exc import SQLAlchemyError
 
+from bot.app import MeyayaBot
 from bot.services.topgg_api import TopggUnavailable
 from bot.services.topgg_poll import TopggPoller
-from bot.services.topgg_votes import VOTE_CREDITS, PollLeaseLost
+from bot.services.topgg_votes import VOTE_CREDITS, PollLeaseLost, VerifiedVote
 from bot.utils.components_v2 import MeyayaView, send_native_embed
 from bot.utils.embeds import meyaya_embed
 
@@ -20,7 +24,7 @@ VOTE_THANKS_GIF = (
 )
 
 
-def vote_thanks_embed(vote):
+def vote_thanks_embed(vote: VerifiedVote) -> discord.Embed:
     embed = meyaya_embed(
         "You voted for Meyaya!",
         "Thank you for voting for **Meyaya** on top.gg! ♡\n\n"
@@ -39,22 +43,25 @@ def vote_thanks_embed(vote):
 
 
 class VoteView(MeyayaView):
-    def __init__(self, cog, owner_id):
+    def __init__(self, cog: VotingCog, owner_id: int) -> None:
         super().__init__(timeout=180)
         self.cog = cog
         self.owner_id = owner_id
+        bot_id = cog.bot.user.id if cog.bot.user is not None else 0
         self.add_item(
             discord.ui.Button(
                 label="Vote on top.gg",
-                url=f"https://top.gg/bot/{cog.bot.user.id}/vote",
+                url=f"https://top.gg/bot/{bot_id}/vote",
             )
         )
         if cog.bot.settings.topgg_enabled:
-            button = discord.ui.Button(label="Check vote", style=discord.ButtonStyle.primary)
-            button.callback = self.check_vote
+            button: discord.ui.Button[Any] = discord.ui.Button(
+                label="Check vote", style=discord.ButtonStyle.primary
+            )
+            button.callback = self.check_vote  # type: ignore[method-assign]
             self.add_item(button)
 
-    async def interaction_check(self, interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner_id:
             await interaction.response.send_message(
                 "Run /vote to check your own reward.", ephemeral=True
@@ -68,7 +75,7 @@ class VoteView(MeyayaView):
             return False
         return True
 
-    async def check_vote(self, interaction):
+    async def check_vote(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         embed = await self.cog.reward_embed(interaction.user.id, recipient=interaction.user)
         await interaction.followup.send(
@@ -79,13 +86,13 @@ class VoteView(MeyayaView):
 
 
 class VotingCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
-        self._poll_task = None
-        self._notification_task = None
+        self._poll_task: asyncio.Task[None] | None = None
+        self._notification_task: asyncio.Task[None] | None = None
         self._notification_wakeup = asyncio.Event()
 
-    async def cog_load(self):
+    async def cog_load(self) -> None:
         if not self.bot.settings.topgg_enabled:
             return
         self._notification_task = asyncio.create_task(
@@ -94,15 +101,17 @@ class VotingCog(commands.Cog):
         if self.bot.settings.topgg_auto_detect_enabled:
             self._poll_task = asyncio.create_task(self._poll_loop(), name="topgg-vote-poll")
 
-    async def cog_unload(self):
+    async def cog_unload(self) -> None:
         tasks = [task for task in (self._poll_task, self._notification_task) if task is not None]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self._poll_task = self._notification_task = None
 
-    async def _poll_loop(self):
+    async def _poll_loop(self) -> None:
         await self.bot.wait_until_ready()
+        if self.bot.user is None:
+            return
         poller = TopggPoller(
             self.bot.topgg_api, self.bot.votes, self.bot.user.id, self.bot.settings.topgg_project_id
         )
@@ -130,7 +139,7 @@ class VotingCog(commands.Cog):
             delay = min(interval * 2**failures, max(interval, 900))
             await asyncio.sleep(max(delay, self.bot.topgg_api.retry_after_seconds))
 
-    async def _notification_loop(self):
+    async def _notification_loop(self) -> None:
         await self.bot.wait_until_ready()
         while True:
             self._notification_wakeup.clear()
@@ -147,14 +156,16 @@ class VotingCog(commands.Cog):
             except TimeoutError:
                 pass
 
-    async def _deliver_pending_notifications_once(self):
+    async def _deliver_pending_notifications_once(self) -> int:
         async with asyncio.timeout(5):
             pending = await self.bot.votes.pending_notifications(limit=10)
         for vote in pending:
             await self.send_vote_thanks(None, vote)
         return len(pending)
 
-    async def send_vote_thanks(self, recipient, vote):
+    async def send_vote_thanks(
+        self, recipient: discord.abc.User | None, vote: VerifiedVote
+    ) -> bool | None:
         if recipient is not None and recipient.id != vote.user_id:
             logger.warning("Vote thank-you recipient mismatch")
             return False
@@ -174,7 +185,9 @@ class VotingCog(commands.Cog):
             logger.info("Vote thank-you DM unavailable error=%s", type(error).__name__)
             return False
 
-    async def reward_embed(self, user_id, *, recipient=None):
+    async def reward_embed(
+        self, user_id: int, *, recipient: discord.abc.User | None = None
+    ) -> discord.Embed:
         enabled = self.bot.settings.topgg_enabled
         claim_instruction = (
             "New votes are detected automatically, usually within a minute. "
@@ -198,6 +211,8 @@ class VotingCog(commands.Cog):
             return embed
         new_vote = None
         try:
+            if self.bot.user is None:
+                raise TopggUnavailable("Vote verification is starting up. Try again shortly.")
             async with asyncio.timeout(10):
                 vote = await self.bot.topgg_api.check_vote(self.bot.user.id, user_id)
                 if vote is not None:
@@ -243,11 +258,11 @@ class VotingCog(commands.Cog):
             )
         return embed
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="vote", description="Vote on top.gg and check your personal bonus AI replies."
     )
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def vote(self, ctx):
+    async def vote(self, ctx: commands.Context[Any]) -> None:
         if ctx.interaction is not None:
             await ctx.defer(ephemeral=True)
         await ctx.send(
@@ -257,5 +272,5 @@ class VotingCog(commands.Cog):
         )
 
 
-async def setup(bot):
+async def setup(bot: MeyayaBot) -> None:
     await bot.add_cog(VotingCog(bot))

@@ -11,7 +11,7 @@ import structlog
 
 class DiscordRateLimitHandler(logging.Handler):
     """Count discord.py's internally retried 429s without storing URLs."""
-    def emit(self, record):
+    def emit(self, record: logging.LogRecord) -> None:
         message = record.getMessage().lower()
         if 'rate limited' in message or ('429' in message and 'retry' in message):
             from bot.logging.telemetry import event

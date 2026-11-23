@@ -1,15 +1,19 @@
 """Loopback-only bridge to the running bot. Credentials never reach JavaScript."""
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Awaitable, Callable
 import re
 from types import SimpleNamespace
+from typing import Any, cast
 from urllib.parse import urlsplit
 
-from aiohttp import ClientSession, ClientTimeout, ClientError, web
+from aiohttp import ClientError, ClientSession, ClientTimeout, web
 from bot.web.dashboard import Dashboard
 from bot.web.local import LocalDashboard
 
 
 class RemoteDashboard(LocalDashboard):
-    def __init__(self, settings):
+    def __init__(self, settings: Any) -> None:
         origin = settings.dashboard_remote_url.rstrip('/')
         parsed = urlsplit(origin)
         tunnel = bool((getattr(settings, 'dashboard_ssh_host', '') or
@@ -20,11 +24,14 @@ class RemoteDashboard(LocalDashboard):
             raise ValueError('Use a plain HTTPS origin, or loopback HTTP with a configured SSH tunnel')
         if len(settings.dashboard_api_token) < 32:
             raise ValueError('Set DASHBOARD_API_TOKEN to the AWS read-only API token')
-        Dashboard.__init__(self, SimpleNamespace(settings=settings), local_no_auth=True)
-        self._client = None
+        cast(Any, Dashboard.__init__)(self, SimpleNamespace(settings=settings), local_no_auth=True)
+        self._client: ClientSession | None = None
 
         @web.middleware
-        async def bridge(request, handler):
+        async def bridge(
+            request: web.Request,
+            handler: Callable[[web.Request], Awaitable[web.StreamResponse]],
+        ) -> web.StreamResponse:
             if not request.path.startswith('/api/'):
                 return await handler(request)
             editing = request.method == 'PATCH' and re.fullmatch(r'/api/servers/[0-9]+', request.path)
@@ -32,9 +39,10 @@ class RemoteDashboard(LocalDashboard):
             edit_token = getattr(settings, 'dashboard_remote_edit_token', '')
             if request.method not in {'GET', 'HEAD'} and not ((editing or resetting) and edit_token):
                 raise web.HTTPForbidden(text='Editing is not enabled for this console')
+            assert self._client is not None
             try:
-                options = {'allow_redirects': False}
-                method = self._client.get
+                options: dict[str, Any] = {'allow_redirects': False}
+                method: Callable[..., Any] = self._client.get
                 if editing or resetting:
                     method = self._client.post if resetting else self._client.patch
                     options.update(json=await request.json(), headers={'Authorization': f'Bearer {edit_token}'})
@@ -57,7 +65,7 @@ class RemoteDashboard(LocalDashboard):
 
         self.app.middlewares.append(bridge)
 
-        async def client_context(app):
+        async def client_context(app: web.Application) -> AsyncIterator[None]:
             async with ClientSession(timeout=ClientTimeout(total=15),
                     headers={'Authorization': f'Bearer {settings.dashboard_api_token}'}) as client:
                 self._client = client

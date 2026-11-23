@@ -5,6 +5,7 @@ from __future__ import annotations
 from hashlib import sha256
 from io import BytesIO
 from collections import OrderedDict
+from collections.abc import Callable
 from bisect import bisect_right
 from math import lcm
 from functools import lru_cache
@@ -12,10 +13,12 @@ from bot.services.profile_badges import badge_icon
 import logging
 import math
 from time import monotonic
+from typing import Protocol, cast
 
-from PIL import Image, ImageDraw, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
-from bot.services.card_renderer import font, label
+from bot.services.card_renderer import font as _raw_font
+from bot.services.card_renderer import label as _raw_label
 from bot.services.profile_scoring import category_available, build_improvement_summary, get_rule_based_recommendation, select_improvement_priority
 from bot.services.profile_aesthetic import (
     ProfileVisual,
@@ -25,23 +28,49 @@ from bot.services.profile_aesthetic import (
     style_compatibility,
 )
 
+type _Font = ImageFont.FreeTypeFont | ImageFont.ImageFont
+
+
+class _LabelFn(Protocol):
+    def __call__(
+        self,
+        draw: ImageDraw.ImageDraw,
+        box: tuple[int, int, int, int],
+        value: object,
+        size: int = 26,
+        color: str = "#eee8dc",
+        minimum: int = 16,
+    ) -> None: ...
+
+
+font = cast(Callable[[int], _Font], _raw_font)
+label: _LabelFn = _raw_label
+
 
 def _rgb(value: str) -> tuple[int, int, int]:
     value = value.lstrip("#")
-    return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4))
+    return (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
 
 
-def _mix(left: tuple[int, int, int], right: tuple[int, int, int], amount: float):
-    return tuple(int(a + (b - a) * amount) for a, b in zip(left, right, strict=True))
+def _mix(
+    left: tuple[int, int, int],
+    right: tuple[int, int, int],
+    amount: float,
+) -> tuple[int, int, int]:
+    return (
+        int(left[0] + (right[0] - left[0]) * amount),
+        int(left[1] + (right[1] - left[1]) * amount),
+        int(left[2] + (right[2] - left[2]) * amount),
+    )
 
 
 def _readable_accent(color: str, background: str, minimum: float = 4.5) -> str:
     """Lift dark avatar colors until they remain readable on the card surface."""
-    def luminance(rgb):
+    def luminance(rgb: tuple[int, int, int]) -> float:
         channels = [value / 255 for value in rgb]
         linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
                   for value in channels]
-        return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+        return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722), strict=True))
 
     original = _rgb(color)
     surface = luminance(_rgb(background))
@@ -49,11 +78,11 @@ def _readable_accent(color: str, background: str, minimum: float = 4.5) -> str:
         candidate = _mix(original, (255, 255, 255), step / 100)
         light = luminance(candidate)
         if (max(light, surface) + 0.05) / (min(light, surface) + 0.05) >= minimum:
-            return '#%02x%02x%02x' % candidate
+            return '#{:02x}{:02x}{:02x}'.format(*candidate)
     return '#ffffff'
 
 
-_BACKGROUNDS = OrderedDict()
+_BACKGROUNDS: OrderedDict[tuple[tuple[int, int], str, str], Image.Image] = OrderedDict()
 _BACKGROUND_BUDGET = 4 * 1024 * 1024
 
 
@@ -112,7 +141,13 @@ def _avatar(image: Image.Image, visual: ProfileVisual, box: tuple[int, int, int,
     _avatar_art(image, visual, box, _open(visual.avatar), _open(visual.decoration))
 
 
-def _avatar_art(image, visual, box, art, decoration) -> None:
+def _avatar_art(
+    image: Image.Image,
+    visual: ProfileVisual,
+    box: tuple[int, int, int, int],
+    art: Image.Image | None,
+    decoration: Image.Image | None,
+) -> None:
     x, y, size, _ = box
     if art is None:
         art = Image.new("RGBA", (size, size), _rgb(visual.palette[1]) + (255,))
@@ -133,11 +168,26 @@ def _avatar_art(image, visual, box, art, decoration) -> None:
     draw.ellipse((x - 3, y - 3, x + size + 3, y + size + 3), outline=visual.palette[2], width=4)
 
 
-def _panel(draw: ImageDraw.ImageDraw, box, fill=(17, 14, 26, 188), outline=(255, 255, 255, 35)):
+def _panel(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    fill: tuple[int, int, int, int] = (17, 14, 26, 188),
+    outline: tuple[int, int, int, int] = (255, 255, 255, 35),
+) -> None:
     draw.rounded_rectangle(box, radius=20, fill=fill, outline=outline, width=2)
 
 
-def _score_bar(draw, x, y, width, name, value, color, *, points_text=None):
+def _score_bar(
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    width: int,
+    name: str,
+    value: int,
+    color: str,
+    *,
+    points_text: str | None = None,
+) -> None:
     draw.text((x, y), name.upper(), font=font(15), fill="#d8cfe0")
     if points_text is not None:
         draw.text((x + width, y - 2), points_text, anchor="ra", font=font(18), fill="white")
@@ -327,8 +377,10 @@ PROFILECHECK_AVATAR = (64, 400, 280, 280)
 PROFILECHECK_ANIMATION_WIDTH = 1000
 
 
-def _profile_spark(draw, x, y, size, color):
-    points = []
+def _profile_spark(
+    draw: ImageDraw.ImageDraw, x: float, y: float, size: float, color: str
+) -> None:
+    points: list[tuple[float, float]] = []
     for i in range(8):
         angle = i * math.pi / 4
         radius = size if i % 2 == 0 else size * .25
@@ -336,7 +388,9 @@ def _profile_spark(draw, x, y, size, color):
     draw.polygon(points, fill=color)
 
 
-def _profile_flower(draw, x, y, size, color):
+def _profile_flower(
+    draw: ImageDraw.ImageDraw, x: float, y: float, size: float, color: str
+) -> None:
     for i in range(5):
         angle = i * math.tau / 5
         tip = (x+math.sin(angle)*size, y+math.cos(angle)*size)
@@ -347,7 +401,7 @@ def _profile_flower(draw, x, y, size, color):
 
 
 @lru_cache(maxsize=1)
-def _profilecheck_frame():
+def _profilecheck_frame() -> Image.Image:
     # Brand decoration is shared, copied before any member's assets are painted.
     image = Image.new("RGBA", PROFILECHECK_SIZE, "#251c28")
     draw = ImageDraw.Draw(image)
@@ -365,19 +419,21 @@ def _profilecheck_frame():
 
 
 @lru_cache(maxsize=1)
-def _profilecheck_banner_mask():
+def _profilecheck_banner_mask() -> Image.Image:
     _, _, width, height = PROFILECHECK_BANNER
     mask = Image.new("L", (width, height))
     ImageDraw.Draw(mask).rounded_rectangle((0,0,width-1,height-1),radius=22,fill=255)
     return mask
 
 
-def _profilecheck_banner(image, banner):
+def _profilecheck_banner(image: Image.Image, banner: Image.Image) -> None:
     x,y,width,height = PROFILECHECK_BANNER
     image.paste(ImageOps.fit(banner,(width,height)),(x,y),_profilecheck_banner_mask())
 
 
-def _profile_score_icon(draw, kind, x, y, color):
+def _profile_score_icon(
+    draw: ImageDraw.ImageDraw, kind: int, x: int, y: int, color: str
+) -> None:
     if kind == 0:
         draw.ellipse((x-13,y-8,x+13,y+8),outline=color,width=3)
         draw.ellipse((x-4,y-4,x+4,y+4),fill=color)
@@ -392,7 +448,7 @@ def _profile_score_icon(draw, kind, x, y, color):
         _profile_spark(draw,x,y,13,color)
 
 
-def _profilecheck_score_overlay(visual):
+def _profilecheck_score_overlay(visual: ProfileVisual) -> Image.Image:
     overlay = Image.new("RGBA",PROFILECHECK_SIZE)
     draw = ImageDraw.Draw(overlay)
     draw.line((716,470,716,706),fill="#6d4d65",width=1)
@@ -414,7 +470,12 @@ def _profilecheck_score_overlay(visual):
     return overlay
 
 
-def _profilecheck_avatar(image, visual, art, decoration):
+def _profilecheck_avatar(
+    image: Image.Image,
+    visual: ProfileVisual,
+    art: Image.Image | None,
+    decoration: Image.Image | None,
+) -> None:
     x,y,size,_ = PROFILECHECK_AVATAR
     draw = ImageDraw.Draw(image)
     draw.ellipse((x-11,y-11,x+size+11,y+size+11),fill="#120f1b",outline="#e18cae",width=2)
@@ -425,7 +486,7 @@ def _profilecheck_avatar(image, visual, art, decoration):
         _profile_spark(draw,x+dx,y+dy,r,"#efa3c2")
 
 
-def _profilecheck_identity(draw, visual):
+def _profilecheck_identity(draw: ImageDraw.ImageDraw, visual: ProfileVisual) -> None:
     # Fit the nickname and server tag on the same line, inside the existing
     # identity column. Long names yield space to the tag without entering scores.
     tag = visual.server_tag
@@ -510,7 +571,7 @@ PROFILE_ANIMATION_DECODE_BYTES = 64 * 1024 * 1024
 PROFILE_MEDIA_BYTES = 8 * 1024 * 1024
 
 
-def _animation_frame_delay(source):
+def _animation_frame_delay(source: Image.Image) -> float:
     # Browsers interpret GIF delays <=10 ms as 100 ms. Clamping them to
     # 20 ms instead makes a re-encoded GIF play five times faster in Discord.
     # https://issues.chromium.org/issues/41352431
@@ -522,7 +583,7 @@ def _animation_frame_delay(source):
     return max(20, delay)
 
 
-def _animation_timeline(sources):
+def _animation_timeline(sources: dict[str, tuple[list[Image.Image], list[int]]]) -> list[int]:
     """Loop assets by elapsed time, preserving exact frame boundaries when bounded."""
     duration = min(PROFILE_ANIMATION_MS, lcm(*(ends[-1] for _, ends in sources.values())))
     boundaries = {0, duration}
@@ -547,10 +608,12 @@ def _animation_timeline(sources):
     return [*playable, duration]
 
 
-def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) -> tuple[bytes, str]:
+def profilecheck_media(
+    visual: ProfileVisual, *, max_bytes: int = PROFILE_MEDIA_BYTES
+) -> tuple[bytes, str]:
     """Render bounded full cycles; complex/oversized assets fall back to a static card."""
-    sources = {}
-    frames = []
+    sources: dict[str, tuple[list[Image.Image], list[int]]] = {}
+    frames: list[Image.Image] = []
     deadline = monotonic() + 12
     decoded_bytes = 0
     try:
@@ -563,7 +626,8 @@ def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) 
                     continue
                 if source.width * source.height > 4_000_000:
                     raise ValueError("animated asset exceeds pixel budget")
-                decoded, ends = [], []
+                decoded: list[Image.Image] = []
+                ends: list[int] = []
                 elapsed_ms = 0.0
                 sources[key] = (decoded, ends)
                 # Store at delivery resolution, not full CDN resolution.
@@ -595,7 +659,7 @@ def profilecheck_media(visual: ProfileVisual, *, max_bytes=PROFILE_MEDIA_BYTES) 
         static_art = {key: _open(getattr(visual, key)) for key in ("avatar", "decoration")
                       if key not in sources}
         times = _animation_timeline(sources)
-        durations = [end - start for start, end in zip(times, times[1:])]
+        durations = [end - start for start, end in zip(times, times[1:], strict=False)]
         for elapsed in times[:-1]:
             if monotonic() > deadline:
                 raise ValueError("animation exceeded render time budget")
@@ -730,7 +794,7 @@ def aura_details(visual: ProfileVisual) -> tuple[str, str, str, str]:
     """Build a stable aura with independently varied profile-born language."""
 
     affinity = profile_affinity(visual)
-    digest = sha256(f"aura:{visual.asset_fingerprint}".encode("utf-8")).digest()
+    digest = sha256(f"aura:{visual.asset_fingerprint}".encode()).digest()
     titles = AURA_ARCHETYPES[affinity]
     title = titles[digest[0] % len(titles)]
     energy = AURA_ESSENCES[digest[7] % len(AURA_ESSENCES)]
@@ -751,7 +815,8 @@ def aura_card(visual: ProfileVisual) -> bytes:
     from bot.services.aura_archive import render_archive
 
     title, _, energy, traits = aura_details(visual)
-    return _save(render_archive(visual, title=title, energy=energy, traits=traits,
+    renderer = cast(Callable[..., Image.Image], render_archive)
+    return _save(renderer(visual, title=title, energy=energy, traits=traits,
         affinity=profile_affinity(visual), class_name=profile_class(visual)))
 
 
@@ -867,16 +932,18 @@ def duostyle_card(left: ProfileVisual, right: ProfileVisual) -> bytes:
     from bot.services.duostyle_archive import render_duo
 
     compatibility = style_compatibility(left, right)
-    return _save(render_duo(left, right, score=compatibility,
+    renderer = cast(Callable[..., Image.Image], render_duo)
+    return _save(renderer(left, right, score=compatibility,
         verdict=duostyle_feedback(left, right, compatibility), reason=duostyle_reason(left, right)))
 
 
 def duostyle_reason(left: ProfileVisual, right: ProfileVisual) -> str:
     """Describe observable palette differences without another model call."""
     a, b = [_rgb(c) for c in left.palette[:4]], [_rgb(c) for c in right.palette[:4]]
-    distance = sum(min(sum((x-y)**2 for x,y in zip(c,d))**0.5 for d in b) for c in a) / len(a)
-    reverse = sum(min(sum((x-y)**2 for x,y in zip(c,d))**0.5 for d in a) for c in b) / len(b)
-    brightness = lambda colors: sum(.2126*r + .7152*g + .0722*b for r,g,b in colors)/len(colors)
+    distance = sum(min(sum((x-y)**2 for x,y in zip(c,d,strict=True))**0.5 for d in b) for c in a) / len(a)
+    reverse = sum(min(sum((x-y)**2 for x,y in zip(c,d,strict=True))**0.5 for d in a) for c in b) / len(b)
+    def brightness(colors: list[tuple[int, int, int]]) -> float:
+        return sum(.2126*r + .7152*g + .0722*b for r,g,b in colors)/len(colors)
     palette = "Closely matched colors" if (distance+reverse)/2 < 65 else "Distinct color palettes"
     light = "similar brightness" if abs(brightness(a)-brightness(b)) < 35 else "contrasting brightness"
     return f"{palette}, {light}."
@@ -891,5 +958,6 @@ def callingcard_card(
 ) -> bytes:
     from bot.services.callingcard_archive import render_callingcard
 
-    return _save(render_callingcard(visual, nickname=nickname,
+    renderer = cast(Callable[..., Image.Image], render_callingcard)
+    return _save(renderer(visual, nickname=nickname,
         relationship=relationship, titles=titles))

@@ -7,17 +7,15 @@ import re
 import time
 import logging
 from contextlib import AsyncExitStack
+from typing import Any, cast
 
 import discord
 from discord import app_commands
 from discord.ext import commands
-from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from bot.app import DEFAULT_COMMAND_PREFIX, MeyayaBot
-from bot.models.court import CourtConfiguration
 from bot.repositories.guild_settings import GuildSettingsRepository
-from bot.services.model_router import ModelRouter, ModelTier
 from bot.utils.embeds import meyaya_embed
 from bot.utils.command_parameters import normalize_member_parameters
 from bot.services.server_setup import load_setup
@@ -33,11 +31,11 @@ async def application_owner(interaction: discord.Interaction) -> bool:
     return interaction.user.id == 715925710849572904
 
 
-def private_owner(ctx):
+def private_owner(ctx: commands.Context[Any] | discord.Message) -> bool:
     return ctx.author.id == 715925710849572904
 
 
-def fantasy_reset_prefix(ctx):
+def fantasy_reset_prefix(ctx: commands.Context[Any]) -> bool:
     return getattr(ctx, "interaction", None) is None and (getattr(ctx, "prefix", "") or "").strip().casefold() == "uwu"
 
 
@@ -62,13 +60,13 @@ class AdminCog(commands.Cog):
 
     async def handle_veyra_glitch_test(self, message: discord.Message) -> bool:
         """Temporary uwu veyra hook; deliberately not a registered command."""
-        if not is_veyra_glitch_test(message) or not private_owner(message):
+        if not cast(Any, is_veyra_glitch_test)(message) or not private_owner(message):
             return False
         if self._veyra_test_running or time.monotonic() < self._veyra_test_available_at:
             return True
         self._veyra_test_running = True
         try:
-            await run_veyra_glitch(message.channel)
+            await cast(Any, run_veyra_glitch)(message.channel)
         finally:
             self._veyra_test_running = False
             self._veyra_test_available_at = time.monotonic() + 15
@@ -77,7 +75,12 @@ class AdminCog(commands.Cog):
     @commands.command(name="fantasyreset", hidden=True)
     @commands.check(private_owner)
     @commands.check(fantasy_reset_prefix)
-    async def fantasyreset(self, ctx: commands.Context, member: discord.User, confirmation: str = ""):
+    async def fantasyreset(
+        self,
+        ctx: commands.Context[Any],
+        member: discord.User,
+        confirmation: str = "",
+    ) -> None:
         # Defense in depth: no slash, mention-prefix or alternate-prefix route.
         if not private_owner(ctx) or not fantasy_reset_prefix(ctx):
             return
@@ -87,12 +90,15 @@ class AdminCog(commands.Cog):
                            allowed_mentions=discord.AllowedMentions.none())
             return
         cog = self.bot.get_cog("FantasyCog")
-        def affected(view):
+
+        def affected(view: Any) -> bool:
             if member.id in getattr(view, "participant_ids", ()):
                 return True
             profile = getattr(view, "profile", None)
-            return getattr(profile, "user_id", None) == member.id or (
-                profile is None and view.owner == member.id)
+            return bool(
+                getattr(profile, "user_id", None) == member.id
+                or (profile is None and view.owner == member.id)
+            )
         views = sorted((view for view in getattr(cog, "views", ()) if affected(view)), key=lambda view: view.id)
         try:
             # Wait for an in-flight local confirmation/reveal before deleting;
@@ -101,7 +107,7 @@ class AdminCog(commands.Cog):
                 for view in views:
                     await locks.enter_async_context(view.lock)
                 async with self.bot.db_session() as session:
-                    deleted = await FantasyProfileService(session).reset(member.id)
+                    deleted = await cast(Any, FantasyProfileService)(session).reset(member.id)
                 for view in tuple(getattr(cog, "views", ())):
                     if affected(view):
                         if view not in views:
@@ -121,43 +127,51 @@ class AdminCog(commands.Cog):
                        else f"User `{member.id}` has no awakened fantasy identity.",
                        allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.hybrid_command(name="serversetup", description="Set up Meyaya's chat access and moderation for this server.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="serversetup",
+        description="Set up Meyaya's chat access and moderation for this server.",
+    )
     @commands.guild_only()
     @commands.has_guild_permissions(manage_guild=True)
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)
     @commands.cooldown(1, 10, commands.BucketType.guild)
-    async def serversetup(self, ctx: commands.Context):
+    async def serversetup(self, ctx: commands.Context[Any]) -> None:
+        assert ctx.guild is not None
         await ctx.defer(ephemeral=True)
         try:
-            choices = await load_setup(self.bot, ctx.guild.id)
+            choices = await cast(Any, load_setup)(self.bot, ctx.guild.id)
         except SQLAlchemyError:
             await ctx.send("I couldn't load the server settings. Please try again shortly.", ephemeral=True)
             return
-        view = ServerSetupView(self.bot, ctx.guild.id, ctx.author.id, choices)
+        view = cast(Any, ServerSetupView)(self.bot, ctx.guild.id, ctx.author.id, choices)
         view.message = await ctx.send(embed=view.embed(), view=view, ephemeral=True,
                                       allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.hybrid_command(name="serverdashboard", description="See this server's allowance, remaining messages, activity, and settings.")
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="serverdashboard",
+        description="See this server's allowance, remaining messages, activity, and settings.",
+    )
     @commands.guild_only()
     @commands.has_guild_permissions(manage_guild=True)
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)
     @commands.cooldown(1, 10, commands.BucketType.guild)
-    async def serverdashboard(self, ctx: commands.Context):
+    async def serverdashboard(self, ctx: commands.Context[Any]) -> None:
+        assert ctx.guild is not None
         await ctx.defer(ephemeral=True)
         try:
-            data = await server_overview(self.bot, ctx.guild.id)
+            data = await cast(Any, server_overview)(self.bot, ctx.guild.id)
         except SQLAlchemyError:
             await ctx.send("I couldn't load server usage. Please try again shortly.", ephemeral=True)
             return
-        await ctx.send(embed=dashboard_embed(ctx.guild, data), ephemeral=True,
+        await ctx.send(embed=cast(Any, dashboard_embed)(ctx.guild, data), ephemeral=True,
                        allowed_mentions=discord.AllowedMentions.none())
 
     @commands.command(name="owner", hidden=True)
     @commands.check(private_owner)
     @commands.cooldown(1, 10, commands.BucketType.user)
-    async def owner(self, ctx: commands.Context):
+    async def owner(self, ctx: commands.Context[Any]) -> None:
         if self.bot.dashboard is None:
             await ctx.author.send(
                 "Dashboard is disabled. Set DASHBOARD_ENABLED=true on the bot host and restart."
@@ -181,7 +195,7 @@ class AdminCog(commands.Cog):
     @commands.check(private_owner)
     @commands.cooldown(1, 5, commands.BucketType.user)
     @commands.max_concurrency(1, per=commands.BucketType.default, wait=False)
-    async def errorlookup(self, ctx: commands.Context, error_id: str = ""):
+    async def errorlookup(self, ctx: commands.Context[Any], error_id: str = "") -> None:
         """Privately retrieve an existing error ID, including retained logs."""
         if not private_owner(ctx):
             return
@@ -191,15 +205,16 @@ class AdminCog(commands.Cog):
         if not re.fullmatch(r"MY-[A-F0-9]{8}", error_id):
             await ctx.send("Usage: `uwu errorlookup MY-1234ABCD`")
             return
-        items = health.search(error_id)
-        record = items[0] if items else await asyncio.to_thread(find_retained_error, error_id)
+        items = cast(Any, health).search(error_id)
+        record = items[0] if items else await asyncio.to_thread(cast(Any, find_retained_error), error_id)
         embed = discord.Embed(title=f"Error lookup · {error_id}", color=0xCF7195)
         if record is None:
             embed.description = "No matching error in this process or retained logs. It may have expired or belong to another bot instance."
         else:
             diagnosis = record["diagnosis"]
             embed.description = diagnosis["cause"]
-            def field(name, value):
+
+            def field(name: str, value: Any) -> None:
                 embed.add_field(name=name, value=discord.utils.escape_markdown(str(value or "Not recorded"))[:1024], inline=False)
             field("Next check", diagnosis["next_step"])
             field("Command / stage", f"{record.get('command')} / {record.get('stage')}")
@@ -221,7 +236,7 @@ class AdminCog(commands.Cog):
         except discord.Forbidden:
             await ctx.send("Enable DMs for the private error report, or look up the ID in the owner dashboard.")
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="chatblacklist",
         description="Block or restore a member's access to Meyaya in this server.",
     )
@@ -231,12 +246,13 @@ class AdminCog(commands.Cog):
     @app_commands.checks.has_permissions(manage_guild=True)
     async def chatblacklist(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         member: discord.Member,
         action: str = "status",
         *,
         reason: str = "Server manager decision",
-    ):
+    ) -> None:
+        assert ctx.guild is not None
         action = action.lower()
         if action not in {"block", "unblock", "status"}:
             await ctx.send(
@@ -264,8 +280,8 @@ class AdminCog(commands.Cog):
     )
     @commands.check(private_owner)
     @commands.cooldown(1, 60, commands.BucketType.user)
-    async def synccommands(self, ctx: commands.Context) -> None:
-        normalize_member_parameters(self.bot)
+    async def synccommands(self, ctx: commands.Context[Any]) -> None:
+        cast(Any, normalize_member_parameters)(self.bot)
         synced = await self.bot.tree.sync()
         if self.bot.settings.guild_id:
             guild = discord.Object(id=self.bot.settings.guild_id)
@@ -275,7 +291,7 @@ class AdminCog(commands.Cog):
             f"Synced {len(synced)} global commands. Refresh Discord if the menu still shows older options.",
         )
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="prefix",
         description="Show or change this server's written command prefix.",
     )
@@ -283,7 +299,7 @@ class AdminCog(commands.Cog):
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)
     @commands.has_guild_permissions(manage_guild=True)
-    async def prefix(self, ctx: commands.Context, value: str | None = None) -> None:
+    async def prefix(self, ctx: commands.Context[Any], value: str | None = None) -> None:
         if ctx.guild is None:
             await ctx.send("Server prefixes can only be configured inside a server.")
             return
@@ -338,7 +354,7 @@ class AdminCog(commands.Cog):
             ephemeral=ctx.interaction is not None,
         )
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="autoresponder",
         description="Enable or disable occasional automatic replies in this server.",
     )
@@ -353,7 +369,7 @@ class AdminCog(commands.Cog):
     @app_commands.default_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)
     @commands.has_guild_permissions(manage_guild=True)
-    async def autoresponder(self, ctx: commands.Context, mode: str = "status") -> None:
+    async def autoresponder(self, ctx: commands.Context[Any], mode: str = "status") -> None:
         if ctx.guild is None:
             await ctx.send("Use this command inside a server.")
             return
@@ -390,7 +406,7 @@ class AdminCog(commands.Cog):
             ephemeral=True,
         )
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="chatbind", description="Choose one channel or the whole server for Meyaya chat."
     )
     @commands.guild_only()
@@ -409,10 +425,11 @@ class AdminCog(commands.Cog):
     )
     async def chatbind(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         mode: str = "status",
         channel: discord.TextChannel | discord.VoiceChannel | discord.StageChannel | None = None,
-    ):
+    ) -> None:
+        assert ctx.guild is not None
         mode = mode.lower().strip()
         if mode not in {"channel", "server", "status"}:
             await ctx.send(

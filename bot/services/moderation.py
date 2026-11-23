@@ -1,17 +1,19 @@
 """Deterministic content checks and permission-safe lockdown recovery."""
 
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from collections import deque
 import hashlib
 import re
 import time
+from typing import Any
 from urllib.parse import urlsplit
 from weakref import WeakValueDictionary
 import discord
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
-from bot.models.moderation import ChannelLock, ModerationSettings
+from bot.models.moderation import ChannelLock
 
 INVITE = re.compile(
     r"(?<![\w.-])(?:https?://)?(?:www\.)?(?:discord\.gg/|discord(?:app)?\.com/invite/)([A-Za-z0-9-]+)",
@@ -27,11 +29,11 @@ LOCK_FIELDS = (
 )
 
 
-def on_probation(joined_at, now=None):
+def on_probation(joined_at: datetime | None, now: datetime | None = None) -> bool:
     return joined_at is not None and (now or datetime.now(UTC)) - joined_at < timedelta(days=3)
 
 
-def probation_blocked_link(content):
+def probation_blocked_link(content: str) -> bool:
     """Allow only Klipy hosts; one allowed URL never exempts other links."""
     for match in LINK.finditer(content):
         token = re.split(r'[\s<>"\']', content[match.start():], maxsplit=1)[0]
@@ -48,10 +50,17 @@ def probation_blocked_link(content):
 
 
 class SpamWindow:
-    def __init__(self):
-        self.entries = {}
+    def __init__(self) -> None:
+        self.entries: dict[tuple[int, int, str], deque[tuple[float, int]]] = {}
 
-    def record(self, guild_id, user_id, channel_id, fingerprints, now=None):
+    def record(
+        self,
+        guild_id: int,
+        user_id: int,
+        channel_id: int,
+        fingerprints: Iterable[str],
+        now: float | None = None,
+    ) -> bool:
         now = time.monotonic() if now is None else now
         for key, entries in list(self.entries.items()):
             if not entries or now - entries[-1][0] > 60:
@@ -70,16 +79,16 @@ class SpamWindow:
         return repeated
 
 
-def text_fingerprint(text):
+def text_fingerprint(text: str) -> str | None:
     normalized = " ".join(text.casefold().split())
     return hashlib.sha256(normalized.encode()).hexdigest() if len(normalized) >= 12 else None
 
 
-def snapshot_for(channel):
+def snapshot_for(channel: Any) -> dict[str, dict[str, Any]]:
     targets = dict(channel.overwrites)
     targets.setdefault(channel.guild.default_role, discord.PermissionOverwrite())
     targets.setdefault(channel.guild.me, channel.overwrites_for(channel.guild.me))
-    result = {}
+    result: dict[str, dict[str, Any]] = {}
     for target, overwrite in targets.items():
         fields = {
             name: getattr(overwrite, name)
@@ -97,18 +106,18 @@ def snapshot_for(channel):
 
 
 class LockdownService:
-    def __init__(self, bot):
+    def __init__(self, bot: Any) -> None:
         self.bot = bot
-        self.locks = WeakValueDictionary()
+        self.locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
 
-    def guild_lock(self, guild_id):
+    def guild_lock(self, guild_id: int) -> asyncio.Lock:
         lock = self.locks.get(guild_id)
         if lock is None:
             lock = asyncio.Lock()
             self.locks[guild_id] = lock
         return lock
 
-    async def apply(self, channel, *, raid=False, unlock=False):
+    async def apply(self, channel: Any, *, raid: bool = False, unlock: bool = False) -> str:
         """Caller holds guild lock. Save before Discord changes; retain failures for retry."""
         channel = await self.bot.fetch_channel(channel.id)
         async with self.bot.db_session() as session:

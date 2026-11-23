@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from bot.utils.command_parameters import member_usage
 
 
@@ -14,7 +14,7 @@ class HelpCommand:
     description: str
     category: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         object.__setattr__(self, "usage", member_usage(self.usage))
 
 
@@ -537,7 +537,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
 COMMANDS_BY_NAME: dict[str, HelpCommand] = {command.name: command for command in COMMANDS}
 
 
-@lru_cache(maxsize=None)
+@cache
 def commands_in_category(category: str) -> tuple[HelpCommand, ...]:
     """Return one category in its intentional user-facing order."""
 

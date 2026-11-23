@@ -10,11 +10,12 @@ import logging
 import threading
 import time
 from io import BytesIO
+from typing import Any, cast
 
 try:
     import audioop  # Python <= 3.12
 except ImportError:  # pragma: no cover - Python >= 3.13
-    import audioop_lts as audioop
+    import audioop_lts as audioop  # type: ignore[import-not-found,no-redef]
 
 import discord
 from sqlalchemy.exc import SQLAlchemyError
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 SPEECH_RMS_THRESHOLD = 800
 SPEECH_CONFIRM_FRAMES = 5  # roughly 100 ms at Discord's 20 ms frame size
 
+voice_recv: Any
 try:
     from discord.ext import voice_recv
 except ImportError:  # pragma: no cover - optional dependency
@@ -53,7 +55,7 @@ _AudioSinkBase = voice_recv.AudioSink if voice_recv is not None else object
 class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
     """Audio sink compatible with discord-ext-voice-recv AudioSink interface."""
 
-    def __init__(self, owner: "VoiceChatSession") -> None:
+    def __init__(self, owner: VoiceChatSession) -> None:
         super().__init__()
         self.owner = owner
         self._state = ResampleState()
@@ -61,14 +63,14 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
         self._utterance_active = False
         self._pre_roll: deque[bytes] = deque(maxlen=SPEECH_CONFIRM_FRAMES)
         self._utterance_lock = threading.RLock()
-        self._speaker_id = None
+        self._speaker_id: int | None = None
         self._speaker_last_audio = 0.0
         self._overlap_noted = False
 
     def wants_opus(self) -> bool:
         return False
 
-    def write(self, user: discord.Member | discord.User | None, data) -> None:
+    def write(self, user: discord.Member | discord.User | None, data: Any) -> None:
         if not getattr(self.owner, "listening_enabled", True) or getattr(
             self.owner, "_song_playing", False
         ):
@@ -76,7 +78,7 @@ class DiscordAudioReceiveSink(_AudioSinkBase):  # type: ignore[misc,valid-type]
         with self._utterance_lock:
             self._write_speaker(user, data)
 
-    def _write_speaker(self, user, data) -> None:
+    def _write_speaker(self, user: discord.Member | discord.User | None, data: Any) -> None:
         self.owner.note_received_frame(user, data)
         if user is None or user.bot:
             return
@@ -159,16 +161,16 @@ class VoiceChatSession:
         self.bot = bot
         self.guild_id = guild_id
         self.voice_name = voice_name or bot.settings.gemini_voice
-        self.voice_client: discord.VoiceClient | None = None
+        self.voice_client: Any = None
         self.diagnostics = VoiceDiagnostics()
         self.play_source = PcmStreamAudioSource(self._note_playback_frame)
         self._playback_state = ResampleState()
         self._gemini: GeminiLiveSession | None = None
         self._closed = False
         self._voice_usage_id = str(uuid4())
-        self._voice_usage_started = None
-        self._voice_usage_clock = None
-        self._voice_usage_checkpoint_at = 0
+        self._voice_usage_started: datetime | None = None
+        self._voice_usage_clock: float | None = None
+        self._voice_usage_checkpoint_at = 0.0
         self._loop = asyncio.get_running_loop()
         self._sink = DiscordAudioReceiveSink(self)
         self._last_end_sent_at = 0.0
@@ -178,20 +180,20 @@ class VoiceChatSession:
         self._logged_resample = False
         self._song_playing = False
         self.listening_enabled = True
-        self._voice_budget_task = None
+        self._voice_budget_task: asyncio.Task[None] | None = None
         self._voice_budget_registered = False
-        self._familiarity_task = None
+        self._familiarity_task: asyncio.Task[None] | None = None
         self._summary_buffer = (
             VoiceSummaryBuffer() if getattr(bot.settings, "voice_summaries_enabled", False) else None
         )
-        self._summary_channel_id = None
+        self._summary_channel_id: int | None = None
         self._summary_channel_name = "Voice channel"
-        self._summary_participants = {}
+        self._summary_participants: dict[int, dict[str, str]] = {}
 
     @property
     def connected_channel_id(self) -> int | None:
         if self.voice_client and self.voice_client.channel:
-            return self.voice_client.channel.id
+            return int(self.voice_client.channel.id)
         return None
 
     @property
@@ -280,7 +282,7 @@ class VoiceChatSession:
             except (SQLAlchemyError, TimeoutError):
                 logger.warning('Voice session metadata unavailable')
 
-    async def _watch_voice_budget(self):
+    async def _watch_voice_budget(self) -> None:
         """Bound session duration, including silent/paused sessions."""
         try:
             for minute in range(1, self.bot.settings.voice_session_minutes + 1):
@@ -295,24 +297,28 @@ class VoiceChatSession:
             logger.warning("Voice session timer failed guild=%s", self.guild_id)
         await self.close(reason="voice session duration reached")
 
-    def voice_usage_snapshot(self):
+    def voice_usage_snapshot(self) -> dict[str, Any] | None:
         from bot.services.voice_usage import daily_seconds
-        if getattr(self, '_voice_usage_started', None) is None or not self.is_active:
+        started = getattr(self, '_voice_usage_started', None)
+        clock = getattr(self, '_voice_usage_clock', None)
+        if started is None or clock is None or not self.is_active:
             return None
         return dict(session_id=self._voice_usage_id, guild_id=self.guild_id,
-            days=daily_seconds(self._voice_usage_started, time.monotonic()-self._voice_usage_clock))
+            days=cast(Any, daily_seconds)(started, time.monotonic() - clock))
 
-    async def checkpoint_voice_usage(self, *, final=False):
+    async def checkpoint_voice_usage(self, *, final: bool = False) -> None:
         from bot.services.voice_usage import daily_seconds, checkpoint
-        if getattr(self, '_voice_usage_started', None) is None:
+        started = getattr(self, '_voice_usage_started', None)
+        clock = getattr(self, '_voice_usage_clock', None)
+        if started is None or clock is None:
             return
         now = time.monotonic()
         if not final and (not self.is_active or now-self._voice_usage_checkpoint_at < 60):
             return
         try:
             async with asyncio.timeout(3):
-                await checkpoint(self.bot.db_session, self._voice_usage_id, self.guild_id,
-                    daily_seconds(self._voice_usage_started, now-self._voice_usage_clock))
+                await cast(Any, checkpoint)(self.bot.db_session, self._voice_usage_id, self.guild_id,
+                    cast(Any, daily_seconds)(started, now - clock))
             self._voice_usage_checkpoint_at = now
         except (SQLAlchemyError, TimeoutError):
             logger.warning('Voice usage checkpoint unavailable guild=%s', self.guild_id)
@@ -430,7 +436,7 @@ class VoiceChatSession:
             self._end_of_utterance_handle = None
         logger.info("[VOICE] Gemini connection recovered; ready for the next utterance")
 
-    def note_received_frame(self, user: discord.Member | discord.User | None, data) -> None:
+    def note_received_frame(self, user: discord.Member | discord.User | None, data: Any) -> None:
         """Record frames that have completed native DAVE and Opus processing."""
 
         self.diagnostics.increment("rtp_packets")
@@ -522,7 +528,8 @@ class VoiceChatSession:
         if not self.is_active or self._song_playing:
             raise RuntimeError("Voice is unavailable or a song is already playing")
         client = self.voice_client
-        finished = asyncio.get_running_loop().create_future()
+        assert client is not None
+        finished: asyncio.Future[None] = asyncio.get_running_loop().create_future()
         source = discord.FFmpegPCMAudio(
             BytesIO(audio),
             pipe=True,
@@ -540,7 +547,7 @@ class VoiceChatSession:
         self._user_is_speaking = False
         self.play_source.clear()
 
-        def complete(error):
+        def complete(error: Exception | None) -> None:
             if not finished.done():
                 if error:
                     finished.set_exception(RuntimeError("Song playback failed"))
@@ -671,11 +678,11 @@ class VoiceChatSession:
             self._summary_buffer.interrupted()
         self.play_source.clear()
 
-    def _voice_gap(self, reason):
+    def _voice_gap(self, reason: str) -> None:
         if self._summary_buffer is not None:
             self._summary_buffer.gap(reason)
 
-    def _capture_voice_text(self, role, text):
+    def _capture_voice_text(self, role: str, text: str) -> None:
         if self._summary_buffer is None:
             return
         if self._closed:
@@ -690,7 +697,7 @@ class VoiceChatSession:
 
         members = [(member.id, member.display_name) for member in channel.members if not member.bot]
         try:
-            async with asyncio.timeout(3), self.bot.db_session() as session:
+            async with asyncio.timeout(3), cast(Any, self.bot.db_session)() as session:
                 service = MeyayaSystemService(session)
                 lines = await service.voice_prompt_lines(self.guild_id, members)
                 lore = await ServerLoreRepository(session).list_current(self.guild_id, limit=12)
@@ -708,7 +715,7 @@ class VoiceChatSession:
         """Update familiarity once when a member begins a voice utterance."""
 
         try:
-            async with asyncio.timeout(3), self.bot.db_session() as session:
+            async with asyncio.timeout(3), cast(Any, self.bot.db_session)() as session:
                 service = MeyayaSystemService(session)
                 guild = self.bot.get_guild(self.guild_id)
                 member = guild.get_member(user_id) if guild else None

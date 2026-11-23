@@ -66,7 +66,7 @@ class AniListCharacterProvider:
         self.cache_ttl = cache_ttl
         self._cache: dict[int, tuple[float, CharacterDisplay]] = {}
         # Retain a lock only while requests for that character are active.
-        self._locks = WeakValueDictionary()
+        self._locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
 
     async def fetch(self, provider_id: int) -> CharacterDisplay:
         provider_id = int(provider_id)
@@ -100,7 +100,7 @@ class AniListCharacterProvider:
                     raise CharacterProviderError("AniList is temporarily unavailable.")
                 if response.status >= 400 or payload.get("errors"):
                     raise CharacterNotFound("That AniList character is unavailable.")
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise CharacterProviderError("AniList lookup timed out.") from exc
         except aiohttp.ClientError as exc:
             raise CharacterProviderError("AniList could not be reached.") from exc

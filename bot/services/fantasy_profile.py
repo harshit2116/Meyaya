@@ -1,16 +1,23 @@
 """Short transactions finish before avatar downloads, rendering or reveal edits."""
 
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import Any, cast
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bot.data.fantasy_alignment import PATRONS, alignment_values, patron_for
+from bot.models.fantasy_profile import FantasyProfile
+from bot.repositories.fantasy_dungeon import FantasyDungeonRepository
 from bot.repositories.fantasy_profiles import FantasyProfileRepository
 from bot.services.fantasy_generation import generate_identity
-from datetime import UTC, datetime, timedelta
-from bot.data.fantasy_alignment import PATRONS, patron_for, alignment_values
-from bot.repositories.fantasy_dungeon import FantasyDungeonRepository
 from bot.services.fantasy_progression import growth_values
 
 REBIRTH_COOLDOWN = timedelta(hours=24)
 
 
-def utc(value):
+def utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
@@ -23,34 +30,40 @@ class AlignmentUnavailable(ValueError):
 
 
 class FantasyProfileService:
-    def __init__(self, session):
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.profiles = FantasyProfileRepository(session)
 
-    async def get(self, user_id):
+    async def get(self, user_id: int) -> FantasyProfile | None:
         return await self.profiles.get(user_id)
 
-    async def reset(self, user_id):
+    async def reset(self, user_id: int) -> bool:
         """Explicit owner administration only; ordinary awakening never calls this."""
         async with self.session.begin():
             return await self.profiles.reset(user_id)
 
-    async def choose_alignment(self, user_id, expected_awakening, choice):
+    async def choose_alignment(
+        self, user_id: int, expected_awakening: datetime, choice: str
+    ) -> FantasyProfile:
         if choice not in PATRONS:
             raise AlignmentUnavailable("That presence cannot claim a soul.")
         async with self.session.begin():
             profile = await self.profiles.locked(user_id)
             if profile is None or utc(profile.awakened_at) != utc(expected_awakening):
                 raise AlignmentUnavailable("Your identity changed. Open `/fantasyprofile` again.")
-            if patron_for(profile):
+            if cast(Any, patron_for)(profile):
                 raise AlignmentUnavailable(
                     "Your oath is already sealed. Only rebirth can change it."
                 )
             if await FantasyDungeonRepository(self.session).active(user_id):
                 raise AlignmentUnavailable("Abandon or finish your dungeon before changing allegiance.")
-            return await self.profiles.replace_identity(user_id, alignment_values(profile, choice))
+            return await self.profiles.replace_identity(
+                user_id, cast(Any, alignment_values)(profile, choice)
+            )
 
-    async def rebirth(self, user_id, expected_awakening, *, now=None):
+    async def rebirth(
+        self, user_id: int, expected_awakening: datetime, *, now: datetime | None = None
+    ) -> FantasyProfile:
         """Lock, revalidate, reroll and commit together; no rendering in this transaction."""
         async with self.session.begin():
             profile = await self.profiles.locked(user_id)
@@ -77,7 +90,7 @@ class FantasyProfileService:
             values.update(rebirth_count=(profile.rebirth_count or 0) + 1, last_rebirth_at=current)
             return await self.profiles.replace_identity(user_id, values)
 
-    async def awaken(self, user_id):
+    async def awaken(self, user_id: int) -> tuple[FantasyProfile, bool]:
         async with self.session.begin():
             existing = await self.profiles.get(user_id)
             if existing is not None:

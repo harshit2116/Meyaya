@@ -1,8 +1,12 @@
 """Conservative callbacks from existing, scoped memory reads. No extra model calls."""
+from __future__ import annotations
+
+from collections.abc import Callable, Iterable
 from hashlib import blake2b
 import json
 import re
 import time
+from typing import Any
 import unicodedata
 
 PREFIX = "NATURAL_CALLBACK "
@@ -23,18 +27,19 @@ TOPICS = (
 )
 
 
-def words(text):
+def words(text: str) -> set[str]:
     normalized = unicodedata.normalize("NFKC", text).casefold()
     normalized = ''.join(c if c.isalnum() or unicodedata.category(c).startswith('M') else ' ' for c in normalized)
     return {word for word in normalized.split() if len(word) >= 3 and word not in STOP}
 
 
-def candidates(lines, current_text):
-    if BOUNDARY.search(current_text) or any(line.startswith("UNFINISHED_TOPIC ") for line in lines):
+def candidates(lines: Iterable[str], current_text: str) -> list[str]:
+    line_list = list(lines)
+    if BOUNDARY.search(current_text) or any(line.startswith("UNFINISHED_TOPIC ") for line in line_list):
         return []
     current = words(current_text)
-    ranked = []
-    for line in lines:
+    ranked: list[tuple[int, str]] = []
+    for line in line_list:
         if '[DISPUTED:' in line:
             continue
         match = FACT.fullmatch(line)
@@ -49,11 +54,11 @@ def candidates(lines, current_text):
 
 
 class MemoryCallbackGate:
-    def __init__(self, redis=None, clock=time.monotonic):
+    def __init__(self, redis: Any = None, clock: Callable[[], float] = time.monotonic) -> None:
         self.redis, self.clock = redis, clock
-        self.recent = {}
+        self.recent: dict[str, float] = {}
 
-    def _remember(self, key, ttl):
+    def _remember(self, key: str, ttl: float) -> bool:
         now = self.clock()
         # Keep only suppression timestamps/hashes, never personal fact text.
         self.recent = {k: expires for k, expires in self.recent.items() if expires > now}
@@ -63,12 +68,16 @@ class MemoryCallbackGate:
         self.recent[key] = now + ttl
         return True
 
-    async def choose(self, lines, current_text, guild_id, user_id):
+    async def choose(
+        self, lines: Iterable[str], current_text: str, guild_id: int | None, user_id: int
+    ) -> str | None:
         member = f"meyaya:callback:{guild_id}:{user_id}"
         if self.recent.get(member, 0) > self.clock():
             return None
         for fact in candidates(lines, current_text):
             match = FACT.fullmatch(fact)
+            if match is None:
+                continue
             identity = '|'.join((match[1], match[2], ' '.join(match[4].casefold().split())))
             digest = blake2b(identity.encode('utf-8'), digest_size=16).hexdigest()
             key = member + ':' + digest
@@ -87,7 +96,7 @@ class MemoryCallbackGate:
             return PREFIX + json.dumps({'member': member, 'key': key, 'fact': fact}, ensure_ascii=False)
         return None
 
-    async def delivered(self, lines):
+    async def delivered(self, lines: Iterable[str]) -> None:
         for line in lines:
             if not line.startswith(PREFIX):
                 continue

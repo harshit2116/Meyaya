@@ -1,9 +1,14 @@
 """Sparse cinematic beats; cosmetic failures never abort a battle."""
 
+from __future__ import annotations
+
 import asyncio
+from typing import Any
+
 import discord
-from bot.utils.embeds import meyaya_embed
+
 from bot.utils.application_emojis import application_emojis
+from bot.utils.embeds import meyaya_embed
 
 INTRO_GIF = "https://klipy.com/gifs/honkai-impact-22"
 INTRO_GIF_DURATION_SECONDS = 4.66
@@ -11,7 +16,7 @@ INTRO_GIF_LOAD_GRACE_SECONDS = 2.0
 VICTORY_GIF = "https://klipy.com/gifs/elysia-honkai-impact-3rd-3"
 
 
-def victory_dialogue(state):
+def victory_dialogue(state: Any) -> str:
     if state.winner_id == state.left.user_id:
         return "# Impossible result confirmed.\n\n**You weren't supposed to be able to do that.**\n\nHehe. I like you even more now."
     if state.winner_id is None:
@@ -19,7 +24,7 @@ def victory_dialogue(state):
     return "# That was beautiful.\n\n> **Unfortunately for you...**\n\n## so am I."
 
 
-def contextual_victory(state):
+def contextual_victory(state: Any) -> str:
     ratio = state.right.hp / max(1, state.right.max_hp)
     return (
         "You were one heartbeat away."
@@ -40,14 +45,14 @@ class BossPresentation:
     embed_colour = 0xEEB4E4
     embed_title = "Everbloom"
 
-    def __init__(self, cog, view, channel):
+    def __init__(self, cog: Any, view: Any, channel: Any) -> None:
         self.cog, self.view, self.channel = cog, view, channel
-        self.message = None
-        self.urls = {}
+        self.message: Any = None
+        self.urls: dict[str, str | None] = {}
         self.speeches = 0
         self.message_has_gif = False
 
-    async def gif(self, url):
+    async def gif(self, url: str) -> str | None:
         if url not in self.urls:
             self.urls[url] = None
             try:
@@ -60,14 +65,18 @@ class BossPresentation:
                 pass
         return self.urls[url]
 
-    async def beat(self, text, *, gif=None, new_message=False):
+    async def beat(
+        self, text: str, *, gif: str | None = None, new_message: bool = False
+    ) -> None:
         embed = None
         if gif:
             url = await self.gif(gif)
             if url:
                 embed = meyaya_embed(self.embed_title, color=self.embed_colour, icon="✦")
                 embed.set_image(url=url)
-        kwargs = dict(content=text, embed=embed, allowed_mentions=discord.AllowedMentions.none())
+        kwargs: dict[str, Any] = dict(
+            content=text, embed=embed, allowed_mentions=discord.AllowedMentions.none()
+        )
         sender = (
             self.channel.send
             if self.message is None or new_message or self.message_has_gif
@@ -86,7 +95,7 @@ class BossPresentation:
         self.message_has_gif = kwargs["embed"] is not None
         self.view.cinematic_message = self.message
 
-    async def intro(self, state):
+    async def intro(self, state: Any) -> None:
         icon = next(
             (str(e) for e in application_emojis(self.cog.bot) if e.name == "meyaya_yay"), "✦"
         )
@@ -111,12 +120,12 @@ class BossPresentation:
         )
         await asyncio.sleep(1.5)
 
-    async def speak(self, state):
+    async def speak(self, state: Any) -> None:
         if state.dialogue and self.speeches < 3:
             self.speeches += 1
             await self.beat(f"# Meyaya\n\n**{state.dialogue}**")
 
-    async def finish(self, state, *, history_note=""):
+    async def finish(self, state: Any, *, history_note: str = "") -> None:
         await asyncio.sleep(0.8)
         text = victory_dialogue(state)
         if state.winner_id == state.right.user_id:

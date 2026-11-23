@@ -1,17 +1,20 @@
 """Combined dynamic status thumbnail; other encounter content stays native."""
 
-from io import BytesIO
-from functools import lru_cache
+from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
+from functools import lru_cache
+from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-from bot.services.card_renderer import font
+from bot.services.card_renderer import CardFont, font
 
 
 @lru_cache(maxsize=24)
-def _title_font(size):
+def _title_font(size: int) -> CardFont:
     for path in ("C:/Windows/Fonts/georgiab.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"):
         if Path(path).is_file():
             return ImageFont.truetype(path, size)
@@ -19,7 +22,7 @@ def _title_font(size):
 
 
 @lru_cache(maxsize=8)
-def _encounter_base(path, modified_ns):
+def _encounter_base(path: str | Path, modified_ns: int) -> Image.Image:
     """Decode and resize once per approved asset; callers must copy before drawing."""
     with Image.open(path) as source:
         source.draft("RGB", (1024, 1024))
@@ -30,7 +33,7 @@ def _encounter_base(path, modified_ns):
 
 
 @lru_cache(maxsize=16)
-def render_scene_art(path, modified_ns, enemy_name=""):
+def render_scene_art(path: str | Path, modified_ns: int, enemy_name: str = "") -> bytes:
     """Cache static artwork, optionally with an encounter's unchanging name."""
     art = _encounter_base(path, modified_ns)
     if enemy_name:
@@ -57,7 +60,15 @@ def render_scene_art(path, modified_ns, enemy_name=""):
 
 
 @lru_cache(maxsize=24)
-def render_encounter_art(path, modified_ns, name, hp, max_hp, intent, status):
+def render_encounter_art(
+    path: str | Path,
+    modified_ns: int,
+    name: str,
+    hp: int,
+    max_hp: int,
+    intent: str,
+    status: str,
+) -> bytes:
     """Decorate approved art with live enemy data; never alter the source file.
 
     The timestamp invalidates replaced assets; the immutable base is shared
@@ -125,27 +136,38 @@ def render_encounter_art(path, modified_ns, name, hp, max_hp, intent, status):
 
 
 @lru_cache(maxsize=16)
-def _enemy_portrait(path):
+def _enemy_portrait(path: str | Path) -> Image.Image:
     with Image.open(path) as image:
         return ImageOps.fit(image.convert("RGB"), (112, 128), method=Image.Resampling.LANCZOS)
 
 
-def render_status_panel(name, hp, max_hp, portrait, *, mp=None, max_mp=None, effects=()):
+def render_status_panel(
+    name: str,
+    hp: int,
+    max_hp: int,
+    portrait: Image.Image,
+    *,
+    mp: int | None = None,
+    max_mp: int | None = None,
+    effects: Iterable[str] = (),
+) -> BytesIO:
     """Return one status panel, without header, battle log, XP or action buttons."""
     image = Image.new("RGB", (900, 195 if mp is not None else 180), "#11151e")
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle((1, 1, 898, image.height - 2), radius=12, outline="#3d4253", width=2)
     image.paste(ImageOps.fit(portrait, (112, 128), method=Image.Resampling.LANCZOS), (20, 24))
 
-    def text(x, y, value, size=23, color="#eeeaf2", width=728):
-        value = str(value)
-        while size > 16 and draw.textlength(value, font=font(size)) > width:
+    def text(
+        x: int, y: int, value: object, size: int = 23, color: str = "#eeeaf2", width: int = 728
+    ) -> None:
+        label = str(value)
+        while size > 16 and draw.textlength(label, font=font(size)) > width:
             size -= 1
-        while value and draw.textlength(value, font=font(size)) > width:
-            value = value[:-2] + "…"
-        draw.text((x, y), value, font=font(size), fill=color)
+        while label and draw.textlength(label, font=font(size)) > width:
+            label = label[:-2] + "…"
+        draw.text((x, y), label, font=font(size), fill=color)
 
-    def bar(y, label, current, maximum, color):
+    def bar(y: int, label: str, current: int, maximum: int, color: str) -> None:
         text(154, y - 5, label, 22, color)
         draw.rounded_rectangle((201, y, 653, y + 23), radius=7, fill="#282e3b", outline="#475063")
         fill = round(452 * max(0, min(1, current / max(1, maximum))))
@@ -156,7 +178,7 @@ def render_status_panel(name, hp, max_hp, portrait, *, mp=None, max_mp=None, eff
     text(154, 20, name, 27)
     bar(76, "HP", hp, max_hp, "#f27da9" if mp is not None else "#ec566c")
     if mp is not None:
-        bar(119, "MP", mp, max_mp, "#8981ef")
+        bar(119, "MP", mp, max_mp or 0, "#8981ef")
     text(154, 158 if mp is not None else 125, " · ".join(effects), 18, "#c6b0f2")
     output = BytesIO()
     image.save(output, format="PNG")
@@ -164,10 +186,12 @@ def render_status_panel(name, hp, max_hp, portrait, *, mp=None, max_mp=None, eff
     return output
 
 
-def render_dungeon_panels(profile, run, asset, avatar, player_name):
+def render_dungeon_panels(
+    profile: Any, run: Any, asset: str | Path, avatar: bytes | None, player_name: str
+) -> tuple[BytesIO, bool]:
     battle = run.state["battle"]
 
-    def effects(fighter):
+    def effects(fighter: Mapping[str, Any]) -> list[str]:
         result = [f"Shield {fighter['shield']}"] if fighter.get("shield", 0) > 0 else []
         result.extend(f"{key.replace('_', ' ').title()} ({duration})"
                       for key, duration in fighter.get("statuses", {}).items() if duration > 0)

@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from copy import deepcopy
 import logging
 from time import monotonic
+from typing import Any
 
 import discord
-from bot.utils.components_v2 import MeyayaView
 from discord.ext import commands
 
+from bot.app import MeyayaBot
 from bot.logging.health import health
 from bot.services.solo_games import SoloGame
+from bot.utils.components_v2 import MeyayaView
 from bot.utils.embeds import meyaya_embed
 
 logger = logging.getLogger(__name__)
@@ -20,35 +23,43 @@ ICONS = {"escape": "🔑", "detective": "🔎", "personalitytest": "🎭"}
 
 
 class SoloView(MeyayaView):
-    def __init__(self, owner, kind, release, *, acquire=None, forget=None):
+    def __init__(
+        self,
+        owner: int,
+        kind: str,
+        release: Callable[[], None],
+        *,
+        acquire: Callable[[], bool] | None = None,
+        forget: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__(timeout=180)
         self.owner, self.kind, self.release = owner, kind, release
-        self.acquire = acquire or (lambda: True)
-        self.forget = forget or (lambda: None)
+        self.acquire: Callable[[], bool] = acquire or (lambda: True)
+        self.forget: Callable[[], None] = forget or (lambda: None)
         self.game = SoloGame(kind)
         self.lock = asyncio.Lock()
-        self.message = None
+        self.message: discord.Message | None = None
         self.revision = 0
         self.has_slot = True
         self.disposed = False
         self.started = monotonic()
-        self.duration = None
+        self.duration: int | None = None
         self.render_buttons()
 
     @property
-    def closed(self):
+    def closed(self) -> bool:
         return self.game.done
 
     @property
-    def step(self):
+    def step(self) -> int:
         return self.game.step
 
-    def release_slot(self):
+    def release_slot(self) -> None:
         if self.has_slot:
             self.has_slot = False
             self.release()
 
-    def dispose(self):
+    def dispose(self) -> None:
         if self.disposed:
             return
         self.disposed = True
@@ -57,7 +68,7 @@ class SoloView(MeyayaView):
         self.stop()
         self.forget()
 
-    def render_buttons(self):
+    def render_buttons(self) -> None:
         self.clear_items()
         revision = self.revision
         if self.game.done:
@@ -68,22 +79,31 @@ class SoloView(MeyayaView):
                        for index, a in enumerate(self.game.actions())]
             actions.append(("quit", "End game", True, discord.ButtonStyle.secondary, 3))
         for key, label, enabled, style, row in actions:
-            button = discord.ui.Button(label=label, disabled=not enabled, style=style, row=row,
-                                       custom_id=f"meyaya:solo:{self.id}:{revision}:{key}")
+            button: discord.ui.Button[Any] = discord.ui.Button(
+                label=label,
+                disabled=not enabled,
+                style=style,
+                row=row,
+                custom_id=f"meyaya:solo:{self.id}:{revision}:{key}",
+            )
 
-            async def callback(interaction, choice=key, version=revision):
+            async def callback(
+                interaction: discord.Interaction,
+                choice: str = key,
+                version: int = revision,
+            ) -> None:
                 await self.choose(interaction, choice, version)
 
-            button.callback = callback
+            button.callback = callback  # type: ignore[method-assign]
             self.add_item(button)
 
-    async def interaction_check(self, interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != self.owner:
             await interaction.response.send_message("This is another player's run. Start your own with `/" + self.kind + "`.", ephemeral=True)
             return False
         return True
 
-    def embed(self):
+    def embed(self) -> discord.Embed:
         title, text, fields = self.game.presentation()
         tone = "magic"
         if self.closed:
@@ -106,7 +126,7 @@ class SoloView(MeyayaView):
         embed.set_footer(text=footer)
         return embed
 
-    async def choose(self, interaction, choice, revision):
+    async def choose(self, interaction: discord.Interaction, choice: str, revision: int) -> None:
         # Acknowledge before any lock or Discord edit wait. Concurrent clicks
         # never silently become a choice on the next scene.
         await interaction.response.defer()
@@ -165,7 +185,7 @@ class SoloView(MeyayaView):
             if self.closed:
                 self.release_slot()
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         async with self.lock:
             if self.disposed:
                 return
@@ -188,7 +208,12 @@ class SoloView(MeyayaView):
                 except discord.HTTPException:
                     pass
 
-    async def on_error(self, interaction, error, item):
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        item: discord.ui.Item[Any],
+    ) -> None:
         error_id = health.capture(error, command=self.kind,
                                   guild_id=getattr(interaction, "guild_id", None),
                                   channel_id=getattr(interaction, "channel_id", None),
@@ -207,12 +232,12 @@ class SoloView(MeyayaView):
 
 
 class SoloGamesCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
-        self.active = {}
-        self.views = set()
+        self.active: dict[tuple[int, int], SoloView] = {}
+        self.views: set[SoloView] = set()
 
-    async def start(self, ctx, kind):
+    async def start(self, ctx: commands.Context[Any], kind: str) -> None:
         key = (ctx.guild.id if ctx.guild else 0, ctx.author.id)
         if key in self.active:
             await ctx.send("You already have a solo game running. Use its **End game** button to leave it first.")
@@ -221,11 +246,13 @@ class SoloGamesCog(commands.Cog):
             await ctx.send("All game tables are busy. Please try again shortly.")
             return
 
-        def release():
+        view: SoloView
+
+        def release() -> None:
             if self.active.get(key) is view:
                 self.active.pop(key, None)
 
-        def acquire():
+        def acquire() -> bool:
             if key in self.active or len(self.active) >= 64:
                 return False
             self.active[key] = view
@@ -242,25 +269,25 @@ class SoloGamesCog(commands.Cog):
             view.dispose()
             raise
 
-    async def cog_unload(self):
+    async def cog_unload(self) -> None:
         for view in tuple(self.views):
             view.dispose()
 
-    @commands.hybrid_command(description="Escape with branching routes, useful items, and a ticking clock.")
+    @commands.hybrid_command(description="Escape with branching routes, useful items, and a ticking clock.")  # type: ignore[arg-type]
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def escape(self, ctx):
+    async def escape(self, ctx: commands.Context[Any]) -> None:
         await self.start(ctx, "escape")
 
-    @commands.hybrid_command(description="Choose your leads, study the evidence, and name the culprit.")
+    @commands.hybrid_command(description="Choose your leads, study the evidence, and name the culprit.")  # type: ignore[arg-type]
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def detective(self, ctx):
+    async def detective(self, ctx: commands.Context[Any]) -> None:
         await self.start(ctx, "detective")
 
-    @commands.hybrid_command(description="Answer six questions and discover your personality mix.")
+    @commands.hybrid_command(description="Answer six questions and discover your personality mix.")  # type: ignore[arg-type]
     @commands.cooldown(1, 5, commands.BucketType.user)
-    async def personalitytest(self, ctx):
+    async def personalitytest(self, ctx: commands.Context[Any]) -> None:
         await self.start(ctx, "personalitytest")
 
 
-async def setup(bot):
+async def setup(bot: MeyayaBot) -> None:
     await bot.add_cog(SoloGamesCog(bot))

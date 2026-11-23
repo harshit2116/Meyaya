@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import blake2s
 import re
-from typing import Callable
+from collections.abc import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -301,7 +301,16 @@ class MeyayaSystemService:
         user_state = await self.states.get_user(scope_id, user_id)
         return self.prompt_lines_from_records(user_id, display_name, global_state, user_state, now=now, guild_id=guild_id)
 
-    def prompt_lines_from_records(self, user_id, display_name, global_state, user_state, *, now=None, guild_id=None):
+    def prompt_lines_from_records(
+        self,
+        user_id: int,
+        display_name: str,
+        global_state: MeyayaGlobalState | None,
+        user_state: MeyayaUserState | None,
+        *,
+        now: datetime | None = None,
+        guild_id: int | None = None,
+    ) -> list[str]:
         """Reuse freshly loaded profile records without fetching them again."""
         now = now or self._now()
         global_values = self._effective_global(global_state, now)
@@ -606,6 +615,7 @@ class MeyayaSystemService:
             # Wait for an interaction path that knows the verified Discord name.
             return
         stem, compact = identity
+        choices: tuple[str, ...]
 
         if state.annoyance >= 35:
             choices = (
@@ -651,7 +661,7 @@ class MeyayaSystemService:
             choices = themed + themed + choices
 
         digest = blake2s(
-            f"nickname:v3:{state.user_id}:{compact}".encode("utf-8"),
+            f"nickname:v3:{state.user_id}:{compact}".encode(),
             digest_size=2,
         ).digest()
         revision = getattr(state, "nickname_revision", 0) or 0
@@ -664,7 +674,7 @@ class MeyayaSystemService:
 
     @classmethod
     def _themed_nicknames(cls, stem: str, compact: str) -> tuple[str, ...]:
-        matches = []
+        matches: list[str] = []
         for keywords, ideas in NICKNAME_THEMES:
             if any(keyword in compact for keyword in keywords):
                 matches.extend(

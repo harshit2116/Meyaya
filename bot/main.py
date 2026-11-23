@@ -19,7 +19,8 @@ async def main() -> None:
     task = asyncio.current_task()
     loop = asyncio.get_running_loop()
     with suppress(NotImplementedError):
-        loop.add_signal_handler(signal.SIGTERM, task.cancel)
+        if task is not None:
+            loop.add_signal_handler(signal.SIGTERM, task.cancel)
     async with bot:
         await bot.start(bot.settings.discord_token)
 

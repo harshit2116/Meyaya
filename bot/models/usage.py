@@ -1,6 +1,7 @@
 """Daily aggregate usage; no message content is retained."""
 
 from datetime import date
+from typing import Any
 from sqlalchemy import BigInteger, Date, Integer, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -15,5 +16,5 @@ class GuildUsage(Base):
     bonus_chats: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
     reset_generation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
     commands: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    command_counts: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict,
+    command_counts: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict,
                                                server_default=text("'{}'::jsonb"))

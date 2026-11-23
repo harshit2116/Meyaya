@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from bot.logging.telemetry import discord_context, event
-
-import logging
 import asyncio
+import logging
+from typing import Any
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from bot.app import MeyayaBot
+from bot.logging.telemetry import discord_context, event
 from bot.models.court import CourtCase
 from bot.services.court import (
     CourtClarification,
@@ -42,12 +42,12 @@ class CourtCog(commands.Cog):
         self.bot = bot
         self.judge = CourtJudge(bot.build_llm_provider())
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="setcourt",
         description="Set this channel as the server's Meyaya court.",
     )
     @app_commands.default_permissions(manage_guild=True)
-    async def setcourt(self, ctx: commands.Context) -> None:
+    async def setcourt(self, ctx: commands.Context[Any]) -> None:
         if ctx.guild is None or ctx.channel is None:
             await ctx.send("Court configuration only works inside a server.")
             return
@@ -82,12 +82,12 @@ class CourtCog(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="removecourt",
         description="Disable Meyaya Court for this server.",
     )
     @app_commands.default_permissions(manage_guild=True)
-    async def removecourt(self, ctx: commands.Context) -> None:
+    async def removecourt(self, ctx: commands.Context[Any]) -> None:
         if ctx.guild is None:
             await ctx.send("Court configuration only works inside a server.")
             return
@@ -121,14 +121,14 @@ class CourtCog(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="court", description="Take a member to Meyaya Court over a server dispute."
     )
     @app_commands.describe(defendant="Member being accused", reason="Charge or reason for the case")
     @commands.guild_only()
     async def court(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         defendant: discord.Member,
         *,
         reason: str,
@@ -232,7 +232,7 @@ class CourtCog(commands.Cog):
             async with self.bot.db_session() as session:
                 case = await CourtService(session).judging_failed(case_id)
             if case.status == CourtStatus.CLARIFYING:
-                retry_view: discord.ui.View = CourtClarificationView(
+                retry_view: CourtClarificationView | CourtCollectionView = CourtClarificationView(
                     bot=self.bot,
                     case_id=case_id,
                     judge_callback=self._judge_case,
@@ -245,7 +245,7 @@ class CourtCog(commands.Cog):
                 )
             if case.status == CourtStatus.LOCKED:
                 for child in retry_view.children:
-                    if getattr(child, "label", "") != "Lock and judge":
+                    if isinstance(child, discord.ui.Button) and child.label != "Lock and judge":
                         child.disabled = True
             retry_message = await judging_message.channel.send(
                 embed=build_court_embed(case),

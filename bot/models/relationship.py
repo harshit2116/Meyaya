@@ -13,7 +13,7 @@ from bot.database.base import Base
 def normalize_pair(user_one_id: int, user_two_id: int) -> tuple[int, int]:
     """Return a stable ordering for a relationship pair."""
 
-    return tuple(sorted((user_one_id, user_two_id)))
+    return (user_one_id, user_two_id) if user_one_id <= user_two_id else (user_two_id, user_one_id)
 
 
 class RelationshipInteraction(Base):

@@ -5,7 +5,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from time import monotonic
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from typing import Any
 from bot.database.urls import postgres_url
 from sqlalchemy import event
 
@@ -21,7 +22,7 @@ RECENT_CONNECTION_SECONDS = 10
 
 
 @contextmanager
-def dungeon_connection_reuse():
+def dungeon_connection_reuse() -> Iterator[None]:
     """Reuse a just-verified connection during consecutive dungeon clicks."""
     token = _dungeon_checkout.set(True)
     try:
@@ -30,32 +31,33 @@ def dungeon_connection_reuse():
         _dungeon_checkout.reset(token)
 
 
-def _install_recent_dungeon_ping(engine):
+def _install_recent_dungeon_ping(engine: AsyncEngine) -> None:
     # asyncpg's health ping performs BEGIN + ping + ROLLBACK. Avoid those three
     # network round trips only for dungeon reads on a recently returned, still
     # open connection. Other commands and idle connections keep full pre-ping.
-    returned = {}
-    original_ping = engine.sync_engine.dialect.do_ping
+    returned: dict[int, float] = {}
+    dialect: Any = engine.sync_engine.dialect
+    original_ping = dialect.do_ping
 
-    def ping(connection):
+    def ping(connection: Any) -> bool:
         recent = returned.get(id(connection))
         driver = getattr(connection, "driver_connection", None)
         if (_dungeon_checkout.get() and recent is not None
                 and monotonic() - recent < RECENT_CONNECTION_SECONDS
                 and driver is not None and not driver.is_closed()):
             return True
-        return original_ping(connection)
+        return bool(original_ping(connection))
 
-    engine.sync_engine.dialect.do_ping = ping
+    dialect.do_ping = ping
 
     @event.listens_for(engine.sync_engine, "checkin")
-    def remember(connection, record):
+    def remember(connection: Any, record: Any) -> None:
         if connection is not None:
             returned[id(connection)] = monotonic()
 
     @event.listens_for(engine.sync_engine, "close")
     @event.listens_for(engine.sync_engine, "invalidate")
-    def forget(connection, record, *args):
+    def forget(connection: Any, record: Any, *args: Any) -> None:
         returned.pop(id(connection), None)
 
 
@@ -68,7 +70,7 @@ def build_async_engine(database_url: str) -> AsyncEngine:
     )
     _install_recent_dungeon_ping(engine)
     @event.listens_for(engine.sync_engine, "handle_error")
-    def record_database_error(context):
+    def record_database_error(context: Any) -> None:
         # Covers failed statements and connection checkout, even if a service
         # catches the failure. Never record the SQL or driver exception text.
         from bot.logging.telemetry import event as emit

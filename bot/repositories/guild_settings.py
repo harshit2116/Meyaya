@@ -30,13 +30,38 @@ class GuildSettingsRepository(Repository):
         result = await self.session.execute(
             select(GuildSettings.guild_id, GuildSettings.chat_channel_id)
         )
-        return dict(result.all())
+        return {int(guild_id): channel_id for guild_id, channel_id in result.all()}
 
-    async def list_disabled_features(self):
+    async def list_disabled_features(self) -> dict[int, frozenset[str]]:
         result = await self.session.execute(select(GuildSettings.guild_id, GuildSettings.disabled_features))
         return {guild_id: frozenset(disabled or ()) for guild_id, disabled in result.all()}
 
-    async def set_chat_channel(self, guild_id: int, channel_id: int | None, actor_id: int):
+    async def list_runtime_settings(
+        self,
+    ) -> tuple[dict[int, int | None], dict[int, str], dict[int, bool], dict[int, frozenset[str]]]:
+        """Load all cached per-guild runtime settings in a single query."""
+        result = await self.session.execute(
+            select(
+                GuildSettings.guild_id,
+                GuildSettings.chat_channel_id,
+                GuildSettings.command_prefix,
+                GuildSettings.autoresponder_enabled,
+                GuildSettings.disabled_features,
+            )
+        )
+        channels: dict[int, int | None] = {}
+        prefixes: dict[int, str] = {}
+        responders: dict[int, bool] = {}
+        features: dict[int, frozenset[str]] = {}
+        for guild_id, channel_id, prefix, enabled, disabled in result.all():
+            gid = int(guild_id)
+            channels[gid] = channel_id
+            prefixes[gid] = str(prefix)
+            responders[gid] = bool(enabled)
+            features[gid] = frozenset(disabled or ())
+        return channels, prefixes, responders, features
+
+    async def set_chat_channel(self, guild_id: int, channel_id: int | None, actor_id: int) -> None:
         values = {"chat_channel_id": channel_id, "updated_by_user_id": actor_id}
         await self.session.execute(
             insert(GuildSettings)

@@ -1,7 +1,10 @@
 """Local single-player state, independent of Discord message delivery."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from random import SystemRandom
+from random import Random, SystemRandom
+from typing import Any
 
 from bot.data.solo_games import ADVENTURES, CASES, PERSONALITIES, QUESTIONS, SUSPECT_NAMES, TRAITS
 
@@ -17,7 +20,9 @@ class Action:
 
 
 class SoloGame:
-    def __init__(self, kind, *, previous=None, rng=None):
+    def __init__(
+        self, kind: str, *, previous: SoloGame | None = None, rng: Random | None = None
+    ) -> None:
         if kind not in KINDS:
             raise ValueError("Unknown solo game")
         rng = rng or RNG
@@ -27,34 +32,34 @@ class SoloGame:
         self.title = ""
         self.result = ""
         self.feedback = ""
-        self.history = []
-        self.inventory = set()
+        self.history: list[Any] = []
+        self.inventory: set[str] = set()
         self.time_left = 8
         self.scene = "start"
         self.scores = [0, 0, 0]
-        self.clues = []
+        self.clues: list[int] = []
         self.accusing = False
-        self.correct = None
-        self.personality = None
-        self.adventure_index = rng.choice([i for i in range(len(ADVENTURES))
+        self.correct: bool | None = None
+        self.personality: tuple[int, ...] | None = None
+        self.adventure_index: int = rng.choice([i for i in range(len(ADVENTURES))
                                           if previous is None or i != previous.adventure_index])
-        self.case_index = rng.choice([i for i in range(len(CASES))
+        self.case_index: int = rng.choice([i for i in range(len(CASES))
                                      if previous is None or i != previous.case_index])
         self.questions = rng.sample(list(QUESTIONS), 6)
-        self.names = dict(zip(("a", "b", "c"), rng.sample(list(SUSPECT_NAMES), 3)))
+        self.names = dict(zip(("a", "b", "c"), rng.sample(list(SUSPECT_NAMES), 3), strict=True))
         self.suspect_order = rng.sample(["a", "b", "c"], 3)
-        self.order = []
+        self.order: list[int] = []
         self.shuffle_options(rng)
 
     @property
-    def adventure(self):
+    def adventure(self) -> Any:
         return ADVENTURES[self.adventure_index]
 
     @property
-    def case(self):
+    def case(self) -> Any:
         return CASES[self.case_index]
 
-    def shuffle_options(self, rng=None):
+    def shuffle_options(self, rng: Random | None = None) -> None:
         rng = rng or RNG
         if self.kind == "escape":
             self.order = list(range(len(self.adventure.scenes[self.scene].choices)))
@@ -64,7 +69,7 @@ class SoloGame:
             return
         rng.shuffle(self.order)
 
-    def actions(self):
+    def actions(self) -> list[Action]:
         if self.done:
             return []
         if self.kind == "escape":
@@ -83,7 +88,7 @@ class SoloGame:
                 for i, (label, _) in enumerate(self.case.evidence)] + [
             Action("accuse", "Make an accusation", len(self.clues) >= 2)]
 
-    def apply(self, key):
+    def apply(self, key: str) -> None:
         if not any(a.key == key and a.enabled for a in self.actions()):
             raise ValueError("That choice is not available")
         if self.kind == "escape":
@@ -136,15 +141,15 @@ class SoloGame:
             else:
                 self.shuffle_options()
 
-    def quit(self):
+    def quit(self) -> None:
         if not self.done:
             self.done = True
             self.title = "Run ended"
             self.result = "You ended this run. A fresh one is ready whenever you are."
 
-    def presentation(self):
+    def presentation(self) -> tuple[str, str, list[tuple[str, str, bool]]]:
         """Title, description and compact fields for one message at every stage."""
-        fields = []
+        fields: list[tuple[str, str, bool]] = []
         if self.done:
             title, text = self.title, self.result
             if self.kind == "escape":
@@ -156,7 +161,7 @@ class SoloGame:
             else:
                 fields.append(("Your mix", "\n".join(
                     f"**{trait}**  {'▰' * count}{'▱' * (6 - count)}  {count}/6"
-                    for trait, count in zip(TRAITS, self.scores)), False))
+                    for trait, count in zip(TRAITS, self.scores, strict=True)), False))
                 if self.history:
                     _, answer, trait = self.history[-1]
                     fields.append(("One choice that shaped this", f'“{answer}” leaned toward {TRAITS[trait].lower()}.', False))

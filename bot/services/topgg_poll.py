@@ -1,19 +1,22 @@
 """Bounded vote-history scans, checkpointed alongside newly awarded receipts."""
 
+from __future__ import annotations
+
 import asyncio
+from typing import Any
 from uuid import uuid4
 
 from bot.services.topgg_api import TopggCursorExpired, TopggUnavailable
 
 
 class TopggPoller:
-    def __init__(self, api, votes, bot_id, project_id):
+    def __init__(self, api: Any, votes: Any, bot_id: int | str, project_id: str) -> None:
         self.api = api
         self.votes = votes
         self.bot_id = bot_id
         self.project_id = project_id
 
-    async def poll_once(self):
+    async def poll_once(self) -> int:
         owner = uuid4().hex
         acquired = False
         try:
@@ -37,7 +40,7 @@ class TopggPoller:
                         return inserted
                     if not page.complete and page.cursor in seen:
                         raise TopggUnavailable("Top.gg vote pagination did not advance.")
-                    inserted += await self.votes.store_poll_page(self.project_id, owner, page)
+                    inserted += int(await self.votes.store_poll_page(self.project_id, owner, page))
                     if page.complete:
                         return inserted
                     cursor = page.cursor

@@ -1,6 +1,7 @@
 """Short-lived session recaps; raw audio and transcripts are never stored here."""
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import BigInteger, Boolean, DateTime, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
@@ -19,7 +20,7 @@ class VoiceSummary(Base):
     channel_name: Mapped[str] = mapped_column(String(100), nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ended_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    participants: Mapped[list[dict]] = mapped_column(JSONB, nullable=False)
+    participants: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     partial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

@@ -1,22 +1,28 @@
 """On-demand, cached health checks using existing clients and observed outcomes."""
 
+from __future__ import annotations
+
 import asyncio
+from collections.abc import Awaitable, Callable
 import math
 import time
 from datetime import UTC, datetime
+from typing import Any
 from sqlalchemy import select
 
 from bot.logging.health import health
 
 
 class OwnerHealth:
-    def __init__(self, bot):
+    def __init__(self, bot: Any) -> None:
         self.bot = bot
         self.lock = asyncio.Lock()
-        self.cache = None
-        self.cached_at = 0
+        self.cache: tuple[list[dict[str, Any]], dict[str, Any], float] | None = None
+        self.cached_at = 0.0
 
-    async def _probe(self, name, callback):
+    async def _probe(
+        self, name: str, callback: Callable[[], Awaitable[Any]]
+    ) -> dict[str, Any]:
         started = time.perf_counter()
         try:
             async with asyncio.timeout(2):
@@ -27,11 +33,11 @@ class OwnerHealth:
             return {'name': name, 'status': 'unavailable', 'latency_ms': None,
                     'reason': type(error).__name__}
 
-    async def _database(self):
+    async def _database(self) -> None:
         async with self.bot.session_factory() as session:
             await session.execute(select(1))
 
-    async def _dependencies(self):
+    async def _dependencies(self) -> tuple[list[dict[str, Any]], dict[str, Any], float]:
         # Coalesce simultaneous tabs and cap dependency traffic to once / 30s.
         async with self.lock:
             if self.cache is not None and time.monotonic() - self.cached_at < 30:
@@ -45,17 +51,26 @@ class OwnerHealth:
                 dependencies.append({'name': 'Redis', 'status': 'disabled', 'latency_ms': None})
             provider = getattr(self.bot, '_llm_provider', None)
             services = list(getattr(provider, 'providers', {}).items())
-            if getattr(provider, 'fallback', None):
-                services.append(('fallback', provider.fallback))
+            fallback = getattr(provider, 'fallback', None)
+            if fallback is not None:
+                services.append(('fallback', fallback))
             quotas = {service.model.removeprefix('models/'): service.quota
                       for _, service in services if getattr(service, 'quota', None)}
             results = await asyncio.gather(*(quota.snapshot() for quota in quotas.values()), return_exceptions=True)
-            budget = {model: result for model, result in zip(quotas, results) if isinstance(result, dict)}
+            budget = {model: result for model, result in zip(quotas, results, strict=True) if isinstance(result, dict)}
             self.cached_at = time.monotonic()
             self.cache = (dependencies, budget, time.time())
             return self.cache
 
-    def _model(self, label, model, budget, service=None, *, configured=True):
+    def _model(
+        self,
+        label: str,
+        model: str | None,
+        budget: dict[str, Any],
+        service: Any = None,
+        *,
+        configured: bool = True,
+    ) -> dict[str, Any]:
         model = str(model or '').removeprefix('models/')
         observation = health.models.get(model)
         quota = budget.get(model)
@@ -78,7 +93,7 @@ class OwnerHealth:
         return {'name': label, 'model': model or None, 'status': status, 'reason': reason,
                 'quota': quota, 'last_observation': observation}
 
-    async def snapshot(self):
+    async def snapshot(self) -> dict[str, Any]:
         dependencies, budgets, checked_at = await self._dependencies()
         bot, settings = self.bot, self.bot.settings
         ready = bool(bot.is_ready())
@@ -92,22 +107,25 @@ class OwnerHealth:
         models = [self._model(names.get(str(tier), 'Gemini Fallback'), service.model, budgets,
                               service, configured=configured)
                   for tier, service in getattr(provider, 'providers', {}).items()]
-        if getattr(provider, 'fallback', None):
-            models.append(self._model('Gemini Fallback', provider.fallback.model, budgets,
-                                      provider.fallback, configured=configured))
+        fallback = getattr(provider, 'fallback', None)
+        if fallback is not None:
+            models.append(self._model('Gemini Fallback', fallback.model, budgets,
+                                      fallback, configured=configured))
         models.append(self._model('Gemini Live', getattr(settings, 'gemini_live_model', None), {}, configured=configured))
         guard = getattr(bot, 'ai_guard', None)
+        key_pool = getattr(provider, 'key_pool', None)
+        telemetry_health: Any = health
         return {'generated_at': datetime.now(UTC).isoformat(), 'checks_at': checked_at,
                 'scope': 'process', 'started_at': datetime.fromtimestamp(health.started_at, UTC).isoformat(),
                 'uptime_seconds': round(time.time() - health.started_at),
                 'dependencies': [{'name': 'Discord', 'status': 'healthy' if ready else 'unavailable',
                                   'latency_ms': latency, 'reason': 'Gateway heartbeat'}] + dependencies,
                 'models': models, 'host': dict(health.host),
-                'key_pool': provider.key_pool.snapshot() if getattr(provider, 'key_pool', None) else None,
+                'key_pool': key_pool.snapshot() if key_pool is not None else None,
                 'queue': {'active': getattr(guard, 'active', 0), 'waiting': getattr(guard, 'waiting', 0),
                           'active_limit': getattr(settings, 'ai_max_concurrent', 0),
                           'waiting_limit': getattr(settings, 'ai_queue_size', 0),
                           'voice_active': len(getattr(guard, 'voice_guilds', ()))},
                 'guilds': len(bot.guilds), 'users_seen': len(health.users), 'users_seen_capped': health.users_capped,
                 'users_cached': len(getattr(bot, 'users', ())),
-                'errors_24h': health.counts(), 'recent_errors': health.search()}
+                'errors_24h': telemetry_health.counts(), 'recent_errors': telemetry_health.search()}

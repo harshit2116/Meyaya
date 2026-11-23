@@ -1,26 +1,33 @@
 """Consent and alternating trainer choices, using FantasyCog's bounded admission."""
 
+from __future__ import annotations
+
 import asyncio
-from io import BytesIO
-from time import monotonic
-import secrets
-import json
 from collections import OrderedDict
+from io import BytesIO
+import json
+import secrets
+from time import monotonic
+from typing import Any, cast
+
 import discord
-from bot.services.fantasy_guardian import bound_guardian, GuardianFighter, GuardianBattle
+from bot.services.fantasy_guardian import GuardianBattle, GuardianFighter, bound_guardian
 from bot.services.guardian_render import battle_card
-from bot.utils.image_work import image_work
-from bot.utils.embeds import meyaya_embed
-from bot.views.fantasy_duel import DuelView, DuelChallengeView
 from bot.utils.command_context import CommandOutput
+from bot.utils.embeds import meyaya_embed
+from bot.utils.image_work import image_work
+from bot.views.fantasy_duel import DuelChallengeView, DuelView
 
 
-def safe(text):
+def safe(text: object) -> str:
     return discord.utils.escape_markdown(discord.utils.escape_mentions(str(text)))
 
 
 class GuardianAccess:
-    async def interaction_check(self, interaction):
+    participant_ids: tuple[int, int]
+    closed: bool
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id in self.participant_ids and not self.closed:
             return True
         await interaction.response.send_message(
@@ -30,9 +37,11 @@ class GuardianAccess:
         return False
 
 
-class GuardianChallengeView(GuardianAccess, DuelChallengeView):
+class GuardianChallengeView(GuardianAccess, DuelChallengeView):  # type: ignore[misc]
     @discord.ui.button(label="Accept Guardian Battle", style=discord.ButtonStyle.success)
-    async def accept(self, interaction, button):
+    async def accept(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         if interaction.user.id != self.right.id:
             await interaction.response.send_message(
                 "Only the challenged trainer can accept.", ephemeral=True
@@ -44,11 +53,15 @@ class GuardianChallengeView(GuardianAccess, DuelChallengeView):
         async with self.lock:
             if self.closed:
                 return
-            battle = GuardianBattle(
-                *(
-                    GuardianFighter(bound_guardian(self.profiles[m.id]), m.display_name)
-                    for m in (self.left, self.right)
-                ),
+            fighters = [
+                cast(Any, GuardianFighter)(
+                    cast(Any, bound_guardian)(self.profiles[m.id]), m.display_name
+                )
+                for m in (self.left, self.right)
+            ]
+            battle = cast(Any, GuardianBattle)(
+                fighters[0],
+                fighters[1],
                 secrets.randbits(63),
             )
             view = GuardianBattleView(self.cog, self.left, self.right, self.profiles, battle)
@@ -74,38 +87,48 @@ class GuardianChallengeView(GuardianAccess, DuelChallengeView):
                 raise
 
 
-class GuardianBattleView(GuardianAccess, DuelView):
-    def __init__(self, cog, left, right, profiles, battle):
+class GuardianBattleView(GuardianAccess, DuelView):  # type: ignore[misc]
+    def __init__(
+        self,
+        cog: Any,
+        left: Any,
+        right: Any,
+        profiles: dict[int, Any],
+        battle: Any,
+    ) -> None:
         # The explicit turn/arena timer owns expiry, including time spent on
         # NPC rendering. A second Discord view timeout could disable controls
         # before the player's actual turn deadline.
         super().__init__(cog, left, right, profiles, timeout=None)
-        self.battle = battle
-        self.timer = None
+        self.battle: Any = battle
+        self.timer: asyncio.TimerHandle | None = None
         self.deadline = monotonic() + 360
         self.turn_deadline = monotonic() + 60
         self.refresh_buttons()
 
-    def finish(self):
+    def finish(self) -> None:
         if self.timer:
             self.timer.cancel()
         super().finish()
 
-    def refresh_buttons(self):
+    def refresh_buttons(self) -> None:
         npc_turn = getattr(self.profiles.get(self.battle.actor.guardian.owner_id), "is_meyaya_boss", False)
         for index, child in enumerate(self.children):
+            if not isinstance(child, discord.ui.Button):
+                continue
+            label = child.label or ""
             child.custom_id = f"meyaya:duel:{self.token}:{index}:{self.battle.moves}"
             child.disabled = self.battle.finished
-            if npc_turn and not child.label.startswith("Recall"):
+            if npc_turn and not label.startswith("Recall"):
                 child.disabled = True
-            if child.label.startswith("Affinity"):
+            if label.startswith("Affinity"):
                 child.disabled |= self.battle.actor.mp < 14
-            if child.label.startswith("Blessing"):
+            if label.startswith("Blessing"):
                 actor = self.battle.actor
                 child.label = f"Blessing · {2 - actor.blessing_uses} left · 18 MP"
                 child.disabled |= not actor.can_bless()
 
-    def schedule_turn(self):
+    def schedule_turn(self) -> None:
         if self.timer:
             self.timer.cancel()
         self.turn_deadline = min(self.deadline, monotonic() + 60)
@@ -116,12 +139,12 @@ class GuardianBattleView(GuardianAccess, DuelView):
             max(0, self.turn_deadline - monotonic()), self.launch_expiry
         )
 
-    def launch_npc(self):
+    def launch_npc(self) -> None:
         if not self.closed:
             self.task = asyncio.create_task(self.npc_move())
             self.task.add_done_callback(lambda task: None if task.cancelled() else task.exception())
 
-    async def npc_move(self):
+    async def npc_move(self) -> None:
         async with self.lock:
             if self.closed or self.battle.finished:
                 return
@@ -145,12 +168,12 @@ class GuardianBattleView(GuardianAccess, DuelView):
                 self.finish()
                 self.cog.report(error, "guardian_duel_npc")
 
-    def launch_expiry(self):
+    def launch_expiry(self) -> None:
         if not self.closed:
             self.task = asyncio.create_task(self.expire())
             self.task.add_done_callback(lambda task: None if task.cancelled() else task.exception())
 
-    async def expire(self):
+    async def expire(self) -> None:
         async with self.lock:
             if self.closed or self.battle.finished:
                 return
@@ -175,12 +198,14 @@ class GuardianBattleView(GuardianAccess, DuelView):
             except Exception as error:
                 self.cog.report(error, "guardian_duel_timeout")
 
-    async def on_timeout(self):
+    async def on_timeout(self) -> None:
         # Fixed deadlines cannot be extended by outsiders or repeated invalid clicks.
         if monotonic() >= self.turn_deadline:
             await self.expire()
 
-    async def update(self, interaction, *, initial=False):
+    async def update(
+        self, interaction: discord.Interaction | None, *, initial: bool = False
+    ) -> None:
         self.refresh_buttons()
         b = self.battle
         text = "\n".join(
@@ -206,7 +231,7 @@ class GuardianBattleView(GuardianAccess, DuelView):
         embed.set_footer(
             text="60 seconds per turn · 24 moves / 6 minutes maximum · no permanent changes"
         )
-        data = None
+        data: bytes | None = None
         try:
             async with self.cog.render_slots:
                 data = await image_work(battle_card, b)
@@ -214,18 +239,28 @@ class GuardianBattleView(GuardianAccess, DuelView):
             self.cog.report(error, "guardian_duel_render")
         if data:
             embed.set_image(url="attachment://guardian-battle.png")
-        kwargs = dict(embed=embed, view=self, allowed_mentions=discord.AllowedMentions.none())
+        kwargs: dict[str, Any] = dict(
+            embed=embed, view=self, allowed_mentions=discord.AllowedMentions.none()
+        )
 
-        async def deliver():
+        async def deliver() -> discord.Message:
             if initial:
-                return await interaction.channel.send(
-                    **kwargs,
-                    files=(
-                        [discord.File(BytesIO(data), filename="guardian-battle.png")]
-                        if data
-                        else []
+                channel: Any = None if interaction is None else interaction.channel
+                if channel is None:
+                    raise RuntimeError("Guardian battle channel is unavailable.")
+                return cast(
+                    discord.Message,
+                    await channel.send(
+                        **kwargs,
+                        files=(
+                            [discord.File(BytesIO(data), filename="guardian-battle.png")]
+                            if data
+                            else []
+                        ),
                     ),
                 )
+            if self.message is None:
+                raise RuntimeError("Guardian battle message is unavailable.")
             return await self.message.edit(
                 **kwargs,
                 attachments=(
@@ -277,7 +312,7 @@ class GuardianBattleView(GuardianAccess, DuelView):
         while len(outputs) > 512:
             outputs.popitem(last=False)
 
-    async def play(self, interaction, move):
+    async def play(self, interaction: discord.Interaction, move: str) -> None:
         if not await self.interaction_check(interaction):
             return
         await interaction.response.defer()
@@ -322,21 +357,31 @@ class GuardianBattleView(GuardianAccess, DuelView):
                 raise
 
     @discord.ui.button(label="Strike", style=discord.ButtonStyle.primary, row=0)
-    async def strike(self, interaction, button):
+    async def strike(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.play(interaction, "strike")
 
     @discord.ui.button(label="Affinity Pulse · 14 MP", style=discord.ButtonStyle.primary, row=0)
-    async def affinity(self, interaction, button):
+    async def affinity(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.play(interaction, "affinity")
 
     @discord.ui.button(label="Guard · +8 MP", style=discord.ButtonStyle.secondary, row=1)
-    async def guard(self, interaction, button):
+    async def guard(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.play(interaction, "guard")
 
     @discord.ui.button(label="Blessing · 18 MP", style=discord.ButtonStyle.success, row=1)
-    async def blessing(self, interaction, button):
+    async def blessing(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.play(interaction, "blessing")
 
     @discord.ui.button(label="Recall / Forfeit", style=discord.ButtonStyle.danger, row=2)
-    async def recall(self, interaction, button):
+    async def recall(
+        self, interaction: discord.Interaction, button: discord.ui.Button[Any]
+    ) -> None:
         await self.play(interaction, "forfeit")

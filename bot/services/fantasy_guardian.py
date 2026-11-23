@@ -1,13 +1,17 @@
 """Versioned soul-bound guardians derived from saved awakenings, never daily draws."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field, replace
+from datetime import UTC
 from hashlib import sha256
 from random import Random
-from datetime import UTC
 from types import SimpleNamespace
+from typing import Any, cast
+
 from bot.data.fantasy import AFFINITIES
-from bot.services.fantasy_duel import element_multiplier
 from bot.data.fantasy_alignment import patron_for
+from bot.services.fantasy_duel import element_multiplier
 
 GUARDIAN_VERSION = 3
 COMMON_SPECIES = (
@@ -60,7 +64,7 @@ SUMMON_RARITIES = {
 }
 
 
-def rare_species_for_roll(roll):
+def rare_species_for_roll(roll: int) -> str | None:
     if not isinstance(roll, int) or not 0 <= roll < RARE_ROLL_SIZE:
         raise ValueError("Rare summon roll must be within the configured range")
     return next((species for limit, species in RARE_THRESHOLDS if roll < limit), None)
@@ -115,19 +119,19 @@ class Guardian:
     alignment: str = ""
 
     @property
-    def battle_species(self):
+    def battle_species(self) -> str:
         return SPECIES_ARCHETYPES.get(self.species, self.species)
 
     @property
-    def rarity(self):
+    def rarity(self) -> str:
         return SUMMON_RARITIES.get(self.species, ("Bound", ""))[0]
 
     @property
-    def summon_chance(self):
+    def summon_chance(self) -> str:
         return SUMMON_RARITIES.get(self.species, ("Bound", ""))[1]
 
 
-def bound_guardian(profile, *, preview_species=None):
+def bound_guardian(profile: Any, *, preview_species: str | None = None) -> Guardian:
     if getattr(profile, "is_meyaya_boss", False):
         if preview_species is not None:
             raise ValueError("Sovereign summons cannot be changed or previewed")
@@ -165,9 +169,10 @@ def bound_guardian(profile, *, preview_species=None):
     if rare_species is not None:
         entry = next(item for item in RARE_SPECIES if item[1] == rare_species)
     if preview_species is not None:
-        entry = next((item for item in SPECIES if item[1] == preview_species), None)
-        if entry is None:
+        matched = next((item for item in SPECIES if item[1] == preview_species), None)
+        if matched is None:
             raise ValueError("Unknown guardian preview species")
+        entry = matched
     name, species, role, blessing, text, weakness, atk, defense, speed = entry
     archetype = SPECIES_ARCHETYPES.get(species, species)
     affinity = AFFINITIES.get(profile.affinity_id, AFFINITIES["arcane"])
@@ -190,7 +195,7 @@ def bound_guardian(profile, *, preview_species=None):
         text,
         weakness,
     )
-    patron = patron_for(profile)
+    patron = cast(Any, patron_for)(profile)
     if not patron:
         return guardian
     names = {
@@ -253,10 +258,10 @@ class GuardianFighter:
     evasive: int = 0
     dodges: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.hp, self.mp = self.guardian.max_hp, self.guardian.max_mp
 
-    def can_bless(self):
+    def can_bless(self) -> bool:
         return (
             self.mp >= 18
             and self.blessing_uses < 2
@@ -267,26 +272,28 @@ class GuardianFighter:
 class GuardianBattle:
     """Alternating player choices; 24 actions and finite healing prevent stalling."""
 
-    def __init__(self, left, right, seed):
+    def __init__(self, left: GuardianFighter, right: GuardianFighter, seed: int) -> None:
         self.fighters = (left, right)
         self.rng = Random(seed)
         initiative = [f.guardian.speed + self.rng.uniform(-2, 2) for f in self.fighters]
         self.turn = 0 if initiative[0] > initiative[1] else 1
         self.moves = 0
         self.finished = False
-        self.winner_id = None
+        self.winner_id: int | None = None
+        self.history: list[str] = []
+        self._log = ""
         self.log = "The guardians enter the soul arena."
 
     @property
-    def actor(self):
+    def actor(self) -> GuardianFighter:
         return self.fighters[self.turn]
 
     @property
-    def log(self):
+    def log(self) -> str:
         return self._log
 
     @log.setter
-    def log(self, value):
+    def log(self, value: str) -> None:
         history = getattr(self, "history", [])
         if history and value.startswith(history[-1]):
             history[-1] = value
@@ -295,7 +302,7 @@ class GuardianBattle:
         self.history = history[-3:]
         self._log = value
 
-    def choose(self, user_id, move):
+    def choose(self, user_id: int, move: str) -> None:
         if self.finished:
             raise ValueError("This battle is already over.")
         if self.actor.guardian.owner_id != user_id:

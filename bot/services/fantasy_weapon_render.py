@@ -1,37 +1,53 @@
 """Local, supersampled weapon illustrations and a gentle acquisition animation."""
 
-from io import BytesIO
+from __future__ import annotations
+
+from collections.abc import Sequence
 from hashlib import sha256
+from io import BytesIO
 import math
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter
 
 from bot.data.fantasy import RARITIES, RARITY_COLORS, WEAPONS
 from bot.services.card_renderer import font
-from bot.services.fantasy_render import blend, rgb, theme_for
 from bot.services.fantasy_awaken_art import weapon_sprite
+from bot.services.fantasy_render import blend, rgb, theme_for
 
 WEAPON_CARD_SIZE = (640, 420)
 MAX_WEAPON_BYTES = 4 * 1024 * 1024
 
 
-def _simple_weapon_art(family, accent, rarity):
+def _simple_weapon_art(family: str, accent: str, rarity: str) -> Image.Image:
     """Ten distinct silhouettes; no external downloads or AI requests."""
     image = Image.new("RGBA", (640, 640))
     draw = ImageDraw.Draw(image)
 
-    def polygon(points, fill, outline=None):
+    def polygon(
+        points: Sequence[tuple[float, float]], fill: str | None, outline: str | None = None
+    ) -> None:
         draw.polygon([(x * 2, y * 2) for x, y in points], fill=fill, outline=outline, width=3)
 
-    def line(points, fill, width=3):
+    def line(points: Sequence[tuple[float, float]], fill: str, width: int = 3) -> None:
         draw.line([(x * 2, y * 2) for x, y in points], fill=fill, width=width * 2)
 
-    def ellipse(box, fill, outline=None, width=2):
-        draw.ellipse(tuple(v * 2 for v in box), fill=fill, outline=outline, width=width * 2)
+    def ellipse(
+        box: tuple[float, float, float, float],
+        fill: str | None,
+        outline: str | None = None,
+        width: int = 2,
+    ) -> None:
+        draw.ellipse(
+            (box[0] * 2, box[1] * 2, box[2] * 2, box[3] * 2),
+            fill=fill,
+            outline=outline,
+            width=width * 2,
+        )
 
     steel, shade, gold = "#edf2ff", "#7185ab", "#d8b87d"
 
-    def blade(x, y, length=165, breadth=22, curved=False):
+    def blade(x: int, y: int, length: int = 165, breadth: int = 22, curved: bool = False) -> None:
         polygon(
             [
                 (x, y),
@@ -156,7 +172,7 @@ def _simple_weapon_art(family, accent, rarity):
     return image.resize((260, 260), Image.Resampling.LANCZOS)
 
 
-def weapon_design(profile):
+def weapon_design(profile: Any) -> tuple[int, int]:
     """Catalogue suffix selects geometry; full saved ID selects fine engraving."""
     names = WEAPONS.get(profile.weapon_family, ("", ()))[1]
     variant = next(
@@ -171,7 +187,9 @@ def weapon_design(profile):
     return (variant if variant is not None else seed % 3), seed
 
 
-def weapon_art(family, accent, rarity, design=0, seed=0):
+def weapon_art(
+    family: str, accent: str, rarity: str, design: int = 0, seed: int = 0
+) -> Image.Image:
     """Named AI illustrations, with authored silhouettes as the asset fallback."""
     illustrated = weapon_sprite(family, design, accent, rarity, seed)
     if illustrated is not None:
@@ -185,27 +203,28 @@ def weapon_art(family, accent, rarity, design=0, seed=0):
     shadow = ("#50657f", "#232b42", "#957c69")[v]
     trim = ("#d9af63", "#b9d0e8", "#ecbe75")[v]
 
-    def poly(points, fill=metal, edge=trim):
+    def poly(points: Sequence[tuple[float, float]], fill: str = metal, edge: str = trim) -> None:
         d.polygon([(int(x * 3), int(y * 3)) for x, y in points], fill=fill, outline=edge, width=4)
 
-    def line(points, fill=accent, width=3):
+    def line(points: Sequence[tuple[float, float]], fill: str = accent, width: int = 3) -> None:
         d.line(
             [(int(x * 3), int(y * 3)) for x, y in points], fill=fill, width=width * 3, joint="curve"
         )
 
-    def orb(x, y, r, color=accent):
+    def orb(x: float, y: float, r: float, color: str = accent) -> None:
         d.ellipse(
             ((x - r) * 3, (y - r) * 3, (x + r) * 3, (y + r) * 3), fill=color, outline=trim, width=4
         )
         d.ellipse(((x - r * 0.5) * 3, (y - r * 0.6) * 3, x * 3, y * 3), fill="#fff4e1")
 
-    def haft(x=160, top=140, end=291):
+    def haft(x: int = 160, top: int = 140, end: int = 291) -> None:
         poly([(x - 7, top), (x + 7, top), (x + 6, end), (x - 6, end)], "#25263c")
         for y in range(max(top + 10, 220), end - 3, 8):
             line([(x - 6, y), (x + 6, y - 4)], trim, 1)
         orb(x, end, 8, rarity)
 
-    def blade(x, top, end, width, variant=v):
+    def blade(x: int, top: int, end: int, width: int, variant: int = v) -> None:
+        pts: list[tuple[float, float]]
         if variant == 0:
             pts = [
                 (x, top),
@@ -381,12 +400,12 @@ def weapon_art(family, accent, rarity, design=0, seed=0):
     elif family == "mace":
         haft(top=124)
         if v == 0:
-            pts = []
+            star_pts: list[tuple[float, float]] = []
             for i in range(20):
                 ang = math.tau * i / 20
                 r = 67 if i % 2 == 0 else 41
-                pts.append((160 + math.cos(ang) * r, 88 + math.sin(ang) * r))
-            poly(pts, shadow)
+                star_pts.append((160 + math.cos(ang) * r, 88 + math.sin(ang) * r))
+            poly(star_pts, shadow)
             orb(160, 88, 34, metal)
         elif v == 1:
             poly(
@@ -515,12 +534,12 @@ def weapon_art(family, accent, rarity, design=0, seed=0):
     # Saved-ID-specific engraving: four different rune/crest arrangements.
     for i in range(3 + seed % 4):
         angle = math.tau * i / (3 + seed % 4)
-        x, y = 160 + math.cos(angle) * 12, 160 + math.sin(angle) * 12
-        d.ellipse((x * 3 - 3, y * 3 - 3, x * 3 + 3, y * 3 + 3), fill=rarity)
+        rx, ry = 160 + math.cos(angle) * 12, 160 + math.sin(angle) * 12
+        d.ellipse((rx * 3 - 3, ry * 3 - 3, rx * 3 + 3, ry * 3 + 3), fill=rarity)
     return im.resize((260, 260), Image.Resampling.LANCZOS)
 
 
-def render_weapon_acquisition(profile):
+def render_weapon_acquisition(profile: Any) -> bytes:
     theme = theme_for(profile)
     dark, accent = rgb(theme.dark), rgb(theme.color)
     tier = RARITIES.index(profile.weapon_rarity) if profile.weapon_rarity in RARITIES else 0
@@ -531,7 +550,7 @@ def render_weapon_acquisition(profile):
         draw.line((0, y, 640, y), fill=blend(dark, accent, max(0, 1 - abs(y - 188) / 260) * 0.14))
     draw.rounded_rectangle((12, 12, 627, 407), radius=20, outline=blend(dark, accent, 0.4), width=1)
 
-    def title(y, text, size, color):
+    def title(y: int, text: str, size: int, color: str) -> None:
         while size > 13 and draw.textlength(text, font=font(size)) > 580:
             size -= 1
         while draw.textlength(text, font=font(size)) > 580:
@@ -555,7 +574,7 @@ def render_weapon_acquisition(profile):
     palette_sample.paste(halo, (190, 58), halo)
     palette_sample.paste(art, (190, 58), art)
     palette = palette_sample.quantize(colors=128)
-    frames = []
+    frames: list[Image.Image] = []
     for i in range(48):
         phase = math.tau * i / 48
         frame = base.copy()
@@ -564,10 +583,10 @@ def render_weapon_acquisition(profile):
         count = 2 + tier * 2
         for n in range(count):
             angle = phase + n * math.tau / count + seed % 360 * math.pi / 180
-            x, y = 320 + 119 * math.cos(angle), 188 + 119 * math.sin(angle)
+            px, py = 320 + 119 * math.cos(angle), 188 + 119 * math.sin(angle)
             radius = 1 + tier // 2
             d.polygon(
-                ((x, y - radius), (x + radius, y), (x, y + radius), (x - radius, y)), fill=rarity
+                ((px, py - radius), (px + radius, py), (px, py + radius), (px - radius, py)), fill=rarity
             )
         if tier >= 2:
             d.arc((190, 58, 450, 318), i * 3, i * 3 + 230, fill=rarity, width=1)
@@ -575,9 +594,9 @@ def render_weapon_acquisition(profile):
             d.arc((182, 50, 458, 326), -i * 3, 140 - i * 3, fill=theme.color, width=1)
         if tier == 5:
             for offset in (0, math.pi):
-                x, y = 320 + math.cos(phase + offset) * 147, 188 + math.sin(phase + offset) * 118
-                d.line((x - 5, y, x + 5, y), fill="#fff4fa", width=1)
-                d.line((x, y - 5, x, y + 5), fill="#fff4fa", width=1)
+                sx, sy = 320 + math.cos(phase + offset) * 147, 188 + math.sin(phase + offset) * 118
+                d.line((sx - 5, sy, sx + 5, sy), fill="#fff4fa", width=1)
+                d.line((sx, sy - 5, sx, sy + 5), fill="#fff4fa", width=1)
         position = (190, 58 + round(math.sin(phase) * 4))
         frame.paste(halo, position, halo)
         frame.paste(art, position, art)

@@ -1,10 +1,14 @@
 """Restart-safe finale combat. Story routing is isolated from ordinary bossfights."""
 
+from __future__ import annotations
+
+from collections.abc import Mapping
 from dataclasses import asdict
 from random import Random
+from typing import Any
 
-from bot.services.fantasy_duel import DuelEngine, Fighter
-from bot.services.fantasy_boss import veyra_boss_profile, meyaya_boss_profile
+from bot.services.fantasy_boss import meyaya_boss_profile, veyra_boss_profile
+from bot.services.fantasy_duel import Battle, DuelEngine, Fighter
 from bot.services.fantasy_dungeon_combat import restore_fighter
 from bot.services.patron_boss_combat import PatronClashEngine
 
@@ -13,7 +17,7 @@ ALLY_TURNS = 6
 CLASH_MAX_MOVES = 16
 
 
-def origin_fighter():
+def origin_fighter() -> Fighter:
     profile = meyaya_boss_profile(1)
     profile.user_id = MEYAYA_STORY_ID
     return Fighter.snapshot(profile, "Meyaya")
@@ -22,13 +26,15 @@ def origin_fighter():
 class MemoryCoreBattle(DuelEngine):
     """The player buys time with Meyaya; defeating Erasure is not the objective."""
 
-    def __init__(self, player, enemy, ally, seed, turn=0):
+    def __init__(
+        self, player: Fighter, enemy: Fighter, ally: Fighter, seed: int, turn: int = 0
+    ) -> None:
         super().__init__(player, enemy, seed)
         self.ally = ally
         self.state.round = turn
 
     @classmethod
-    def begin(cls, profile, seed):
+    def begin(cls, profile: Any, seed: int) -> MemoryCoreBattle:
         player = Fighter.snapshot(profile, "You")
         ally = origin_fighter()
         enemy = Fighter.snapshot(veyra_boss_profile(), "Veyra")
@@ -37,22 +43,22 @@ class MemoryCoreBattle(DuelEngine):
         return cls(player, enemy, ally, seed)
 
     @classmethod
-    def restore(cls, saved, seed):
+    def restore(cls, saved: Mapping[str, Any], seed: int) -> MemoryCoreBattle:
         battle = cls(restore_fighter(saved["player"]), restore_fighter(saved["enemy"]),
                      restore_fighter(saved["ally"]), seed, saved["turn"])
         battle.state.log = list(saved.get("log", ()))
         return battle
 
-    def export(self):
+    def export(self) -> dict[str, Any]:
         return dict(player=asdict(self.state.left), enemy=asdict(self.state.right),
                     ally=asdict(self.ally), turn=self.state.round, log=self.state.log[-6:])
 
-    def absorb(self, fighter, amount):
+    def absorb(self, fighter: Fighter, amount: int) -> tuple[int, int]:
         if fighter is self.state.right:
             amount = min(amount, max(0, fighter.hp + fighter.shield - 1))
         return super().absorb(fighter, amount)
 
-    def player_turn(self, action):
+    def player_turn(self, action: str) -> Battle:
         if action not in {"attack", "ability", "guard"} or self.state.round >= ALLY_TURNS:
             raise ValueError("Choose an available Memory Core action")
         player, enemy = self.state.left, self.state.right
@@ -99,18 +105,19 @@ class MemoryCoreBattle(DuelEngine):
 class WorldlineClashEngine(PatronClashEngine):
     """Same attacks and act progression, with the saved story branch determining victory."""
 
-    def __init__(self, origin, erasure, seed, route):
+    def __init__(self, origin: Fighter, erasure: Fighter, seed: int, route: str) -> None:
         if route not in {"meyaya", "veyra"}:
             raise ValueError("A permanent worldline must be chosen before witnessing")
         super().__init__(origin, erasure, seed)
         self.chosen_id = origin.user_id if route == "meyaya" else erasure.user_id
 
-    def absorb(self, fighter, amount):
+    def absorb(self, fighter: Fighter, amount: int) -> tuple[int, int]:
         if fighter.user_id == self.chosen_id:
             amount = min(amount, max(0, fighter.hp + fighter.shield - 1))
         return super().absorb(fighter, amount)
 
-    def attack(self, attacker, defender, signature=False):
+    def attack(self, a: Fighter, b: Fighter, signature: bool = False) -> None:
+        attacker, defender = a, b
         super().attack(attacker, defender, signature)
         if self.state.moves >= 11 and attacker.user_id == self.chosen_id and defender.hp:
             self.absorb(defender, defender.hp + defender.shield)
@@ -118,7 +125,7 @@ class WorldlineClashEngine(PatronClashEngine):
             self.state.log.append(f"{attacker.name}'s final release settles the worldline you chose to stand behind.")
 
 
-def story_clash(run, route):
+def story_clash(run: Any, route: str) -> WorldlineClashEngine:
     """Replay at most sixteen deterministic moves; no RNG blobs or live model calls."""
     origin = origin_fighter()
     erasure = Fighter.snapshot(veyra_boss_profile(), "Veyra")
@@ -133,7 +140,7 @@ def story_clash(run, route):
     return engine
 
 
-def advance_clash(run, route):
+def advance_clash(run: Any, route: str) -> None:
     engine = story_clash(run, route)
     frame = run.state.get("clash_frame", "opening")
     if frame == "verdict":

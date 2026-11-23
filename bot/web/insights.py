@@ -1,12 +1,17 @@
 """Safe dashboard summaries from existing observations and server permissions."""
+from __future__ import annotations
+
 from collections import Counter
+from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
 import math
+from typing import Any
+
 from bot.logging.health import health
 from bot.logging.telemetry import operations
 
 
-def overview(bot, servers):
+def overview(bot: Any, servers: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     now = datetime.now(UTC)
     snapshot = operations.snapshot()
     failures = [e for e in health.errors.values() if e.get('timestamp', '')[:10] == now.date().isoformat()]

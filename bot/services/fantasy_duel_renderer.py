@@ -1,30 +1,36 @@
 """Bounded per-move still cards: profile-palette split screen and clash art."""
 
-from io import BytesIO
-from pathlib import Path
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
 from functools import lru_cache
+from io import BytesIO
 import math
+from pathlib import Path
 from random import Random
+from typing import Any, cast
+
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFilter, ImageOps
-from bot.services.card_renderer import font
-from bot.services.fantasy_render import portrait, rgb, blend
+
 from bot.data.fantasy import RARITIES
+from bot.services.card_renderer import font
+from bot.services.fantasy_render import Color, RGB, blend, portrait, rgb
 
 DUEL_SIZE = (1100, 640)
 ART_DIR = Path(__file__).resolve().parents[1] / "assets" / "duels"
 
 
 @lru_cache(maxsize=2)
-def cinematic_background(kind):
+def cinematic_background(kind: str) -> Image.Image:
     with Image.open(ART_DIR / f"{kind}.png") as source:
         return ImageOps.fit(source.convert("L"), DUEL_SIZE, method=Image.Resampling.LANCZOS)
 
 
-def victory_background(colors):
+def victory_background(colors: Sequence[RGB]) -> Image.Image:
     image = Image.new("RGB", DUEL_SIZE, (7, 9, 20))
     glow = Image.new("RGB", DUEL_SIZE)
     draw = ImageDraw.Draw(glow)
-    for center, color in zip((255, 845), colors):
+    for center, color in zip((255, 845), colors, strict=False):
         draw.ellipse((center - 185, 180, center + 185, 520), fill=blend(color, (0, 0, 0), 0.62))
     image = ImageChops.add(image, glow.filter(ImageFilter.GaussianBlur(85)))
     draw = ImageDraw.Draw(image)
@@ -41,7 +47,13 @@ def victory_background(colors):
     return image
 
 
-def shattered_portrait(image, art, mask, center, color):
+def shattered_portrait(
+    image: Image.Image,
+    art: Image.Image,
+    mask: Image.Image,
+    center: tuple[int, int],
+    color: RGB,
+) -> None:
     rng = Random(73)
     size = art.width
     points = [
@@ -82,14 +94,21 @@ def shattered_portrait(image, art, mask, center, color):
                 image.paste(shard, position, shard)
 
 
-def cinematic_card(state, portraits, palettes, *, intro):
+def cinematic_card(
+    state: Any,
+    portraits: Sequence[bytes],
+    palettes: Sequence[Sequence[str]],
+    *,
+    intro: bool,
+) -> bytes:
     """Reusable illustrated backdrops with local, truthful player overlays."""
     colors = [rgb(p[0]) if p else rgb(state.arena[2]) for p in palettes]
     image = Image.new("RGB", DUEL_SIZE)
     fighters = [state.left, state.right]
+    portrait_list = list(portraits)
     if not intro and state.winner_id == state.right.user_id:
         fighters.reverse()
-        portraits = tuple(reversed(portraits))
+        portrait_list.reverse()
         colors.reverse()
     if intro:
         base = cinematic_background("opening")
@@ -111,7 +130,7 @@ def cinematic_card(state, portraits, palettes, *, intro):
     d = ImageDraw.Draw(image)
     for index, fighter in enumerate(fighters):
         x = 255 if index == 0 else 845
-        art = portrait(portraits[index], fighter.name, 274).convert("RGB")
+        art = portrait(portrait_list[index], fighter.name, 274).convert("RGB")
         loser = not intro and state.winner_id is not None and index == 1
         if loser:
             art = ImageEnhance.Brightness(ImageOps.grayscale(art).convert("RGB")).enhance(0.7)
@@ -156,20 +175,36 @@ def cinematic_card(state, portraits, palettes, *, intro):
     return output.getvalue()
 
 
-def fit(draw, pos, text, size=23, color="#f5f0fa", width=370, anchor="mm"):
-    text = " ".join(str(text).split())[:150]
-    while size > 12 and draw.textlength(text, font=font(size)) > width:
+def fit(
+    draw: ImageDraw.ImageDraw,
+    pos: tuple[float, float],
+    text: object,
+    size: int = 23,
+    color: Color = "#f5f0fa",
+    width: float = 370,
+    anchor: str = "mm",
+) -> None:
+    value = " ".join(str(text).split())[:150]
+    while size > 12 and draw.textlength(value, font=font(size)) > width:
         size -= 1
-    while text and draw.textlength(text, font=font(size)) > width:
-        text = text[:-2] + "…"
-    draw.text(pos, text, font=font(size), fill=color, anchor=anchor)
+    while value and draw.textlength(value, font=font(size)) > width:
+        value = value[:-2] + "…"
+    draw.text(pos, value, font=font(size), fill=color, anchor=anchor)
 
 
-def render_duel(state, portraits=(b"", b""), palettes=((), ()), *, intro=False):
+def render_duel(
+    state: Any,
+    portraits: Sequence[bytes] = (b"", b""),
+    palettes: Sequence[Sequence[str]] = ((), ()),
+    *,
+    intro: bool = False,
+) -> bytes:
     if state.right.is_boss:
         from bot.services.meyaya_boss_renderer import render_boss_duel
 
-        return render_boss_duel(state, portraits, palettes, intro=intro)
+        return cast(Callable[..., bytes], cast(Any, render_boss_duel))(
+            state, portraits, palettes, intro=intro
+        )
     if intro or state.finished:
         try:
             return cinematic_card(state, portraits, palettes, intro=intro)
@@ -181,7 +216,7 @@ def render_duel(state, portraits=(b"", b""), palettes=((), ()), *, intro=False):
     arena, dark, arena_accent, motif = state.arena
     colors = [rgb(palette[0]) if palette else rgb(arena_accent) for palette in palettes]
     secondary = [
-        rgb(palette[1]) if len(palette) > 1 else color for palette, color in zip(palettes, colors)
+        rgb(palette[1]) if len(palette) > 1 else color for palette, color in zip(palettes, colors, strict=True)
     ]
     for y in range(640):
         intensity = 0.16 + 0.24 * max(0, 1 - abs(y - 250) / 390)
@@ -189,15 +224,11 @@ def render_duel(state, portraits=(b"", b""), palettes=((), ()), *, intro=False):
             tint = blend(colors[index], secondary[index], y / 640)
             d.line((start, y, end, y), fill=blend(rgb(dark), tint, intensity))
     # Soft palette-coloured halos behind the portraits, not a new bitmap asset.
-    from PIL import ImageFilter
-
     glow = Image.new("RGB", DUEL_SIZE)
     gd = ImageDraw.Draw(glow)
-    for x, color in zip((250, 850), colors):
+    for x, color in zip((250, 850), colors, strict=False):
         gd.ellipse((x - 150, 88, x + 150, 388), fill=blend((0, 0, 0), color, 0.36))
     # ImageChops.screen is additive while preserving the dark arena background.
-    from PIL import ImageChops
-
     image = ImageChops.screen(image, glow.filter(ImageFilter.GaussianBlur(45)))
     d = ImageDraw.Draw(image)
     # Original geometric energy shards, tinted from each member's profile.
@@ -242,10 +273,11 @@ def render_duel(state, portraits=(b"", b""), palettes=((), ()), *, intro=False):
         mask = Image.new("L", (236, 236))
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, 235, 235), radius=38, fill=255)
         image.paste(art, (x - 118, 113), mask)
+        outline_color: Color = "#efd493" if winner else "#fff0fb" if acting else accent
         d.rounded_rectangle(
             (x - 123, 108, x + 123, 354),
             radius=40,
-            outline="#efd493" if winner else "#fff0fb" if acting else accent,
+            outline=outline_color,
             width=4 if winner or acting else 2,
         )
         fit(d, (x, 80), fighter.name, 29, width=390)
@@ -260,17 +292,19 @@ def render_duel(state, portraits=(b"", b""), palettes=((), ()), *, intro=False):
             width=390,
         )
         fit(d, (x, 459), fighter.affinity_name, 14, color="#bdb6ce", width=390)
-        for y, label, current, maximum, tint in (
+        bar_specs: tuple[tuple[int, str, int, int, Color], ...] = (
             (492, "HP", fighter.hp, fighter.max_hp, accent),
             (544, "MP", fighter.mp, fighter.max_mp, "#b1a6e3"),
-        ):
+        )
+        for y, label, current, maximum, bar_tint in bar_specs:
             d.rounded_rectangle((x - 185, y, x + 185, y + 15), radius=7, fill="#181924")
             fill = 370 * max(0, min(1, current / max(1, maximum)))
             if fill:
+                bar_fill: Color = "#e2939b" if label == "HP" and current < maximum * 0.25 else bar_tint
                 d.rounded_rectangle(
                     (x - 185, y, x - 185 + max(15, fill), y + 15),
                     radius=7,
-                    fill="#e2939b" if label == "HP" and current < maximum * 0.25 else tint,
+                    fill=bar_fill,
                 )
             fit(d, (x, y - 13), f"{label}  {current} / {maximum}", 15, width=380)
         statuses = [s.replace("_", " ").title() for s in fighter.statuses]

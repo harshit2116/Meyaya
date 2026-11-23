@@ -1,50 +1,59 @@
 """Unified member profile command."""
 
 from __future__ import annotations
-from sqlalchemy.dialects.postgresql import insert
-from bot.models.meyaya_state import MeyayaUserState
-from bot.repositories.meyaya_state import MeyayaStateRepository
-from bot.services.meyaya_system import MeyayaSystemService
 
 import asyncio
 from io import BytesIO
+from typing import Any, cast
 
 import discord
 from discord import app_commands
 from discord.ext import commands
+from sqlalchemy.dialects.postgresql import insert
 
 from bot.app import MeyayaBot
+from bot.models.meyaya_state import MeyayaUserState
+from bot.repositories.meyaya_state import MeyayaStateRepository
+from bot.services.meyaya_system import MeyayaSystemService
+from bot.services.profile_aesthetic import ProfileVisual
 from bot.services.profile_header import ProfileHeaderRenderer
 from bot.services.profilecheck_render import ProfileCheckRenderer
-from bot.utils.profile_v2 import build_profile_card
-from bot.services.profiles import ProfileService
+from bot.services.profiles import ProfileService, ProfileSummary
 from bot.utils.embeds import build_profile_embed
+from bot.utils.profile_v2 import build_profile_card
 
 
 class ProfileReviewView(discord.ui.LayoutView):
     """One native card with cached artwork, live data, and lazy review."""
 
-    def __init__(self, bot, target, summary, visual, review_renderer):
+    def __init__(
+        self,
+        bot: MeyayaBot,
+        target: discord.Member,
+        summary: ProfileSummary,
+        visual: ProfileVisual,
+        review_renderer: ProfileCheckRenderer,
+    ) -> None:
         super().__init__(timeout=180)
         self.bot = bot
         self.target = target
         self.review_renderer = review_renderer
         # Retain only compact display data, not downloaded member image bytes.
-        self.details = build_profile_embed(target, summary, visual)
+        self.details = build_profile_embed(target, cast(Any, summary), visual)
         card = build_profile_card(target, summary, visual)
-        review = discord.ui.Button(
+        review: discord.ui.Button[Any] = discord.ui.Button(
             label="Visual review", emoji="✨", style=discord.ButtonStyle.primary
         )
-        review.callback = self.visual_review
-        details = discord.ui.Button(
+        review.callback = self.visual_review  # type: ignore[method-assign]
+        details: discord.ui.Button[Any] = discord.ui.Button(
             label="More details", emoji="📋", style=discord.ButtonStyle.secondary
         )
-        details.callback = self.more_details
+        details.callback = self.more_details  # type: ignore[method-assign]
         card.add_item(discord.ui.Separator(spacing=discord.SeparatorSpacing.small))
         card.add_item(discord.ui.ActionRow(review, details))
         self.add_item(card)
 
-    async def visual_review(self, interaction):
+    async def visual_review(self, interaction: discord.Interaction) -> None:
         await interaction.response.defer(ephemeral=True, thinking=True)
         visual = await self.bot.build_profile_aesthetic_service().inspect(self.target)
         _, rendered, extension = await self.review_renderer.render(visual)
@@ -54,7 +63,7 @@ class ProfileReviewView(discord.ui.LayoutView):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    async def more_details(self, interaction):
+    async def more_details(self, interaction: discord.Interaction) -> None:
         await interaction.response.send_message(
             embed=self.details, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
         )
@@ -68,7 +77,7 @@ class ProfileCog(commands.Cog):
         self._header_renderer = ProfileHeaderRenderer()
         self._review_renderer = ProfileCheckRenderer()
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="nickname", description="View, refresh, keep, or turn off your Meyaya nickname."
     )
     @commands.guild_only()
@@ -79,7 +88,9 @@ class ProfileCog(commands.Cog):
             for name in ("status", "refresh", "keep", "reroll", "reject", "on")
         ]
     )
-    async def nickname(self, ctx: commands.Context, action: str = "status"):
+    async def nickname(self, ctx: commands.Context[Any], action: str = "status") -> None:
+        if ctx.guild is None:
+            return
         action = action.lower().strip()
         if action == "refresh":
             action = "reroll"
@@ -98,6 +109,8 @@ class ProfileCog(commands.Cog):
             state = await MeyayaStateRepository(session).get_user(
                 ctx.guild.id, ctx.author.id, for_update=True
             )
+            if state is None:
+                return
             if action in {"reject", "off"}:
                 state.nickname = None
                 state.nickname_mode = "off"
@@ -133,14 +146,14 @@ class ProfileCog(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="profile",
         description="See a member's profile, relationships, activity, and Meyaya bond.",
     )
     @app_commands.describe(member="Member to inspect; defaults to you")
     async def profile(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         member: discord.Member | None = None,
     ) -> None:
         if ctx.guild is None:

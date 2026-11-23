@@ -3,7 +3,10 @@
 Origin/Erasure are natural processes. Their channelers are people, not gods
 embodying those processes. Reset unfinished cinematics when changing story versions.
 """
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import Any
 
 CYCLE = 33_550_336
 PREVIOUS_CYCLES = CYCLE - 1
@@ -27,7 +30,17 @@ class Scene:
     ending_route: str | None = None
 
 
-def scene(key, title, text, asset, *, floor=0, flags=(), anchor=None, route="shared"):
+def scene(
+    key: str,
+    title: str,
+    text: str,
+    asset: str,
+    *,
+    floor: int = 0,
+    flags: tuple[str, ...] = (),
+    anchor: int | None = None,
+    route: str = "shared",
+) -> Scene:
     return Scene(key, title, text, asset, floor, route, flags, anchor,
                  ending_route=route if route in ENDING_TITLES else None)
 
@@ -97,8 +110,8 @@ CORE = (
 LEGACY_CORE_IDS = tuple(s.id for s in CORE if s.id not in {"joint-battle", "memory-destruction"})
 
 
-def core_scene_index(run):
-    index = run.state.get("scene", 0)
+def core_scene_index(run: Any) -> int:
+    index = int(run.state.get("scene", 0))
     if run.state.get("story_version", 3) < STORY_VERSION:
         old_id = LEGACY_CORE_IDS[min(index, len(LEGACY_CORE_IDS) - 1)]
         return next(i for i, s in enumerate(CORE) if s.id == old_id)
@@ -136,7 +149,7 @@ VEYRA_ENDING = (
 )
 
 
-def ending_scenes(route, *, battle_played=False):
+def ending_scenes(route: str, *, battle_played: bool = False) -> tuple[Scene, ...]:
     aftermath = (scene("duel-aftermath", "THE PRICE OF THE VERDICT",
         ("Meyaya wins the duel. Everbloom breaks through Mournfang's final advance, and Veyra falls back. Your chosen worldline has its victor.\n\nBut Veyra will not survive what she has gathered. Unable to break Meyaya's guard, she abandons the contest and turns herself into the medium of a final release. Meyaya's victory has left her one chance to make a beginning beyond it."
          if route == "meyaya" else
@@ -145,12 +158,12 @@ def ending_scenes(route, *, battle_played=False):
     return (aftermath + COSMIC[4:] if battle_played else COSMIC) + (VEYRA_ENDING if route == "veyra" else MEYAYA_ENDING)
 
 
-def current_scene(run, profile):
+def current_scene(run: Any, profile: Any) -> Scene:
     sequence = run.state.get("sequence", "core")
     if sequence == "opening":
-        return OPENING[run.state.get("scene", 0)]
+        return OPENING[int(run.state.get("scene", 0))]
     if sequence == "choice":
         return CHOICE
     if sequence == "ending":
-        return ending_scenes(profile.ending_route, battle_played=bool(run.state.get("clash_winner")))[run.state.get("scene", 0)]
+        return ending_scenes(profile.ending_route, battle_played=bool(run.state.get("clash_winner")))[int(run.state.get("scene", 0))]
     return CORE[core_scene_index(run)]

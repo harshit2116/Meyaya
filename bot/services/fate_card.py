@@ -1,4 +1,6 @@
 """Archetype-specific illustrated Fate cards with bounded local rendering."""
+from __future__ import annotations
+
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
@@ -6,6 +8,7 @@ from pathlib import Path
 from PIL import Image,ImageDraw,ImageFilter,ImageOps
 from bot.services.aura_archive import _asset,_serif,_text
 from bot.services.card_renderer import font
+from bot.services.celestial import CardResult
 
 SIZE=(1421,1107)
 ASSETS=Path(__file__).resolve().parents[1]/'assets'/'celestial'/'fate'
@@ -20,7 +23,12 @@ SCENES={
 }
 
 
-def _veil(image,box,color,opacity):
+def _veil(
+    image: Image.Image,
+    box: tuple[int, int, int, int],
+    color: tuple[int, int, int],
+    opacity: int,
+) -> None:
     x,y,right,bottom=box
     # Blur only a small alpha mask. Keeping RGB constant avoids grey halos
     # around pale reading surfaces and processing full-card buffers.
@@ -35,7 +43,7 @@ def _veil(image,box,color,opacity):
 
 
 @lru_cache(maxsize=2)
-def _background(scene):
+def _background(scene: str) -> Image.Image:
     # At most two decoded member-free backgrounds, copied before live text.
     with Image.open(ASSETS/f'{scene}.jpg') as source:
         image=source.convert('RGBA')
@@ -47,7 +55,15 @@ def _background(scene):
     return image
 
 
-def _line(draw,box,text,size,color,minimum=20,serif=True):
+def _line(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    text: object,
+    size: int,
+    color: str,
+    minimum: int = 20,
+    serif: bool = True,
+) -> None:
     x,y,w,h=box
     value=' '.join(str(text).split())[:180]
     family=_serif if serif and all(ord(c)<0x3000 for c in value) else font
@@ -60,19 +76,19 @@ def _line(draw,box,text,size,color,minimum=20,serif=True):
     draw.text((x-bounds[0],y+(h-(bounds[3]-bounds[1]))/2-bounds[1]),value,font=face,fill=color)
 
 
-def _spark(draw,x,y,r,color=GOLD):
+def _spark(draw: ImageDraw.ImageDraw, x: float, y: float, r: float, color: str = GOLD) -> None:
     draw.polygon(((x,y-r),(x+3,y-3),(x+r,y),(x+3,y+3),(x,y+r),
                   (x-3,y+3),(x-r,y),(x-3,y-3)),fill=color)
 
 
 @lru_cache(maxsize=1)
-def _portrait_mask():
+def _portrait_mask() -> Image.Image:
     mask=Image.new('L',(228,228))
     ImageDraw.Draw(mask).ellipse((0,0,227,227),fill=255)
     return mask.resize((76,76),Image.Resampling.LANCZOS)
 
 
-def render_fate(result,name,avatar=b''):
+def render_fate(result: CardResult, name: str, avatar: bytes = b'') -> bytes:
     scene,footer=SCENES.get(result.title,SCENES['The Wanderer'])
     image=_background(scene).copy();draw=ImageDraw.Draw(image)
     fields=dict(result.fields)
@@ -107,7 +123,7 @@ def render_fate(result,name,avatar=b''):
         draw.text((x,884),heading,font=_serif(18),fill=INK)
         _text(draw,(x,916,width,76),fields.get(key,''),27,INK,minimum=18)
     footer_font=font(17)
-    width=draw.textlength(footer,font=footer_font)
-    draw.text(((SIZE[0]-width)/2,1030),footer,font=footer_font,fill=GOLD)
+    footer_width=draw.textlength(footer,font=footer_font)
+    draw.text(((SIZE[0]-footer_width)/2,1030),footer,font=footer_font,fill=GOLD)
     output=BytesIO();image.convert('RGB').save(output,format='PNG',compress_level=2)
     return output.getvalue()

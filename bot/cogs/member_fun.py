@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 import json
 import logging
 from random import SystemRandom
+from typing import Any, cast
 
 import discord
 from discord.ext import commands
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from bot.app import MeyayaBot
 from bot.models.meyaya_state import MeyayaUserState
 from bot.prompts.composer import build_system_instruction
 from bot.services.usage import ChatLimitReached
@@ -39,12 +42,17 @@ COMMAND_DESCRIPTIONS = {
 
 
 class MemberFunCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
         self.webhook_lock = asyncio.Lock()
 
     @discord_context("fun")
-    async def run_member(self, ctx, kind, members):
+    async def run_member(
+        self,
+        ctx: commands.Context[Any],
+        kind: str,
+        members: Sequence[discord.Member | discord.User],
+    ) -> None:
         if ctx.guild is None:
             await ctx.send("Use this in a server.")
             return
@@ -54,8 +62,11 @@ class MemberFunCog(commands.Cog):
         await ctx.defer()
         facts = []
         try:
-            samples = {m.id: [] for m in members}
-            if ctx.channel.permissions_for(ctx.guild.me).read_message_history:
+            samples: dict[int, list[str]] = {m.id: [] for m in members}
+            if (
+                not isinstance(ctx.channel, discord.PartialMessageable)
+                and ctx.channel.permissions_for(ctx.guild.me).read_message_history
+            ):
                 try:
                     async for message in ctx.channel.history(limit=30, before=ctx.message):
                         if (
@@ -141,40 +152,59 @@ class MemberFunCog(commands.Cog):
         embed.set_thumbnail(url=str(members[0].display_avatar.url))
         await ctx.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         description="Post your message with a member's name and avatar.",
     )
     @commands.guild_only()
     @commands.cooldown(1, 20, commands.BucketType.member)
-    async def impersonate(self, ctx, member: discord.Member, *, message: str):
+    async def impersonate(
+        self, ctx: commands.Context[Any], member: discord.Member, *, message: str
+    ) -> None:
+        if ctx.guild is None:
+            return
         if not message.strip() or len(message) > 2000:
             await ctx.send("Provide a message between 1 and 2,000 characters.", ephemeral=True)
             return
         channel = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
-        if channel is None or not channel.permissions_for(ctx.guild.me).manage_webhooks:
+        if (
+            channel is None
+            or isinstance(channel, discord.PartialMessageable)
+            or not channel.permissions_for(ctx.guild.me).manage_webhooks
+        ):
             await ctx.send(
                 "I need Manage Webhooks here to use their name and avatar.", ephemeral=True
             )
             return
-        if not ctx.interaction and not ctx.channel.permissions_for(ctx.guild.me).manage_messages:
+        if (
+            not ctx.interaction
+            and (
+                isinstance(ctx.channel, discord.PartialMessageable)
+                or not ctx.channel.permissions_for(ctx.guild.me).manage_messages
+            )
+        ):
             await ctx.send("I need Manage Messages here to delete your command after sending.")
             return
         await ctx.defer(ephemeral=True)
         await self.send_imitation(ctx, member, message)
 
-    async def send_imitation(self, ctx, member, content):
-        channel = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
+    async def send_imitation(
+        self, ctx: commands.Context[Any], member: discord.Member, content: str
+    ) -> None:
+        channel: Any = ctx.channel.parent if isinstance(ctx.channel, discord.Thread) else ctx.channel
+        if channel is None:
+            return
         stage = "list"
         try:
             async with self.webhook_lock:
                 hooks = await channel.webhooks()
+                bot_id = self.bot.user.id if self.bot.user is not None else None
                 hook = next(
                     (
                         h
                         for h in hooks
                         if h.name == "Meyaya impressions"
                         and h.user
-                        and h.user.id == self.bot.user.id
+                        and h.user.id == bot_id
                         and h.token
                     ),
                     None,
@@ -182,16 +212,24 @@ class MemberFunCog(commands.Cog):
                 if hook is None:
                     stage = "create"
                     hook = await channel.create_webhook(name="Meyaya impressions")
-            kwargs = {
-                "username": member.display_name[:80],
-                "avatar_url": str(member.display_avatar.url),
-                "allowed_mentions": discord.AllowedMentions.none(),
-                "wait": True,
-            }
-            if isinstance(ctx.channel, discord.Thread):
-                kwargs["thread"] = ctx.channel
             stage = "send"
-            await hook.send(content, **kwargs)
+            if isinstance(ctx.channel, discord.Thread):
+                await hook.send(
+                    content,
+                    username=member.display_name[:80],
+                    avatar_url=str(member.display_avatar.url),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                    wait=True,
+                    thread=ctx.channel,
+                )
+            else:
+                await hook.send(
+                    content,
+                    username=member.display_name[:80],
+                    avatar_url=str(member.display_avatar.url),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                    wait=True,
+                )
         except discord.HTTPException as exc:
             # Never log the exception text/URL: webhook tokens and user content
             # can occur there. Numeric codes and the stage are enough to triage.
@@ -228,39 +266,44 @@ class MemberFunCog(commands.Cog):
                 ephemeral=True,
             )
 
-    @commands.hybrid_command(description="Rank two to five members in a silly category.")
+    @commands.hybrid_command(description="Rank two to five members in a silly category.")  # type: ignore[arg-type]
     @commands.guild_only()
     @commands.cooldown(1, 20, commands.BucketType.member)
     async def rank(
         self,
-        ctx,
+        ctx: commands.Context[Any],
         first: discord.Member,
         second: discord.Member,
-        third: discord.Member = None,
-        fourth: discord.Member = None,
-        fifth: discord.Member = None,
-    ):
+        third: discord.Member | None = None,
+        fourth: discord.Member | None = None,
+        fifth: discord.Member | None = None,
+    ) -> None:
         await self.run_member(
             ctx, "rank", [m for m in (first, second, third, fourth, fifth) if m is not None]
         )
 
 
-def member_command(name):
-    async def callback(self, ctx: commands.Context, member: discord.Member = None):
+def member_command(name: str) -> commands.HybridCommand[Any, ..., Any]:
+    async def callback(
+        self: MemberFunCog,
+        ctx: commands.Context[Any],
+        member: discord.Member | None = None,
+    ) -> None:
         await self.run_member(ctx, name, [member or ctx.author])
 
     callback.__name__ = name
     callback.__qualname__ = f"MemberCommands.{name}"
-    callback = commands.guild_only()(callback)
-    callback = commands.cooldown(1, 20, commands.BucketType.member)(callback)
-    return commands.hybrid_command(name=name, description=COMMAND_DESCRIPTIONS[name])(callback)
+    wrapped: Any = commands.guild_only()(callback)
+    wrapped = commands.cooldown(1, 20, commands.BucketType.member)(wrapped)
+    return commands.hybrid_command(name=name, description=COMMAND_DESCRIPTIONS[name])(wrapped)
 
 
 # CogMeta collects commands at class creation, so build a subclass with the generated commands.
-MemberCommands = type(
-    "MemberCommands", (MemberFunCog,), {name: member_command(name) for name in SPECS}
+MemberCommands: type[MemberFunCog] = cast(
+    type[MemberFunCog],
+    type("MemberCommands", (MemberFunCog,), {name: member_command(name) for name in SPECS}),
 )
 
 
-async def setup(bot):
+async def setup(bot: MeyayaBot) -> None:
     await bot.add_cog(MemberCommands(bot))

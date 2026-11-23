@@ -6,28 +6,38 @@ from hashlib import sha256
 from io import BytesIO
 import math
 from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-from bot.services.card_renderer import font
+from bot.services.card_renderer import CardFont, font
 
 SIZE=(1500,1000)
 PORTRAIT=(98,182,540)
 
 
 @lru_cache(maxsize=24)
-def _serif(size):
+def _serif(size: int) -> CardFont:
     for path in ('C:/Windows/Fonts/georgia.ttf','/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf'):
         if Path(path).is_file():
             return ImageFont.truetype(path,size)
     return font(size)
 
 
-def _text(draw,box,value,size,color,*,minimum=20,serif=True):
+def _text(
+    draw: ImageDraw.ImageDraw,
+    box: tuple[int, int, int, int],
+    value: object,
+    size: int,
+    color: str,
+    *,
+    minimum: int = 20,
+    serif: bool = True,
+) -> None:
     x,y,width,height=box
-    value=' '.join(str(value).split())[:180]
-    def wrap(chosen):
-        rows=[]; row=''
-        for word in value.split():
+    text=' '.join(str(value).split())[:180]
+    def wrap(chosen: CardFont) -> list[str]:
+        rows: list[str]=[]; row=''
+        for word in text.split():
             candidate=(row+' '+word).strip()
             if row and draw.textlength(candidate,font=chosen)>width:
                 rows.append(row);row=word
@@ -35,7 +45,7 @@ def _text(draw,box,value,size,color,*,minimum=20,serif=True):
                 row=candidate
         return rows+[row]
     # Use the general font for names outside the serif's common script range.
-    family=_serif if serif and all(ord(char)<0x3000 for char in value) else font
+    family=_serif if serif and all(ord(char)<0x3000 for char in text) else font
     while True:
         chosen=family(size)
         rows=wrap(chosen)
@@ -50,18 +60,18 @@ def _text(draw,box,value,size,color,*,minimum=20,serif=True):
         draw.text((x,y+index*(size+7)),row,font=chosen,fill=color)
 
 
-def _spark(draw,x,y,r,color):
-    points=[]
+def _spark(draw: ImageDraw.ImageDraw, x: float, y: float, r: float, color: str) -> None:
+    points: list[tuple[float, float]]=[]
     for i in range(8):
         a=i*math.pi/4; radius=r if i%2==0 else r*.22
         points.append((x+math.sin(a)*radius,y+math.cos(a)*radius))
     draw.polygon(points,fill=color)
 
 
-def _flower(draw,x,y,r,color):
+def _flower(draw: ImageDraw.ImageDraw, x: float, y: float, r: float, color: str) -> None:
     for index in range(5):
         a=index*math.tau/5
-        points=[]
+        points: list[tuple[float, float]]=[]
         for sign,steps in ((-1,range(11)),(1,range(10,-1,-1))):
             for step in steps:
                 t=step/10; px=sign*math.sin(math.pi*t)*r*.34; py=-t*r
@@ -71,7 +81,7 @@ def _flower(draw,x,y,r,color):
 
 
 @lru_cache(maxsize=1)
-def _frame():
+def _frame() -> Image.Image:
     # No user content enters the shared frame. Callers always copy it.
     strip=Image.new('RGB',(1,SIZE[1]))
     strip.putdata([(int(32-14*math.sin(y/SIZE[1]*math.pi)),
@@ -82,7 +92,7 @@ def _frame():
     draw.rounded_rectangle((26,25,1474,975),radius=24,outline='#c593aa',width=2)
     # Delicate vines and blossoms are kept around the outer margins.
     for mirror in (False,True):
-        def xy(x,y):
+        def xy(x: int, y: int, *, mirror: bool = mirror) -> tuple[int, int]:
             return (1500-x,y) if mirror else (x,y)
         branch=[xy(x,y) for x,y in ((26,170),(78,220),(48,310),(70,430),(34,555),(68,686),(35,783),(70,913))]
         draw.line(branch,fill='#53303f',width=2)
@@ -104,7 +114,7 @@ def _frame():
     return image
 
 
-def _asset(data):
+def _asset(data: bytes | None) -> Image.Image | None:
     if not data:
         return None
     try:
@@ -117,7 +127,7 @@ def _asset(data):
         return None
 
 
-def _portrait(image,visual):
+def _portrait(image: Image.Image, visual: Any) -> None:
     x,y,size=PORTRAIT
     art=_asset(visual.avatar)
     if art is None:
@@ -140,11 +150,11 @@ def _portrait(image,visual):
         _flower(draw,xx,yy,r,'#e1a0ad')
 
 
-def _panel(draw,box):
+def _panel(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
     draw.rounded_rectangle(box,radius=19,fill='#1b1420',outline='#79516b',width=1)
 
 
-def _icon(draw,index,x,y):
+def _icon(draw: ImageDraw.ImageDraw, index: int, x: int, y: int) -> None:
     pink='#f0a8bc'
     if index==0:
         draw.polygon([(x-17,y-7),(x-9,y-17),(x+9,y-17),(x+17,y-7),(x,y+13)],outline=pink,width=3)
@@ -162,7 +172,15 @@ def _icon(draw,index,x,y):
         _spark(draw,x,y+22,6,'#f4cfbd')
 
 
-def render_archive(visual,*,title,energy,traits,affinity,class_name):
+def render_archive(
+    visual: Any,
+    *,
+    title: str,
+    energy: str,
+    traits: str,
+    affinity: str,
+    class_name: str,
+) -> Image.Image:
     image=_frame().copy()
     draw=ImageDraw.Draw(image)
     draw.text((132,48),'MEYAYA / AURA ARCHIVE',font=_serif(32),fill='#fff0e8')
@@ -185,7 +203,7 @@ def render_archive(visual,*,title,energy,traits,affinity,class_name):
     boxes=((696,304,1444,402),(696,416,1444,536),(696,550,1444,638),(696,652,1444,742))
     headings=('A U R A  A R C H E T Y P E','E S S E N C E','S I G N A T U R E','A F F I N I T Y')
     contents=(title.upper(),energy,traits.replace('•','·'),f'{affinity.upper()} AFFINITY · {class_name.upper()}')
-    for index,(box,heading,content) in enumerate(zip(boxes,headings,contents)):
+    for index,(box,heading,content) in enumerate(zip(boxes,headings,contents,strict=True)):
         _panel(draw,box)
         if index in (0,3):
             draw.arc((1320,box[1]-20,1460,box[3]+25),105,255,fill='#482b3f',width=1)

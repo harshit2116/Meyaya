@@ -1,7 +1,10 @@
 """Durable rollback records and bounded rules for temporary channel pranks."""
+from __future__ import annotations
+
 from pathlib import Path
 import json
 import os
+from typing import Any
 
 import discord
 from bot.prompts.elation import APPROACHES
@@ -19,7 +22,7 @@ TITLES = {
 }
 
 
-def public_chat_channel(channel):
+def public_chat_channel(channel: object) -> bool:
     """Conservative: @everyone itself must be able to read and write here."""
     if not isinstance(channel, discord.TextChannel) or channel.is_news():
         return False
@@ -27,7 +30,7 @@ def public_chat_channel(channel):
     return permissions.view_channel and permissions.send_messages
 
 
-def parse_decree(text):
+def parse_decree(text: str) -> dict[str, Any] | None:
     text = text.strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
@@ -51,11 +54,11 @@ def parse_decree(text):
 
 class ElationStore:
     """Local durable state; no expiry before restoration has actually succeeded."""
-    def __init__(self, root=None):
+    def __init__(self, root: str | Path | None = None) -> None:
         self.root = Path(root) if root else Path(__file__).resolve().parents[2] / "runtime" / "elation"
 
-    def load(self):
-        result = {}
+    def load(self) -> dict[int, dict[str, Any]]:
+        result: dict[int, dict[str, Any]] = {}
         for path in self.root.glob("*.json"):
             # Fail closed on corrupt rollback data instead of silently overwriting it.
             state = json.loads(path.read_text(encoding="utf-8"))
@@ -64,12 +67,15 @@ class ElationStore:
             result[int(path.stem)] = state
         return result
 
-    def save(self, state):
+    def save_serialized(self, guild_id: int, payload: str) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
-        path = self.root / f"{int(state['guild_id'])}.json"
+        path = self.root / f"{guild_id}.json"
         temporary = path.with_suffix(".tmp")
         with temporary.open("w", encoding="utf-8") as stream:
-            json.dump(state, stream, ensure_ascii=False)
+            stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
+
+    def save(self, state: dict[str, Any]) -> None:
+        self.save_serialized(int(state["guild_id"]), json.dumps(state, ensure_ascii=False))

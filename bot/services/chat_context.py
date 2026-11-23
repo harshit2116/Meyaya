@@ -1,5 +1,9 @@
 """Fit final chat requests without dropping the member's current statement."""
+from __future__ import annotations
+
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from typing import Any, Literal
 
 from bot.logging.telemetry import event
 from bot.prompts.composer import build_system_instruction
@@ -13,15 +17,26 @@ class ContextOverflow(ValueError):
 class PreparedChat:
     instruction: str
     prompt: str
-    history: list
-    memory_lines: list
+    history: list[dict[str, Any]]
+    memory_lines: list[str]
 
 
-def prepare_chat(*, profile, guild_id, context_lines, memory_lines=(), lore_lines=(),
-                 prompt, history=(), recent_context='', limit=32000):
+def prepare_chat(
+    *,
+    profile: Literal["chat", "flavor", "proactive", "voice", "elation", "group"],
+    guild_id: int | None,
+    context_lines: Iterable[str | None],
+    memory_lines: Iterable[str] = (),
+    lore_lines: Iterable[str] = (),
+    prompt: str,
+    history: Sequence[dict[str, Any]] = (),
+    recent_context: str = '',
+    limit: int = 32000,
+) -> PreparedChat:
     # Never split a serialized prompt on a sentinel that user text can imitate.
     # Quote fields are bounded by the caller before serialization.
-    core, optional = [], []
+    core: list[str] = []
+    optional: list[str] = []
     for line in context_lines:
         if not line:
             continue
@@ -34,7 +49,7 @@ def prepare_chat(*, profile, guild_id, context_lines, memory_lines=(), lore_line
     memories = list(memory_lines)
     lore = list(lore_lines)
     context = core + optional
-    def compose():
+    def compose() -> str:
         return build_system_instruction(profile=profile, guild_id=guild_id,
             context_lines=context, memory_lines=memories, lore_lines=lore)
     instruction = compose()
@@ -57,7 +72,8 @@ def prepare_chat(*, profile, guild_id, context_lines, memory_lines=(), lore_line
         raise ContextOverflow('Internal context exceeds the available budget')
     remaining = limit - len(instruction) - len(prompt)
     # Most recent complete exchanges come before ambient channel chatter.
-    kept, used = [], 0
+    kept: list[dict[str, Any]] = []
+    used = 0
     for item in reversed(history):
         size = len(item.get('content', ''))
         if used + size > remaining:

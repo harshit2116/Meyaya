@@ -2,22 +2,22 @@
 
 from __future__ import annotations
 
-from bot.logging.telemetry import discord_context, event
+from bot.logging.telemetry import discord_context
 
 import logging
-from bot.utils.typing import background_typing
-from typing import Literal
+from typing import Any, Literal
 
 import discord
 from discord import app_commands
 from discord.ext import commands
+from sqlalchemy.exc import SQLAlchemyError
 
 from bot.app import MeyayaBot
-from bot.services.usage import ChatLimitReached
-from bot.services.chat_blacklist import acknowledge_silently
-from sqlalchemy.exc import SQLAlchemyError
 from bot.data.roleplay_personas import ROLEPLAY_PERSONAS, build_roleplay_instruction
+from bot.services.chat_blacklist import acknowledge_silently
+from bot.services.usage import ChatLimitReached
 from bot.utils.embeds import meyaya_embed
+from bot.utils.typing import background_typing
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class RoleplayCog(commands.Cog):
         self.bot = bot
         self._webhooks: dict[int, discord.Webhook] = {}
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="roleplay",
         aliases=["rp"],
         description="Talk to Jungkook or Alya for one message.",
@@ -47,13 +47,11 @@ class RoleplayCog(commands.Cog):
     @discord_context("roleplay")
     async def roleplay(
         self,
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         character: RoleplayCharacter,
         *,
         message: str,
     ) -> None:
-        """Generate one response and deliver it using the selected RP identity."""
-
         message = message.strip()
         if await self.bot.chat_blacklist.inspect(
             ctx.guild.id if ctx.guild else None, ctx.author.id, message
@@ -155,23 +153,48 @@ class RoleplayCog(commands.Cog):
         avatar_url = self._avatar_url(character)
         available = 2000 - len(author.mention) - 1
         content = f"{author.mention} {response[:available].rstrip()}"
-        kwargs: dict[str, object] = {
-            "username": persona.display_name,
-            "allowed_mentions": discord.AllowedMentions.none(),
-            "wait": True,
-        }
-        if avatar_url:
-            kwargs["avatar_url"] = avatar_url
-        if thread is not None:
-            kwargs["thread"] = thread
+
+        async def send_once(hook: discord.Webhook) -> None:
+            if thread is not None and avatar_url:
+                await hook.send(
+                    content,
+                    username=persona.display_name,
+                    avatar_url=avatar_url,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                    wait=True,
+                    thread=thread,
+                )
+            elif thread is not None:
+                await hook.send(
+                    content,
+                    username=persona.display_name,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                    wait=True,
+                    thread=thread,
+                )
+            elif avatar_url:
+                await hook.send(
+                    content,
+                    username=persona.display_name,
+                    avatar_url=avatar_url,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                    wait=True,
+                )
+            else:
+                await hook.send(
+                    content,
+                    username=persona.display_name,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                    wait=True,
+                )
 
         webhook = await self._get_webhook(channel)
         try:
-            await webhook.send(content, **kwargs)
+            await send_once(webhook)
         except discord.NotFound:
             self._webhooks.pop(channel.id, None)
             webhook = await self._get_webhook(channel)
-            await webhook.send(content, **kwargs)
+            await send_once(webhook)
 
     async def _get_webhook(
         self,
@@ -185,6 +208,8 @@ class RoleplayCog(commands.Cog):
         for webhook in await channel.webhooks():
             owner_id = webhook.user.id if webhook.user is not None else None
             if webhook.name == ROLEPLAY_WEBHOOK_NAME and owner_id == bot_id and webhook.token:
+                if len(self._webhooks) >= 128 and channel.id not in self._webhooks:
+                    self._webhooks.pop(next(iter(self._webhooks)))
                 self._webhooks[channel.id] = webhook
                 return webhook
 
@@ -192,6 +217,8 @@ class RoleplayCog(commands.Cog):
             name=ROLEPLAY_WEBHOOK_NAME,
             reason="Meyaya character roleplay replies",
         )
+        if len(self._webhooks) >= 128 and channel.id not in self._webhooks:
+            self._webhooks.pop(next(iter(self._webhooks)))
         self._webhooks[channel.id] = webhook
         return webhook
 
@@ -220,7 +247,7 @@ class RoleplayCog(commands.Cog):
         return None, None
 
     @staticmethod
-    async def _send_error(ctx: commands.Context, description: str) -> None:
+    async def _send_error(ctx: commands.Context[Any], description: str) -> None:
         embed = meyaya_embed(
             "Roleplay Unavailable",
             description,
@@ -234,6 +261,4 @@ class RoleplayCog(commands.Cog):
 
 
 async def setup(bot: MeyayaBot) -> None:
-    """Install the roleplay command."""
-
     await bot.add_cog(RoleplayCog(bot))

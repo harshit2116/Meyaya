@@ -1,6 +1,10 @@
 """Remembered regions and gradually earned evidence of the artificial world."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import Any
+
 from bot.data.fantasy_memory_world import NULLIS_REVELATION
 
 
@@ -61,11 +65,13 @@ LORE = {
 }
 
 
-def patron_name(alignment):
+def patron_name(alignment: str) -> str:
     return "Meyaya"  # Display identity only; Veyra's mask is revealed at the Core.
 
 
-def lore_scenes(world, phase, alignment, beat=1):
+def lore_scenes(
+    world: Any, phase: str, alignment: str, beat: int = 1
+) -> tuple[tuple[str, str], ...]:
     """Scene positions live in the existing run JSON, including old-run defaults."""
     patron = patron_name(alignment)
     lore = LORE.get(world.number)
@@ -89,7 +95,7 @@ def lore_scenes(world, phase, alignment, beat=1):
     return tuple((title, text.format(patron=patron)) for title, text in scenes)
 
 
-def lore_asset(world, phase, beat, index):
+def lore_asset(world: Any, phase: str, beat: int, index: int) -> str | None:
     if world.number == 9 and phase == "story" and beat == 1 and index >= 2:
         return NULLIS_REVELATION[index - 2].asset
     return None

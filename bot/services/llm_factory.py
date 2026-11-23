@@ -1,5 +1,9 @@
 """The single composition point for text model providers."""
 
+from __future__ import annotations
+
+from typing import Any, cast
+
 import aiohttp
 
 from bot.config.settings import Settings
@@ -11,17 +15,27 @@ from bot.services.model_quota import ModelQuota
 
 
 def create_llm_provider(
-    settings: Settings, http_session: aiohttp.ClientSession, guard=None, *, redis=None
+    settings: Settings,
+    http_session: aiohttp.ClientSession,
+    guard: Any = None,
+    *,
+    redis: Any = None,
 ) -> LLMProvider:
     """Preserve feature routes; credentials rotate before the model fallback."""
     provider = settings.llm_provider.strip().casefold()
     if provider != 'gemini':
         raise ValueError(f"Unsupported LLM_PROVIDER: {provider!r}. Available: gemini")
-    pool = GeminiKeyPool(settings.gemini_keys)
-    availability, quotas = {}, {}
+    pool = cast(Any, GeminiKeyPool)(settings.gemini_keys)
+    availability: dict[tuple[str, int], GeminiAvailability] = {}
+    quotas: dict[tuple[str, str], ModelQuota] = {}
 
-    def build(model, *, thinking_budget=None, thinking_level=None):
-        services = []
+    def build(
+        model: str,
+        *,
+        thinking_budget: int | None = None,
+        thinking_level: str | None = None,
+    ) -> LLMProvider:
+        services: list[GeminiService] = []
         # Preserve legacy missing-key behavior and the one-key public interface.
         for index, key in enumerate(settings.gemini_keys or ('',)):
             service = GeminiService(key, model, http_session,
@@ -36,9 +50,9 @@ def create_llm_provider(
                 limits = settings.gemini_model_limits.get(canonical, {'rpm': 5, 'rpd': 20})
                 quotas[identity] = ModelQuota(**limits, redis=redis, model=canonical,
                     namespace=namespace, max_wait=settings.gemini_pacing_wait_seconds)
-            service.quota = quotas[identity]
+            cast(Any, service).quota = quotas[identity]
             services.append(service)
-        return services[0] if len(services) == 1 else GeminiPooledService(services, pool)
+        return services[0] if len(services) == 1 else cast(LLMProvider, cast(Any, GeminiPooledService)(services, pool))
 
     providers = {
         ModelTier.FAST: build(settings.gemini_fast_model, thinking_level='minimal'),

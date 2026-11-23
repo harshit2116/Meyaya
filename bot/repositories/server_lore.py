@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from sqlalchemy import Select, select
+from sqlalchemy.orm import load_only
 
 from bot.models.server_lore import ServerLore
 from bot.repositories.base import Repository
@@ -56,6 +57,14 @@ class ServerLoreRepository(Repository):
 
         statement: Select[tuple[ServerLore]] = (
             select(ServerLore)
+            .options(
+                load_only(
+                    ServerLore.id,
+                    ServerLore.content,
+                    ServerLore.times_seen,
+                    ServerLore.source_user_id,
+                )
+            )
             .where(ServerLore.guild_id == guild_id)
             .order_by(ServerLore.times_seen.desc(), ServerLore.updated_at.desc())
             .limit(limit)

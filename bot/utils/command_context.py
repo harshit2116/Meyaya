@@ -1,10 +1,13 @@
 """Separate command work from Discord response delivery in slow-command logs."""
 
+from __future__ import annotations
+
 import logging
 import json
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
+from typing import Any, cast
 from bot.utils.command_timing import add_stage
 from discord.ext import commands
 from bot.utils.components_v2 import v2_payload
@@ -23,7 +26,7 @@ class CommandOutput:
     result_summary: str = ""
 
 
-def remember_command_result(ctx, **result) -> None:
+def remember_command_result(ctx: Any, **result: Any) -> None:
     """Attach bounded result data to the next public response, never to user memory."""
     summary = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
     ctx._meyaya_result_summary = (
@@ -32,7 +35,7 @@ def remember_command_result(ctx, **result) -> None:
     )
 
 
-def command_output_for(bot, channel_id: int, message_id: int) -> CommandOutput | None:
+def command_output_for(bot: Any, channel_id: int, message_id: int) -> CommandOutput | None:
     outputs = getattr(bot, "_meyaya_command_outputs", None)
     if outputs is None:
         return None
@@ -43,10 +46,12 @@ def command_output_for(bot, channel_id: int, message_id: int) -> CommandOutput |
     if time.monotonic() - created_at > _COMMAND_OUTPUT_TTL:
         outputs.pop((channel_id, message_id), None)
         return None
-    return output
+    return cast(CommandOutput, output)
 
 
-def remember_output_message(bot, channel_id, message_id, command, invoker, summary):
+def remember_output_message(
+    bot: Any, channel_id: int, message_id: int, command: str, invoker: Any, summary: str
+) -> None:
     """Keep follow-up answers aligned with the latest visible card, including rerolls."""
     outputs = getattr(bot, '_meyaya_command_outputs', None)
     if outputs is None:
@@ -58,17 +63,17 @@ def remember_output_message(bot, channel_id, message_id, command, invoker, summa
         outputs.popitem(last=False)
 
 
-class TimedContext(commands.Context):
-    async def defer(self, *, ephemeral=False):
+class TimedContext(commands.Context[Any]):
+    async def defer(self, *, ephemeral: bool = False) -> None:
         if self.interaction is not None and self.interaction.response.is_done():
             return
-        return await super().defer(ephemeral=ephemeral)
+        await super().defer(ephemeral=ephemeral)
 
-    async def send(self, *args, **kwargs):
+    async def send(self, *args: Any, **kwargs: Any) -> Any:
         if args:
             kwargs["content"] = args[0]
             args = args[1:]
-        kwargs = v2_payload(kwargs, force=True)
+        kwargs = cast(Any, v2_payload)(kwargs, force=True)
         loader = getattr(self, "_meyaya_loader", None)
         started = time.monotonic()
         try:
@@ -86,7 +91,8 @@ class TimedContext(commands.Context):
                     uploads = [image]
                 edit["attachments"] = uploads
                 sent = await loading_message.edit(**edit)
-                loader.message = None
+                if loader is not None:
+                    loader.message = None
             else:
                 sent = await super().send(*args, **kwargs)
             command = getattr(self, "command", None)

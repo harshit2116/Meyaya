@@ -1,5 +1,7 @@
 """Pair-specific scrapbook cards using a fixed, photo-free illustrated template."""
 
+from __future__ import annotations
+
 from functools import lru_cache
 from io import BytesIO
 import math
@@ -8,7 +10,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from bot.services.aura_archive import _asset, _serif, _text
-from bot.services.card_renderer import font
+from bot.services.card_renderer import CardFont, font
 
 SIZE = (1672, 941)
 ASSETS = Path(__file__).resolve().parents[1] / "assets/celestial/besties"
@@ -16,7 +18,7 @@ INK = "#302a35"
 
 
 @lru_cache(maxsize=1)
-def _template():
+def _template() -> Image.Image:
     # All four photo windows are transparent. No reference member photos,
     # names, scores, verdicts or filled bars are present in this shared asset.
     with Image.open(ASSETS / "scrapbook-template.png") as source:
@@ -24,12 +26,12 @@ def _template():
 
 
 @lru_cache(maxsize=32)
-def _hand(size, bold=False):
+def _hand(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     path = ASSETS / ("Kalam-Bold.ttf" if bold else "Caveat.ttf")
     return ImageFont.truetype(path, size)
 
 
-def bestie_breakdown(score):
+def bestie_breakdown(score: int | float) -> dict[str, int]:
     """Playful display variations from the existing daily score, not new rolls."""
     p = max(0, min(100, int(score)))
     return {
@@ -39,7 +41,7 @@ def bestie_breakdown(score):
     }
 
 
-def _paper_note(score):
+def _paper_note(score: int) -> tuple[str, str]:
     if score >= 80:
         return ("Same wavelength, matching chaos.", "The group chat never stood a chance.")
     if score >= 60:
@@ -49,7 +51,7 @@ def _paper_note(score):
     return ("Different wavelengths...", "but that's what makes it interesting.")
 
 
-def _report(verdict):
+def _report(verdict: str) -> tuple[str, str]:
     # Reflow the existing verdict; do not replace it with an unrelated report.
     for separator in (". ", " - ", ", but "):
         if separator in verdict:
@@ -63,7 +65,7 @@ def _report(verdict):
     return verdict, ""
 
 
-def _avatar(data, name):
+def _avatar(data: bytes | None, name: str) -> Image.Image:
     art = _asset(data)
     if art is None:
         art = Image.new("RGBA", (400, 400), "#4a3b50")
@@ -75,7 +77,15 @@ def _avatar(data, name):
     return result
 
 
-def _photo(image, art, size, angle, position, *, film=False):
+def _photo(
+    image: Image.Image,
+    art: Image.Image,
+    size: tuple[int, int],
+    angle: float,
+    position: tuple[int, int],
+    *,
+    film: bool = False,
+) -> None:
     photo = ImageOps.fit(art, size, method=Image.Resampling.LANCZOS)
     if film:
         photo = ImageOps.colorize(ImageOps.grayscale(photo), "#251d2a", "#d5a6bd").convert("RGBA")
@@ -83,26 +93,35 @@ def _photo(image, art, size, angle, position, *, film=False):
     image.alpha_composite(photo, position)
 
 
-def _hand_line(image, value, center, size, width, angle=0, color=INK, heart=False):
-    value = " ".join(str(value).split())[:100]
+def _hand_line(
+    image: Image.Image,
+    value: object,
+    center: tuple[int, int],
+    size: int,
+    width: int,
+    angle: float = 0,
+    color: str = INK,
+    heart: bool = False,
+) -> None:
+    text = " ".join(str(value).split())[:100]
     canvas = Image.new("RGBA", (width, 76))
     draw = ImageDraw.Draw(canvas)
-    chosen = _hand(size)
+    chosen: CardFont = _hand(size)
     # General Unicode fonts keep unsupported display names safe without
     # changing the bundled handwritten look for Latin-script names.
-    if any(ord(c) > 0x2FFF for c in value):
+    if any(ord(c) > 0x2FFF for c in text):
         chosen = font(size)
-    while size > 18 and draw.textlength(value, font=chosen) > width - (48 if heart else 12):
+    while size > 18 and draw.textlength(text, font=chosen) > width - (48 if heart else 12):
         size -= 1
-        chosen = font(size) if any(ord(c) > 0x2FFF for c in value) else _hand(size)
-    while len(value) > 1 and draw.textlength(value, font=chosen) > width - (48 if heart else 12):
-        value = value[:-2] + "…"
+        chosen = font(size) if any(ord(c) > 0x2FFF for c in text) else _hand(size)
+    while len(text) > 1 and draw.textlength(text, font=chosen) > width - (48 if heart else 12):
+        text = text[:-2] + "…"
     name_center = width / 2 - (14 if heart else 0)
-    draw.text((name_center, 38), value, font=chosen, fill=color, anchor="mm")
+    draw.text((name_center, 38), text, font=chosen, fill=color, anchor="mm")
     if heart:
-        text_width = draw.textlength(value, font=chosen)
+        text_width = draw.textlength(text, font=chosen)
         hx = name_center + text_width / 2 + 21
-        points = []
+        points: list[tuple[float, float]] = []
         for step in range(81):
             t = step * math.tau / 80
             points.append(
@@ -130,7 +149,7 @@ def _hand_line(image, value, center, size, width, angle=0, color=INK, heart=Fals
     )
 
 
-def _score(image, score):
+def _score(image: Image.Image, score: int) -> None:
     canvas = Image.new("RGBA", (398, 148))
     draw = ImageDraw.Draw(canvas)
     text = f"{score}%"
@@ -165,8 +184,15 @@ def _score(image, score):
     image.alpha_composite(fill, (680, 441))
 
 
-def render_scrapbook(first, second, name_one, name_two, score, verdict):
-    score = max(0, min(100, int(score)))
+def render_scrapbook(
+    first: bytes | None,
+    second: bytes | None,
+    name_one: str,
+    name_two: str,
+    score: int | float,
+    verdict: str,
+) -> bytes:
+    clamped = max(0, min(100, int(score)))
     left, right = _avatar(first, name_one), _avatar(second, name_two)
     image = Image.new("RGBA", SIZE, "#19151e")
     # These angles map the reference's four transparent photographic windows.
@@ -177,8 +203,8 @@ def render_scrapbook(first, second, name_one, name_two, score, verdict):
     image.alpha_composite(_template())
     _hand_line(image, name_one, (416, 548), 43, 260, 9.3, heart=True)
     _hand_line(image, name_two, (1197, 537), 43, 260, -9.8, color="#8a597d", heart=True)
-    _score(image, score)
-    note_one, note_two = _paper_note(score)
+    _score(image, clamped)
+    note_one, note_two = _paper_note(clamped)
     _hand_line(image, note_one, (833, 509), 27, 345, 3.3)
     _hand_line(image, note_two, (849, 535), 27, 360, 3.3)
     title, subtitle = _report(verdict)
@@ -186,7 +212,7 @@ def render_scrapbook(first, second, name_one, name_two, score, verdict):
     _text(draw, (178, 700, 690, 66), title, 43, "#fbecf2", minimum=26)
     if subtitle:
         _text(draw, (178, 772, 680, 52), subtitle, 30, "#bda5bc", minimum=20)
-    values = bestie_breakdown(score)
+    values = bestie_breakdown(clamped)
     for index, key in enumerate(("conversation", "chaos_sync", "hangout_potential")):
         value = values[key]
         y = 680 + index * 54

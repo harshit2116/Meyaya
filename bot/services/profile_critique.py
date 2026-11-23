@@ -9,7 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 from math import atan2, degrees, hypot, sqrt
+from typing import Any
 from PIL import Image, ImageChops, ImageDraw, ImageOps, ImageStat
+
+OklabColor = tuple[float, float, float]
+WeightedPalette = tuple[tuple[float, OklabColor], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,7 +29,7 @@ class Advice:
     reason: str
 
     @property
-    def priority(self):
+    def priority(self) -> float:
         return self.impact * self.confidence * self.fixability
 
 
@@ -38,7 +42,7 @@ class Critique:
 
 @dataclass(frozen=True, slots=True)
 class Features:
-    palette: tuple
+    palette: WeightedPalette
     contrast: float
     edge: float
     entropy: float
@@ -46,7 +50,7 @@ class Features:
     chroma: float
 
 
-def oklab(rgb):
+def oklab(rgb: tuple[int, int, int]) -> OklabColor:
     """sRGB bytes to perceptually useful OKLab (L nominally 0..1)."""
     r,g,b = (v/255 for v in rgb)
     r,g,b = (v/12.92 if v <= .04045 else ((v+.055)/1.055)**2.4 for v in (r,g,b))
@@ -58,7 +62,7 @@ def oklab(rgb):
             .0259040371*l+.7827717662*m-.808675766*s)
 
 
-def _open(data):
+def _open(data: bytes | None) -> Image.Image | None:
     if not data:
         return None
     try:
@@ -71,12 +75,12 @@ def _open(data):
         return None
 
 
-def _gray(image):
+def _gray(image: Image.Image) -> Image.Image:
     background=Image.new('RGBA',image.size,(18,15,25,255))
     return Image.alpha_composite(background,image).convert('L')
 
 
-def _edges(gray):
+def _edges(gray: Image.Image) -> float:
     if min(gray.size)<2:
         return 0.0
     horizontal=ImageChops.difference(gray.crop((1,0,gray.width,gray.height)),gray.crop((0,0,gray.width-1,gray.height)))
@@ -84,11 +88,11 @@ def _edges(gray):
     return (ImageStat.Stat(horizontal).mean[0]+ImageStat.Stat(vertical).mean[0])/2
 
 
-def _features(image):
+def _features(image: Image.Image) -> Features | None:
     small=image.copy()
     small.thumbnail((64,64),Image.Resampling.LANCZOS)
     raw=small.tobytes()
-    pixels=[(r,g,b) for r,g,b,a in zip(raw[::4],raw[1::4],raw[2::4],raw[3::4]) if a>=128]
+    pixels=[(r,g,b) for r,g,b,a in zip(raw[::4],raw[1::4],raw[2::4],raw[3::4],strict=True) if a>=128]
     if not pixels:
         return None
     strip=Image.new('RGB',(len(pixels),1))
@@ -96,7 +100,11 @@ def _features(image):
     quantized=strip.quantize(colors=6,method=Image.Quantize.MEDIANCUT).convert('RGB')
     counts=sorted(quantized.getcolors(len(pixels)) or [],reverse=True)
     # No synthetic display-palette padding or invisible decoration pixels.
-    colors=tuple((count/len(pixels),oklab(color)) for count,color in counts if count/len(pixels)>=.03)
+    colors: WeightedPalette = tuple(
+        (count / len(pixels), oklab((int(color[0]), int(color[1]), int(color[2]))))
+        for count, color in counts
+        if isinstance(color, tuple) and count / len(pixels) >= 0.03
+    )
     total=sum(weight for weight,_ in colors)
     colors=tuple((weight/total,color) for weight,color in colors)
     gray=_gray(image)
@@ -105,19 +113,19 @@ def _features(image):
                     sum(w*hypot(c[1],c[2]) for w,c in colors))
 
 
-def palette_relationship(left, right):
+def palette_relationship(left: Features, right: Features) -> tuple[float, float]:
     """Frequency-weighted compatibility, including neutral and opposing hues.
 
     These are heuristic relationships, never a claim that a style is wrong.
     A compatible secondary accent can connect two different dominant colours.
     """
-    def compare(source,target):
+    def compare(source: WeightedPalette, target: WeightedPalette) -> tuple[float, float]:
         score=shared=0.0
         for weight,a in source:
             best=0.0
             nearest=10.0
             for _,b in target:
-                distance=sqrt(sum((x-y)**2 for x,y in zip(a,b)))
+                distance=sqrt(sum((x-y)**2 for x,y in zip(a,b,strict=True)))
                 nearest=min(nearest,distance)
                 ca,cb=hypot(a[1],a[2]),hypot(b[1],b[2])
                 if min(ca,cb)<.035:
@@ -136,12 +144,12 @@ def palette_relationship(left, right):
     return (a+b)/2,(sa+sb)/2
 
 
-def _icon_evidence(image):
+def _icon_evidence(image: Image.Image) -> tuple[dict[str, tuple[float, float]], float]:
     gray=ImageOps.fit(_gray(image),(128,128),method=Image.Resampling.LANCZOS)
     mask=Image.new('L',(128,128))
     ImageDraw.Draw(mask).ellipse((0,0,127,127),fill=255)
     base=max(1,ImageStat.Stat(gray,mask).stddev[0])
-    samples=[]
+    samples: list[tuple[int, float, float]] = []
     for size in (128,64,48,32,24):
         tiny=gray.resize((size,size),Image.Resampling.LANCZOS)
         tiny_mask=mask.resize((size,size),Image.Resampling.NEAREST)
@@ -160,7 +168,7 @@ def _icon_evidence(image):
     return dict((str(size),(retained,loss)) for size,retained,loss in samples),rim_share
 
 
-def analyze_advice(visual):
+def analyze_advice(visual: Any) -> Critique:
     avatar=_open(visual.avatar)
     if avatar is None:
         return Critique((),"Your avatar could not be analysed. Try again once the image loads.", False)
@@ -169,8 +177,18 @@ def analyze_advice(visual):
         return Critique((),"The avatar has no sufficiently opaque pixels to review reliably.", False)
     samples,rim_share=_icon_evidence(avatar)
     retained,loss=samples['32']
-    findings=[]
-    def add(rule,metric,impact,confidence,fixability,evidence,title,action,reason):
+    findings: list[Advice] = []
+    def add(
+        rule: str,
+        metric: str,
+        impact: float,
+        confidence: float,
+        fixability: float,
+        evidence: dict[str, float],
+        title: str,
+        action: str,
+        reason: str,
+    ) -> None:
         findings.append(Advice(rule,metric,impact,confidence,fixability,
             tuple((key,round(value,4)) for key,value in evidence.items()),title,action,reason))
     if a.edge>28 and loss>.55:

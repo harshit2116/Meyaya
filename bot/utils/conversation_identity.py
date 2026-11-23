@@ -1,8 +1,11 @@
 """Bounded, cache-only identity context for conversational references."""
 
+from __future__ import annotations
+
 import json
 import re
 from itertools import islice
+from typing import Any
 from bot.data.private_identity import AYAYA_USER_ID, PAPA_GUILD_ID
 
 
@@ -53,7 +56,7 @@ IDENTITY_SCOPE_RULES = (
 )
 
 
-def server_identity_context(guild):
+def server_identity_context(guild: Any) -> str:
     """Use Discord's current owner ID, with no network or database dependency."""
     if guild is None:
         return "AUTHORITATIVE SERVER IDENTITY: This is a DM; there is no current server owner."
@@ -61,7 +64,7 @@ def server_identity_context(guild):
     record = {"server_id": guild.id, "server_name": getattr(guild, "name", None), "owner_id": owner_id}
     owner = getattr(guild, "owner", None)
     # A missing/stale member cache must never supply another person's name.
-    if owner_id is not None and getattr(owner, "id", None) == owner_id:
+    if owner is not None and owner_id is not None and getattr(owner, "id", None) == owner_id:
         record["owner_display_name"] = owner.display_name[:80]
         record["owner_handle"] = getattr(owner, "name", "")[:80]
     return (
@@ -92,7 +95,7 @@ CONVERSATION_RULES = (
 )
 
 
-def referenced_member_context(message, bot_id=None):
+def referenced_member_context(message: Any, bot_id: int | None = None) -> str | None:
     """Resolve explicit mentions and exact cached names; never fetch an entire guild."""
     text = getattr(message, "content", "").casefold()
     speaker_id = message.author.id

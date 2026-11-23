@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from redis.asyncio import Redis
 from redis.backoff import NoBackoff
 from redis.asyncio.retry import Retry
@@ -10,7 +12,7 @@ from redis.asyncio.retry import Retry
 def build_redis_client(redis_url: str, *, verify_tls: bool = True) -> Redis:
     """Create an async Redis client."""
 
-    tls = (
+    tls: dict[str, Any] = (
         {"ssl_cert_reqs": "required" if verify_tls else "none"}
         if redis_url.startswith("rediss://")
         else {}

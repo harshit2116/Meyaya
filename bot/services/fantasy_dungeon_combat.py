@@ -1,19 +1,23 @@
 """Interactive dungeon turns reusing the existing Fighter and DuelEngine rules."""
 
+from __future__ import annotations
+
+from collections.abc import Mapping
 from dataclasses import asdict, replace
 from random import Random
 from types import SimpleNamespace
+from typing import Any, cast
 
-from bot.data.fantasy_dungeon import world_for
 from bot.data.fantasy_combat import CombatRule
-from bot.services.fantasy_duel import DuelEngine, Fighter
+from bot.data.fantasy_dungeon import world_for
+from bot.services.fantasy_duel import Battle, DuelEngine, Fighter
 from bot.services.fantasy_generation import generate_identity
 
 
-def enemy_fighter(floor, encounter, alignment):
+def enemy_fighter(floor: int, encounter: int, alignment: str) -> Fighter:
     if floor == 10:
         raise ValueError("The Memory Core uses a witnessed cinematic confrontation.")
-    world = world_for(floor)
+    world = cast(Any, world_for)(floor)
     spec = world.boss if encounter == 3 else world.enemies[encounter]
     npc_id = -(floor * 10 + encounter + 1)
     values = generate_identity(abs(npc_id), rng=Random(abs(npc_id)), class_id=spec.class_id)
@@ -35,15 +39,15 @@ def enemy_fighter(floor, encounter, alignment):
     return fighter
 
 
-def restore_fighter(values):
+def restore_fighter(values: Mapping[str, Any]) -> Fighter:
     copied = dict(values)
     copied["rule"] = CombatRule(**copied["rule"])
     return Fighter(**copied)
 
 
-def enemy_intent(floor, encounter, battle):
+def enemy_intent(floor: int, encounter: int, battle: Mapping[str, Any]) -> str:
     """Telegraph the existing deterministic action policy without advancing it."""
-    world = world_for(floor)
+    world = cast(Any, world_for)(floor)
     spec = world.boss if encounter == 3 else world.enemies[encounter]
     turn = battle.get("turn", 0) + 1
     move = spec.abilities[(turn - 1) % len(spec.abilities)]
@@ -62,21 +66,30 @@ def enemy_intent(floor, encounter, battle):
 
 
 class DungeonCombat(DuelEngine):
-    def __init__(self, player, enemy, seed, *, floor, encounter, turn=0):
+    def __init__(
+        self,
+        player: Fighter,
+        enemy: Fighter,
+        seed: int,
+        *,
+        floor: int,
+        encounter: int,
+        turn: int = 0,
+    ) -> None:
         super().__init__(player, enemy, seed)
         self.floor, self.encounter = floor, encounter
         self.state.round = turn
 
     @classmethod
-    def restore(cls, saved, seed, floor, encounter):
+    def restore(cls, saved: Mapping[str, Any], seed: int, floor: int, encounter: int) -> DungeonCombat:
         return cls(restore_fighter(saved["player"]), restore_fighter(saved["enemy"]),
                    seed, floor=floor, encounter=encounter, turn=saved["turn"])
 
-    def export(self):
+    def export(self) -> dict[str, Any]:
         return dict(player=asdict(self.state.left), enemy=asdict(self.state.right),
                     turn=self.state.round, log=self.state.log[-8:])
 
-    def player_turn(self, action):
+    def player_turn(self, action: str) -> Battle:
         if action not in {"attack", "ability", "guard"}:
             raise ValueError("Choose Attack, Ability or Guard")
         state = self.state
@@ -121,10 +134,10 @@ class DungeonCombat(DuelEngine):
             state.winner_id = player.user_id if player.hp else enemy.user_id
         return state
 
-    def enemy_turn(self):
+    def enemy_turn(self) -> None:
         state = self.state
         enemy, player = state.right, state.left
-        world = world_for(self.floor)
+        world = cast(Any, world_for)(self.floor)
         spec = world.boss if self.encounter == 3 else world.enemies[self.encounter]
         turn = state.round
         move = spec.abilities[(turn - 1) % len(spec.abilities)]

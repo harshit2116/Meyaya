@@ -1,5 +1,7 @@
 """Bounded, read-only Top.gg v1 verification using a project-scoped token."""
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
 import json
@@ -9,6 +11,7 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from typing import Any
 
 import aiohttp
 
@@ -34,7 +37,7 @@ class VotePage:
     complete: bool
 
 
-def parse_vote_page(payload, bot_id: int, *, now=None) -> VotePage:
+def parse_vote_page(payload: object, bot_id: int, *, now: datetime | None = None) -> VotePage:
     if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
         raise InvalidVote("Invalid vote page")
     records = payload["data"]
@@ -65,7 +68,9 @@ def parse_vote_page(payload, bot_id: int, *, now=None) -> VotePage:
     return VotePage(tuple(votes), cursor, False)
 
 
-def parse_vote_status(payload, bot_id: int, user_id: int, *, now=None) -> VerifiedVote | None:
+def parse_vote_status(
+    payload: object, bot_id: int, user_id: int, *, now: datetime | None = None
+) -> VerifiedVote | None:
     now = now or datetime.now(UTC)
     if not isinstance(payload, dict):
         raise InvalidVote("Invalid vote status")
@@ -86,18 +91,18 @@ def parse_vote_status(payload, bot_id: int, user_id: int, *, now=None) -> Verifi
 
 
 class TopggAPI:
-    def __init__(self, http_session, token: str, project_id: str):
+    def __init__(self, http_session: aiohttp.ClientSession, token: str, project_id: str) -> None:
         self.http = http_session
         self._token = token.strip()
         self.project_id = project_id
-        self._verified_bot = None
+        self._verified_bot: int | None = None
         self._identity_lock = asyncio.Lock()
         self._request_lock = asyncio.Lock()
-        self._requests = deque()
+        self._requests: deque[float] = deque()
         self._blocked_until = 0.0
-        self._cache = OrderedDict()
+        self._cache: OrderedDict[int, tuple[float, VerifiedVote | None]] = OrderedDict()
 
-    async def _reserve_request(self):
+    async def _reserve_request(self) -> None:
         async with self._request_lock:
             now = time.monotonic()
             if now < self._blocked_until:
@@ -112,7 +117,7 @@ class TopggAPI:
             self._requests.append(now)
 
     @staticmethod
-    async def _read_json(response):
+    async def _read_json(response: aiohttp.ClientResponse) -> Any:
         body = bytearray()
         async for chunk in response.content.iter_chunked(4096):
             body.extend(chunk)
@@ -127,7 +132,7 @@ class TopggAPI:
                 "Top.gg returned an unreadable response. Please try again later."
             ) from None
 
-    def _backoff(self, response, payload):
+    def _backoff(self, response: aiohttp.ClientResponse, payload: object) -> None:
         delays = [3600.0]
         header = response.headers.get("Retry-After", "")
         try:
@@ -146,10 +151,16 @@ class TopggAPI:
         self._blocked_until = max(self._blocked_until, time.monotonic() + max(delays))
 
     @property
-    def retry_after_seconds(self):
-        return max(0, self._blocked_until - time.monotonic())
+    def retry_after_seconds(self) -> float:
+        return max(0.0, self._blocked_until - time.monotonic())
 
-    async def _get(self, suffix="", *, missing_vote=False, params=None):
+    async def _get(
+        self,
+        suffix: str = "",
+        *,
+        missing_vote: bool = False,
+        params: dict[str, str] | None = None,
+    ) -> Any:
         await self._reserve_request()
         try:
             async with self.http.get(
@@ -187,7 +198,7 @@ class TopggAPI:
                 "I couldn't reach top.gg. Please try checking your vote again shortly."
             ) from None
 
-    async def verify_project(self, bot_id: int):
+    async def verify_project(self, bot_id: int) -> None:
         async with self._identity_lock:
             if self._verified_bot == bot_id:
                 return
@@ -224,13 +235,15 @@ class TopggAPI:
         self._remember_vote(user_id, vote)
         return vote
 
-    def _remember_vote(self, user_id, vote):
+    def _remember_vote(self, user_id: int, vote: VerifiedVote | None) -> None:
         self._cache[user_id] = (time.monotonic() + (30 if vote else 5), vote)
         self._cache.move_to_end(user_id)
         while len(self._cache) > 512:
             self._cache.popitem(last=False)
 
-    async def vote_page(self, bot_id: int, *, since: datetime, cursor=None) -> VotePage:
+    async def vote_page(
+        self, bot_id: int, *, since: datetime, cursor: str | None = None
+    ) -> VotePage:
         await self.verify_project(bot_id)
         params = {"cursor": cursor} if cursor is not None else {"startDate": since.isoformat()}
         data = await self._get("/votes", params=params)

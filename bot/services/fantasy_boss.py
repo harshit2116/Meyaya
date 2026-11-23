@@ -1,5 +1,7 @@
 """Meyaya's dedicated Soul Interface archetype. Never persisted as a player."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from random import Random
 from types import SimpleNamespace
@@ -7,7 +9,7 @@ from types import SimpleNamespace
 from bot.services.fantasy_generation import generate_identity
 
 
-def meyaya_boss_profile(user_id):
+def meyaya_boss_profile(user_id: int) -> SimpleNamespace:
     values = generate_identity(
         user_id, rng=Random(7963), class_id="mage", now=datetime(2026, 1, 1, tzinfo=UTC)
     )
@@ -47,7 +49,7 @@ def meyaya_boss_profile(user_id):
 VEYRA_BOSS_ID = -1
 
 
-def veyra_boss_profile():
+def veyra_boss_profile() -> SimpleNamespace:
     profile = meyaya_boss_profile(1)
     profile.user_id = VEYRA_BOSS_ID
     profile.boss_key = "veyra"

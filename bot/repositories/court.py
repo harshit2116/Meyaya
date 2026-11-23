@@ -10,8 +10,6 @@ from bot.repositories.base import Repository
 
 
 class CourtRepository(Repository):
-    """Create and retrieve court cases."""
-
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import discord
 from bot.utils.components_v2 import MeyayaView
@@ -49,7 +50,8 @@ class MarriageProposalView(MeyayaView):
 
     def _disable(self) -> None:
         for item in self.children:
-            item.disabled = True
+            if isinstance(item, (discord.ui.Button, discord.ui.Select)):
+                item.disabled = True
 
     async def _claim_resolution(self) -> bool:
         async with self._resolution_lock:
@@ -59,7 +61,7 @@ class MarriageProposalView(MeyayaView):
             return True
 
     @discord.ui.button(label="Accept", emoji="💍", style=discord.ButtonStyle.success)
-    async def accept(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def accept(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         if not await self._claim_resolution():
             await interaction.response.send_message(
                 "This proposal was already answered.", ephemeral=True
@@ -121,7 +123,7 @@ class MarriageProposalView(MeyayaView):
         )
 
     @discord.ui.button(label="Decline", emoji="💔", style=discord.ButtonStyle.danger)
-    async def decline(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def decline(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         if not await self._claim_resolution():
             await interaction.response.send_message(
                 "This proposal was already answered.", ephemeral=True
@@ -187,7 +189,8 @@ class DivorceConfirmationView(MeyayaView):
 
     def _disable(self) -> None:
         for item in self.children:
-            item.disabled = True
+            if isinstance(item, (discord.ui.Button, discord.ui.Select)):
+                item.disabled = True
 
     async def _claim_resolution(self) -> bool:
         async with self._resolution_lock:
@@ -197,7 +200,7 @@ class DivorceConfirmationView(MeyayaView):
             return True
 
     @discord.ui.button(label="Confirm divorce", style=discord.ButtonStyle.danger)
-    async def confirm(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def confirm(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         if not await self._claim_resolution():
             await interaction.response.send_message(
                 "This divorce request was already answered.", ephemeral=True
@@ -234,7 +237,7 @@ class DivorceConfirmationView(MeyayaView):
             await interaction.message.edit(embed=embed, view=self)
 
     @discord.ui.button(label="Stay married", style=discord.ButtonStyle.secondary)
-    async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+    async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button[Any]) -> None:
         if not await self._claim_resolution():
             await interaction.response.send_message(
                 "This divorce request was already answered.", ephemeral=True

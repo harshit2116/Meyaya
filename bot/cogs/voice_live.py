@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import Any
 from weakref import WeakValueDictionary
 
 import discord
@@ -12,12 +13,12 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from bot.app import MeyayaBot
-from bot.data.voices import GEMINI_LIVE_VOICES, canonical_voice_name
-from bot.services.voice_session import VoiceChatSession
-from bot.services.chat_blacklist import acknowledge_silently
-from bot.views.voice_picker import VoicePicker
+from bot.data.voices import canonical_voice_name
 from bot.services.ai_guard import AILimitReached
+from bot.services.chat_blacklist import acknowledge_silently
+from bot.services.voice_session import VoiceChatSession
 from bot.utils.embeds import meyaya_embed
+from bot.views.voice_picker import VoicePicker
 
 logger = logging.getLogger(__name__)
 
@@ -28,24 +29,29 @@ class VoiceLiveCog(commands.Cog):
         self._sessions: dict[int, VoiceChatSession] = {}
         self._lifecycle_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
         self._voice_overrides: dict[int, str] = {}
-        self._empty_since = {}
+        self._empty_since: dict[int, tuple[tuple[VoiceChatSession, int], float]] = {}
 
-    async def cog_load(self):
+    async def cog_load(self) -> None:
         self._empty_watch.start()
 
     @tasks.loop(seconds=15)
-    async def _empty_watch(self):
+    async def _empty_watch(self) -> None:
         for session in list(self._sessions.values()):
             if hasattr(session, 'checkpoint_voice_usage'):
                 await session.checkpoint_voice_usage()
         await self._check_empty_sessions()
 
     @_empty_watch.before_loop
-    async def _before_empty_watch(self):
+    async def _before_empty_watch(self) -> None:
         await self.bot.wait_until_ready()
 
-    async def _check_empty_sessions(self):
+    async def _check_empty_sessions(self) -> None:
         for guild_id, session in list(self._sessions.items()):
+            if getattr(session, "_closed", False):
+                if self._sessions.get(guild_id) is session:
+                    self._sessions.pop(guild_id, None)
+                self._empty_since.pop(guild_id, None)
+                continue
             channel = getattr(session.voice_client, "channel", None)
             if channel is None or any(not member.bot for member in channel.members):
                 self._empty_since.pop(guild_id, None)
@@ -122,11 +128,11 @@ class VoiceLiveCog(commands.Cog):
         channel = getattr(voice, "channel", None)
         return channel is not None and channel.id == session.connected_channel_id
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="join", description="Join your voice channel and start talking with Meyaya."
     )
     @commands.guild_only()
-    async def join(self, ctx: commands.Context) -> None:
+    async def join(self, ctx: commands.Context[Any]) -> None:
         if ctx.guild is None:
             await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
@@ -200,9 +206,9 @@ class VoiceLiveCog(commands.Cog):
             icon="🎙️",
         )
 
-    @commands.hybrid_command(name="leave", description="End voice chat and disconnect Meyaya.")
+    @commands.hybrid_command(name="leave", description="End voice chat and disconnect Meyaya.")  # type: ignore[arg-type]
     @commands.guild_only()
-    async def leave(self, ctx: commands.Context) -> None:
+    async def leave(self, ctx: commands.Context[Any]) -> None:
         if ctx.guild is None:
             await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
@@ -230,12 +236,12 @@ class VoiceLiveCog(commands.Cog):
             icon="🌙",
         )
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="voicecheck",
         description="Check whether Meyaya can speak in the current voice channel.",
     )
     @commands.guild_only()
-    async def voicecheck(self, ctx: commands.Context) -> None:
+    async def voicecheck(self, ctx: commands.Context[Any]) -> None:
         if ctx.guild is None:
             await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
@@ -270,12 +276,14 @@ class VoiceLiveCog(commands.Cog):
             icon="🔊",
         )
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="voice", description="Send a message and hear Meyaya reply in voice chat."
     )
     @commands.guild_only()
     @commands.cooldown(1, 8, commands.BucketType.member)
-    async def voice(self, ctx: commands.Context, *, message: str) -> None:
+    async def voice(self, ctx: commands.Context[Any], *, message: str) -> None:
+        if ctx.guild is None:
+            return
         message = message.strip()
         if len(message) >= 2 and message[0] == message[-1] and message[0] in {'"', "'"}:
             message = message[1:-1].strip()
@@ -308,7 +316,7 @@ class VoiceLiveCog(commands.Cog):
             return
         await ctx.send("Sent. Listen for Meyaya in voice chat.", ephemeral=True)
 
-    @commands.hybrid_command(
+    @commands.hybrid_command(  # type: ignore[arg-type]
         name="listen",
         description="Turn microphone listening on or off while staying in voice chat.",
     )
@@ -320,7 +328,9 @@ class VoiceLiveCog(commands.Cog):
             app_commands.Choice(name="Status", value="status"),
         ]
     )
-    async def listen(self, ctx: commands.Context, mode: str = "status"):
+    async def listen(self, ctx: commands.Context[Any], mode: str = "status") -> None:
+        if ctx.guild is None:
+            return
         mode = mode.lower().strip()
         if mode not in {"on", "off", "status"}:
             await ctx.send("Use `listen on`, `listen off`, or `listen status`.", ephemeral=True)
@@ -343,10 +353,10 @@ class VoiceLiveCog(commands.Cog):
             ephemeral=True,
         )
 
-    @commands.hybrid_command(name="voiceset", description="Show or change Meyaya's speaking voice.")
+    @commands.hybrid_command(name="voiceset", description="Show or change Meyaya's speaking voice.")  # type: ignore[arg-type]
     @app_commands.describe(name="Optional voice name, e.g. Kore, Leda, Aoede")
     @commands.guild_only()
-    async def voiceset(self, ctx: commands.Context, name: str | None = None) -> None:
+    async def voiceset(self, ctx: commands.Context[Any], name: str | None = None) -> None:
         if ctx.guild is None:
             await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
@@ -408,7 +418,7 @@ class VoiceLiveCog(commands.Cog):
 
     @staticmethod
     async def _send_status(
-        ctx: commands.Context,
+        ctx: commands.Context[Any],
         title: str,
         description: str,
         *,
@@ -431,9 +441,10 @@ class VoiceLiveCog(commands.Cog):
         if self.bot.user is None:
             return
         if member.id != self.bot.user.id:
-            if not member.bot and getattr(after, "channel", None) is not None:
+            after_channel = getattr(after, "channel", None)
+            if not member.bot and after_channel is not None:
                 session = self._sessions.get(member.guild.id)
-                if session and session.connected_channel_id == after.channel.id:
+                if session and session.connected_channel_id == after_channel.id:
                     self._empty_since.pop(member.guild.id, None)
             return
 
