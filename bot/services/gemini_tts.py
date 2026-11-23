@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from io import BytesIO
 import logging
 import re
+import shutil
 import time
 import wave
 
@@ -36,15 +37,24 @@ def _pcm_to_wav(pcm_bytes: bytes, *, sample_rate: int = 24000) -> bytes:
     return buf.getvalue()
 
 
+def resolve_ffmpeg_executable(configured: str = "ffmpeg") -> str:
+    """Resolve ffmpeg cleanly even when a cross-OS path is present in .env."""
+    candidate = (configured or "").strip()
+    if candidate and shutil.which(candidate):
+        return candidate
+    return shutil.which("ffmpeg") or candidate or "ffmpeg"
+
+
 async def encode_discord_audio(
     wav_bytes: bytes,
     *,
     ffmpeg_executable: str = "ffmpeg",
 ) -> tuple[bytes, str]:
     """Encode WAV to MP3 for universal inline Discord Desktop+Mobile playback, falling back to WAV."""
+    ffmpeg_bin = resolve_ffmpeg_executable(ffmpeg_executable)
     try:
         proc = await asyncio.create_subprocess_exec(
-            ffmpeg_executable,
+            ffmpeg_bin,
             "-hide_banner",
             "-loglevel",
             "error",

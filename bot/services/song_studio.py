@@ -15,7 +15,7 @@ import wave
 
 from bot.logging.telemetry import event
 from bot.services.gemini_keys import GeminiKeyPool
-from bot.services.gemini_tts import GeminiTTSService, encode_discord_audio
+from bot.services.gemini_tts import GeminiTTSService, encode_discord_audio, resolve_ffmpeg_executable
 from bot.services.llm import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -154,17 +154,18 @@ async def mix_song_mp3(
         return audio, name.replace("meyaya-voice", "meyaya-song"), False
 
     vocal_dur = wav_duration_seconds(vocal_wav)
-    intro_delay_ms = 1200
-    total_dur = max(6.0, vocal_dur + 3.2)
-    fade_out_start = max(1.0, total_dur - 1.8)
+    intro_delay_ms = 1500
+    total_dur = max(6.0, vocal_dur + 3.5)
+    fade_out_start = max(1.0, total_dur - 2.0)
     filter_complex = (
         f"[0:a]aresample=48000,aformat=channel_layouts=stereo,"
         f"aecho=0.8:0.88:45:0.20,adelay={intro_delay_ms}|{intro_delay_ms},volume=1.05[v];"
         f"[1:a]atrim=0:{total_dur:.2f},afade=t=in:st=0:d=1.0,"
-        f"afade=t=out:st={fade_out_start:.2f}:d=1.8,volume=0.28[m];"
+        f"afade=t=out:st={fade_out_start:.2f}:d=2.0,volume=0.38[m];"
         f"[v][m]amix=inputs=2:duration=longest:dropout_transition=2:normalize=0[out]"
     )
 
+    ffmpeg_bin = resolve_ffmpeg_executable(ffmpeg_executable)
     try:
         with tempfile.TemporaryDirectory(prefix="meyaya_song_") as tmp_dir:
             tmp = Path(tmp_dir)
@@ -175,7 +176,7 @@ async def mix_song_mp3(
             bgm_path.write_bytes(bgm_pcm)
 
             proc = await asyncio.create_subprocess_exec(
-                ffmpeg_executable,
+                ffmpeg_bin,
                 "-hide_banner",
                 "-loglevel",
                 "error",
