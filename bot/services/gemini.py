@@ -282,6 +282,12 @@ class GeminiService(LLMProvider):
                         logger.warning("Gemini rate limit hit.")
                         return None
                     if response.status in RETRYABLE_STATUS_CODES and attempt < MAX_REQUEST_ATTEMPTS:
+                        # Low-RPM models (<= 10 RPM) enforce >= 6s spacing between calls;
+                        # retrying on the same key would immediately hit model_pacing_busy
+                        # instead of failing over cleanly to the next key or model.
+                        if self.quota is not None and getattr(self.quota, "rpm", 15) <= 10:
+                            self._transient_failure()
+                            return None
                         logger.warning(
                             "Gemini temporarily unavailable status=%s; retrying attempt=%s",
                             response.status,

@@ -228,8 +228,15 @@ class ModelRouter(LLMProvider):
             remaining = budget - (asyncio.get_running_loop().time() - started)
             if remaining <= 0:
                 break
-            if index == 0 and len(candidates) > 1:
-                candidate_budget = min(remaining, budget * 0.70)
+            if len(candidates) == 1:
+                candidate_budget = remaining
+            elif index == 0:
+                # Cap primary below half on long multi-fallback budgets so a slow
+                # 503 on model 1 cannot starve every fallback model to 2-3 seconds.
+                primary_share = 0.45 if budget >= 25.0 and len(candidates) > 2 else 0.70
+                candidate_budget = min(remaining, budget * primary_share)
+            elif budget >= 15.0:
+                candidate_budget = min(remaining, max(12.0, remaining * 0.65))
             else:
                 candidate_budget = remaining / max(1, len(candidates) - index)
             if index > 0:

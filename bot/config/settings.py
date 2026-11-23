@@ -109,12 +109,12 @@ class Settings(BaseSettings):
         default_factory=lambda: ["gemma-4-31b-it"],
         alias="GEMINI_LIGHT_FALLBACK_MODELS",
     )
-    gemini_reasoning_model: str = Field(default="gemini-3.8-flash", alias="GEMINI_REASONING_MODEL")
+    gemini_reasoning_model: str = Field(default="gemini-3.6-flash", alias="GEMINI_REASONING_MODEL")
     gemini_reasoning_fallback_models: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
-            "gemini-3.6-flash",
-            "gemini-4-hydrogen",
-            "gemini-3-flash-preview",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+            "gemini-3.8-flash",
         ],
         alias="GEMINI_REASONING_FALLBACK_MODELS",
     )

@@ -396,6 +396,27 @@ async def send_native_embed(destination: Any, embed: discord.Embed) -> Any:
         _delivering.reset(token)
 
 
+async def send_native_file(
+    destination: Any,
+    *,
+    file: discord.File,
+    content: str | None = None,
+    allowed_mentions: discord.AllowedMentions | None = None,
+) -> Any:
+    """Deliver a raw file attachment without V2 container wrapping (e.g. inline audio)."""
+    token = _delivering.set(True)
+    try:
+        kwargs: dict[str, Any] = {
+            "file": file,
+            "allowed_mentions": allowed_mentions or discord.AllowedMentions.none(),
+        }
+        if content:
+            kwargs["content"] = content
+        return await destination.send(**kwargs)
+    finally:
+        _delivering.reset(token)
+
+
 def install_components_v2() -> None:
     """Install once at bot startup across channel, DM and interaction delivery."""
     global _installed

@@ -283,10 +283,12 @@ class AdminCog(commands.Cog):
     async def synccommands(self, ctx: commands.Context[Any]) -> None:
         cast(Any, normalize_member_parameters)(self.bot)
         synced = await self.bot.tree.sync()
-        if self.bot.settings.guild_id:
+        if self.bot.settings.guild_id and self.bot.application_id is not None:
             guild = discord.Object(id=self.bot.settings.guild_id)
-            self.bot.tree.copy_global_to(guild=guild)
-            await self.bot.tree.sync(guild=guild)
+            self.bot.tree.clear_commands(guild=guild)
+            await self.bot.http.bulk_upsert_guild_commands(
+                self.bot.application_id, self.bot.settings.guild_id, []
+            )
         await ctx.send(
             f"Synced {len(synced)} global commands. Refresh Discord if the menu still shows older options.",
         )

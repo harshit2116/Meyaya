@@ -18,9 +18,10 @@ from bot.data.voices import canonical_voice_name
 from bot.services.ai_guard import AILimitReached
 from bot.services.audio import PcmStreamAudioSource
 from bot.services.chat_blacklist import acknowledge_silently
-from bot.services.gemini_tts import MAX_TTS_CHARS
+from bot.services.gemini_tts import MAX_TTS_CHARS, encode_discord_audio
 from bot.services.lyria_music import LyriaMusicSession
 from bot.services.voice_session import VoiceChatSession
+from bot.utils.components_v2 import send_native_file
 from bot.utils.embeds import meyaya_embed
 from bot.views.voice_picker import VoicePicker
 
@@ -499,8 +500,13 @@ class VoiceLiveCog(commands.Cog):
         if len(self._voiceclip_cooldowns) >= 2048 and key not in self._voiceclip_cooldowns:
             self._voiceclip_cooldowns.pop(next(iter(self._voiceclip_cooldowns)))
         self._voiceclip_cooldowns[key] = time.monotonic()
-        await ctx.send(
-            file=discord.File(BytesIO(wav), filename="meyaya-voice.wav"),
+        audio_bytes, filename = await encode_discord_audio(
+            wav,
+            ffmpeg_executable=getattr(self.bot.settings, "ffmpeg_executable", "ffmpeg"),
+        )
+        await send_native_file(
+            ctx,
+            file=discord.File(BytesIO(audio_bytes), filename=filename),
             allowed_mentions=discord.AllowedMentions.none(),
         )
 

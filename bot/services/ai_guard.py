@@ -3,13 +3,26 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
 from functools import wraps
 import time
 from typing import Any, cast
 from bot.logging.telemetry import current_model_context, event
 from bot.services.llm import GroundingError
+
+_skip_user_cooldown: ContextVar[bool] = ContextVar("ai_guard_skip_user_cooldown", default=False)
+
+
+@contextmanager
+def multi_step_ai_scope() -> Iterator[None]:
+    """Allow follow-up LLM sub-steps within one already-throttled command."""
+    token = _skip_user_cooldown.set(True)
+    try:
+        yield
+    finally:
+        _skip_user_cooldown.reset(token)
 
 
 class AILimitReached(Exception):
@@ -38,12 +51,14 @@ class AIGuard:
             for user, stamp in self.users.items()
             if now - stamp < self.settings.ai_user_cooldown_seconds
         }
-        if user_id and (user_id in self.users or user_id in self.inflight_users):
+        skip_cooldown = _skip_user_cooldown.get()
+        if user_id and not skip_cooldown and (user_id in self.users or user_id in self.inflight_users):
             raise AILimitReached("Please wait a few seconds before another AI request.")
         optional = current_model_context().get('feature') in {'proactive', 'monitor', 'moderation'}
-        if user_id:
+        if user_id and not skip_cooldown:
             self.inflight_users.add(user_id)
         acquired = False
+        succeeded = False
         try:
             async with self.condition:
                 if optional and self.waiting:
@@ -64,12 +79,15 @@ class AIGuard:
                     raise AILimitReached("Meyaya's AI features are temporarily paused.")
                 self.active += 1
                 acquired = True
-                if user_id:
+                if user_id and not skip_cooldown:
                     self.users[user_id] = time.monotonic()
             yield
+            succeeded = True
         finally:
-            if user_id:
+            if user_id and not skip_cooldown:
                 self.inflight_users.discard(user_id)
+                if not succeeded:
+                    self.users.pop(user_id, None)
             if acquired:
                 async with self.condition:
                     self.active -= 1

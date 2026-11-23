@@ -36,6 +36,40 @@ def _pcm_to_wav(pcm_bytes: bytes, *, sample_rate: int = 24000) -> bytes:
     return buf.getvalue()
 
 
+async def encode_discord_audio(
+    wav_bytes: bytes,
+    *,
+    ffmpeg_executable: str = "ffmpeg",
+) -> tuple[bytes, str]:
+    """Encode WAV to MP3 for universal inline Discord Desktop+Mobile playback, falling back to WAV."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            ffmpeg_executable,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "wav",
+            "-i",
+            "pipe:0",
+            "-f",
+            "mp3",
+            "-b:a",
+            "128k",
+            "pipe:1",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        async with asyncio.timeout(6):
+            stdout, _ = await proc.communicate(wav_bytes)
+        if proc.returncode == 0 and stdout:
+            return stdout, "meyaya-voice.mp3"
+    except (OSError, TimeoutError):
+        pass
+    return wav_bytes, "meyaya-voice.wav"
+
+
 class GeminiTTSService:
     """Generate short WAV voice clips across configured Gemini TTS fallback models."""
 
