@@ -28,7 +28,6 @@ SHORT_COMMANDS = {
     "court": "ct", "setcourt": "sct", "removecourt": "rc", "checkclaim": "ck",
     "memories": "mem", "nicknames": "nks", "roleplay": "rp",
     "voiceset": "vset", "voicecheck": "vck",
-    "monitor_add": "ma", "monitor_remove": "mr", "monitor_list": "mli",
     "prefix": "px",
 }
 

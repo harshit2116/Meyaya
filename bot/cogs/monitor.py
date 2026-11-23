@@ -18,16 +18,13 @@ import random
 import re
 import time
 from datetime import timedelta
-from typing import Any
 from weakref import WeakValueDictionary
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 from bot.app import MeyayaBot
 from bot.config.settings import get_settings
-from bot.utils.embeds import meyaya_embed
 
 logger = logging.getLogger(__name__)
 
@@ -370,99 +367,6 @@ class MonitorCog(commands.Cog):
 
         async with self._decision_lock(message.guild.id, message.author.id):
             await self._process_non_english_candidate(message, content)
-
-    @commands.hybrid_command(  # type: ignore[arg-type]
-        name="monitor_add",
-        description="Enforce the English-only rule in a channel.",
-        with_app_command=True,
-    )
-    @commands.has_guild_permissions(manage_guild=True)
-    @commands.guild_only()
-    @app_commands.default_permissions(manage_guild=True)
-    async def monitor_add(
-        self, ctx: commands.Context[Any], channel: discord.abc.GuildChannel
-    ) -> None:
-        cid = getattr(channel, "id", None)
-        if cid is None or ctx.guild is None or getattr(getattr(channel, "guild", None), "id", None) != ctx.guild.id:
-            await ctx.send("Choose a channel belonging to this server.")
-            return
-        redis = getattr(self.bot, "redis", None)
-        try:
-            if redis is not None:
-                await redis.sadd(MONITOR_CHANNELS_KEY, cid)
-            self._channels.add(int(cid))
-            await ctx.send(
-                embed=meyaya_embed(
-                    "Language Monitor Updated",
-                    f"Now enforcing the English-only rule in {channel.mention}.",
-                    tone="success",
-                    icon="🌐",
-                )
-            )
-        except Exception:
-            logger.exception("Failed to add channel to monitor set")
-            await ctx.send("Failed to add channel to monitor list")
-
-    @commands.hybrid_command(  # type: ignore[arg-type]
-        name="monitor_remove",
-        description="Stop enforcing the English-only rule in a channel.",
-        with_app_command=True,
-    )
-    @commands.has_guild_permissions(manage_guild=True)
-    @commands.guild_only()
-    @app_commands.default_permissions(manage_guild=True)
-    async def monitor_remove(
-        self, ctx: commands.Context[Any], channel: discord.abc.GuildChannel
-    ) -> None:
-        cid = getattr(channel, "id", None)
-        if cid is None or ctx.guild is None or getattr(getattr(channel, "guild", None), "id", None) != ctx.guild.id:
-            await ctx.send("Choose a channel belonging to this server.")
-            return
-        redis = getattr(self.bot, "redis", None)
-        try:
-            if redis is not None:
-                await redis.srem(MONITOR_CHANNELS_KEY, cid)
-            self._channels.discard(int(cid))
-            await ctx.send(
-                embed=meyaya_embed(
-                    "Language Monitor Updated",
-                    f"Stopped watching {channel.mention}.",
-                    tone="muted",
-                    icon="🌐",
-                )
-            )
-        except Exception:
-            logger.exception("Failed to remove channel from monitor set")
-            await ctx.send("Failed to remove channel from monitor list")
-
-    @commands.hybrid_command(  # type: ignore[arg-type]
-        name="monitor_list",
-        description="Show every channel with English-only monitoring enabled.",
-        with_app_command=True,
-    )
-    @commands.has_guild_permissions(manage_guild=True)
-    @commands.guild_only()
-    @app_commands.default_permissions(manage_guild=True)
-    async def monitor_list(self, ctx: commands.Context[Any]) -> None:
-        if ctx.guild is None:
-            await ctx.send("Use this command inside a server.")
-            return
-        channels = sorted(channel.id for channel in ctx.guild.channels if channel.id in self._channels)
-        if not channels:
-            await ctx.send("No channels are currently monitored in this server.")
-            return
-        mentions = "\n".join(f"- <#{channel_id}>" for channel_id in channels[:100])
-        if len(channels) > 100:
-            mentions += f"\n...and {len(channels) - 100} more in this server."
-        await ctx.send(
-            embed=meyaya_embed(
-                "Monitored Channels",
-                mentions,
-                tone="info",
-                icon="🌐",
-            ),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
 
 
 async def setup(bot: MeyayaBot) -> None:

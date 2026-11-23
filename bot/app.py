@@ -321,9 +321,12 @@ class MeyayaBot(commands.Bot):
         synced = await self.tree.sync()
         logger.info("Synced %s global slash commands", len(synced))
         if self.settings.guild_id:
+            # Global commands already appear in every guild; clear any stale
+            # guild-scoped copies so commands are not shown twice.
             guild = discord.Object(id=self.settings.guild_id)
-            self.tree.copy_global_to(guild=guild)
+            self.tree.clear_commands(guild=guild)
             await self.tree.sync(guild=guild)
+            logger.info("Cleared duplicate guild slash commands for guild=%s", self.settings.guild_id)
 
     async def close(self) -> None:
         """Close external resources before shutting down the bot."""

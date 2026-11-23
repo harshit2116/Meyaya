@@ -600,7 +600,7 @@ class VoiceLiveCog(commands.Cog):
         await self._send_status(
             ctx,
             "Ambient Music Playing",
-            f"Streaming **{clean_mood[:120]}** in **{channel.name}** (auto-stops in 3 min; use `bgm stop` anytime).",
+            f"Streaming **{clean_mood[:120]}** in **{channel.name}** (auto-stops in 3 min; use `/bgm stop` anytime).",
             tone="success",
             icon="🎵",
         )
