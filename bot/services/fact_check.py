@@ -151,7 +151,7 @@ class FactCheckService:
                         "### Scope\n"
                         f"Checked {len(messages)} message(s).\n\n"
                         "### Bottom line\n"
-                        "No verifiable factual claims were found — this appears to be an opinion, "
+                        "No verifiable factual claims were found - this appears to be an opinion, "
                         "joke, or personal remark rather than a checkable factual claim."
                     ),
                     message_count=len(messages),

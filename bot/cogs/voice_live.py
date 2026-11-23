@@ -476,7 +476,7 @@ class VoiceLiveCog(commands.Cog):
         )
         if remaining > 0:
             await ctx.send(
-                f"Give my voice a breather — try again in {int(remaining) + 1}s.",
+                f"Give my voice a breather - try again in {int(remaining) + 1}s.",
                 ephemeral=True,
             )
             return

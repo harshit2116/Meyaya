@@ -456,7 +456,7 @@ def render_duo(
 
     draw = ImageDraw.Draw(image)
 
-    # Dedicated top header band (y=18..96 — completely clear of portraits and outer border)
+    # Dedicated top header band (y=18..96 - completely clear of portraits and outer border)
     duo_tint = _hex(_mix(_rgb(left_accent), (255, 240, 248), 0.35))
     _spark(draw, 58, 52, 13, duo_tint)
     draw.text((84, 24), "DUO", font=_serif(38), fill=duo_tint)

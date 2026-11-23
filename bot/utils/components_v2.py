@@ -387,6 +387,11 @@ def _remember(result: Any, view: Any) -> None:
         _message_views[message_id] = view
 
 
+def is_native_delivery() -> bool:
+    """Return True inside send_native_embed / send_native_file bypass scopes."""
+    return bool(_delivering.get())
+
+
 async def send_native_embed(destination: Any, embed: discord.Embed) -> Any:
     """Deliver an explicitly requested classic embed through the shared transport."""
     token = _delivering.set(True)

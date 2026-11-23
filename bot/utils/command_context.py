@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 from bot.utils.command_timing import add_stage
 from discord.ext import commands
-from bot.utils.components_v2 import v2_payload
+from bot.utils.components_v2 import is_native_delivery, v2_payload
 
 logger = logging.getLogger(__name__)
 _MAX_COMMAND_OUTPUTS = 512
@@ -73,7 +73,8 @@ class TimedContext(commands.Context[Any]):
         if args:
             kwargs["content"] = args[0]
             args = args[1:]
-        kwargs = cast(Any, v2_payload)(kwargs, force=True)
+        if not is_native_delivery():
+            kwargs = cast(Any, v2_payload)(kwargs, force=True)
         loader = getattr(self, "_meyaya_loader", None)
         started = time.monotonic()
         try:
