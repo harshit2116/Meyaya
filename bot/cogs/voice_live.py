@@ -460,6 +460,19 @@ class VoiceLiveCog(commands.Cog):
             await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
         clean = " ".join(text.split()).strip()
+        if not style and clean:
+            if "|" in clean:
+                maybe_style, maybe_text = clean.split("|", 1)
+                if maybe_style.strip() and maybe_text.strip():
+                    style = maybe_style.strip()
+                    clean = maybe_text.strip()
+            elif clean.startswith("[") and "]" in clean:
+                end_bracket = clean.find("]")
+                maybe_style = clean[1:end_bracket].strip()
+                maybe_text = clean[end_bracket + 1 :].strip()
+                if maybe_style and maybe_text:
+                    style = maybe_style
+                    clean = maybe_text
         if not clean:
             await ctx.send("Give me a short line to speak first.", ephemeral=True)
             return

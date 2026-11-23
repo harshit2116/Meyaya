@@ -110,19 +110,33 @@ class GeminiTTSService:
         if not self.enabled or not clean:
             return None
         voice = canonical_voice_name(voice_name or "") or self.default_voice
-        prompt = f"Speak {style.strip()[:80]}: {clean}" if style and style.strip() else clean
+        clean_style = " ".join((style or "").split()).strip()[:100]
 
-        payload = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseModalities": ["AUDIO"],
-                "speechConfig": {
-                    "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}
-                },
-            },
-        }
         deadline = time.monotonic() + timeout_seconds
         for model in self.models:
+            part: dict[str, object]
+            if clean_style and model.startswith("gemini-3.8"):
+                part = {"text": clean, "speechMetadata": {"style": clean_style}}
+            elif clean_style:
+                part = {
+                    "text": (
+                        "### DIRECTOR'S NOTES:\n"
+                        f"{clean_style}\n\n"
+                        "#### TRANSCRIPT:\n"
+                        f"{clean}"
+                    )
+                }
+            else:
+                part = {"text": clean}
+            payload = {
+                "contents": [{"role": "user", "parts": [part]}],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {
+                        "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}
+                    },
+                },
+            }
             url = GEMINI_TTS_ENDPOINT.format(model=model)
             tried: set[int] = set()
             now = time.monotonic()
