@@ -59,11 +59,13 @@ class GeminiLiveSession:
         channel_id: int | None = None,
         key_pool: Any = None,
         on_transcription: TranscriptionCallback | None = None,
+        fallback_model: str | None = None,
     ) -> None:
         self.api_key = api_key
         self.key_pool: Any = key_pool
         self._key_index: int | None = None
         self.model = model
+        self.fallback_model = (fallback_model or "").strip() or None
         self.guild_id = guild_id
         self.channel_id = channel_id
         self.voice_name = voice_name
@@ -189,34 +191,57 @@ class GeminiLiveSession:
 
     async def _open_connection(self) -> None:
         assert self._client is not None
-        logger.info(
-            "Opening Gemini Live session model=%s voice=%s",
-            self.model,
-            self.voice_name,
-        )
-        conn_cm = self._client.aio.live.connect(model=self.model, config=self._config())
-        started = time.perf_counter()
-        try:
-            async with asyncio.timeout(20):
-                session = await conn_cm.__aenter__()
-        except Exception as exc:
+        candidates = [self.model]
+        if self.fallback_model and self.fallback_model != self.model:
+            candidates.append(self.fallback_model)
+        last_exc: Exception | None = None
+        for idx, candidate in enumerate(candidates):
+            logger.info(
+                "Opening Gemini Live session model=%s voice=%s",
+                candidate,
+                self.voice_name,
+            )
+            conn_cm = self._client.aio.live.connect(model=candidate, config=self._config())
+            started = time.perf_counter()
+            try:
+                async with asyncio.timeout(20):
+                    session = await conn_cm.__aenter__()
+            except Exception as exc:
+                last_exc = exc
+                self._metric(
+                    "voice_connect",
+                    status="error",
+                    fallback_reason=type(exc).__name__,
+                    latency_ms=round((time.perf_counter() - started) * 1000, 2),
+                )
+                code = (
+                    getattr(exc, "code", None)
+                    or getattr(exc, "status_code", None)
+                    or getattr(getattr(exc, "response", None), "status_code", None)
+                )
+                if code in {401, 403} or idx == len(candidates) - 1:
+                    raise
+                logger.warning(
+                    "Primary Gemini Live model=%s failed (%s); falling back to %s",
+                    candidate,
+                    type(exc).__name__,
+                    candidates[idx + 1],
+                )
+                continue
+            self.model = candidate
             self._metric(
                 "voice_connect",
-                status="error",
-                fallback_reason=type(exc).__name__,
+                status="success",
+                fallback_reason=None,
                 latency_ms=round((time.perf_counter() - started) * 1000, 2),
             )
-            raise
-        self._metric(
-            "voice_connect",
-            status="success",
-            fallback_reason=None,
-            latency_ms=round((time.perf_counter() - started) * 1000, 2),
-        )
-        self._conn_cm = conn_cm
-        self._session = session
-        self._connected.set()
-        logger.info("[GEMINI] session connected; setup complete")
+            self._conn_cm = conn_cm
+            self._session = session
+            self._connected.set()
+            logger.info("[GEMINI] session connected; setup complete")
+            return
+        if last_exc is not None:
+            raise last_exc
 
     async def _close_connection(self) -> None:
         self._connected.clear()

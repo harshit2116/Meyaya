@@ -28,6 +28,7 @@ def create_llm_provider(
     pool = cast(Any, GeminiKeyPool)(settings.gemini_keys)
     availability: dict[tuple[str, int], GeminiAvailability] = {}
     quotas: dict[tuple[str, str], ModelQuota] = {}
+    pooled_views: dict[tuple[int, ...], Any] = {}
 
     def build(
         model: str,
@@ -52,15 +53,58 @@ def create_llm_provider(
                     namespace=namespace, max_wait=settings.gemini_pacing_wait_seconds)
             cast(Any, service).quota = quotas[identity]
             services.append(service)
-        return services[0] if len(services) == 1 else cast(LLMProvider, cast(Any, GeminiPooledService)(services, pool))
+        if len(services) == 1:
+            return services[0]
+        pooled = cast(Any, GeminiPooledService)(services, pool)
+        view_key = tuple(id(s.quota) for s in services)
+        pooled.quota = pooled_views.setdefault(view_key, pooled.quota)
+        return cast(LLMProvider, pooled)
 
+    def _grounded_thinking(model: str) -> tuple[int | None, str | None]:
+        canonical = model.removeprefix("models/")
+        if canonical.startswith(("gemini-3", "gemini-4")):
+            return None, "minimal"
+        return 0, None
+
+    grounded_budget, grounded_level = _grounded_thinking(settings.gemini_grounded_model)
     providers = {
         ModelTier.FAST: build(settings.gemini_fast_model, thinking_level='minimal'),
         ModelTier.BALANCED: build(settings.gemini_model, thinking_level='minimal'),
         ModelTier.REASONING: build(settings.gemini_reasoning_model, thinking_level='low'),
-        ModelTier.GROUNDED: build(settings.gemini_grounded_model, thinking_budget=0),
+        ModelTier.GROUNDED: build(
+            settings.gemini_grounded_model,
+            thinking_budget=grounded_budget,
+            thinking_level=grounded_level,
+        ),
     }
+    tier_fallbacks: dict[ModelTier, list[LLMProvider]] = {
+        ModelTier.REASONING: [
+            build(model, thinking_level='low')
+            for model in getattr(settings, 'gemini_reasoning_fallback_models', ())
+            if model and model != settings.gemini_reasoning_model
+        ],
+        ModelTier.GROUNDED: [
+            build(model, thinking_budget=_grounded_thinking(model)[0], thinking_level=_grounded_thinking(model)[1])
+            for model in getattr(settings, 'gemini_grounded_fallback_models', ())
+            if model and model != settings.gemini_grounded_model
+        ],
+    }
+    light_models = [
+        model
+        for model in (
+            getattr(settings, 'gemini_light_model', ''),
+            *getattr(settings, 'gemini_light_fallback_models', ()),
+        )
+        if model
+    ]
+    light_providers = [build(model, thinking_level='minimal') for model in dict.fromkeys(light_models)]
     fallback = build(settings.gemini_fallback_model, thinking_level='minimal') if settings.gemini_fallback_model else None
-    router = ModelRouter(providers, guard=guard, fallback=fallback)
+    router = ModelRouter(
+        providers,
+        guard=guard,
+        fallback=fallback,
+        tier_fallbacks=tier_fallbacks,
+        light_providers=light_providers,
+    )
     router.key_pool = pool
     return router

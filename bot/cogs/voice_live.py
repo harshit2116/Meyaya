@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
 import logging
 import time
 from typing import Any
@@ -15,18 +16,24 @@ from discord.ext import commands, tasks
 from bot.app import MeyayaBot
 from bot.data.voices import canonical_voice_name
 from bot.services.ai_guard import AILimitReached
+from bot.services.audio import PcmStreamAudioSource
 from bot.services.chat_blacklist import acknowledge_silently
+from bot.services.gemini_tts import MAX_TTS_CHARS
+from bot.services.lyria_music import LyriaMusicSession
 from bot.services.voice_session import VoiceChatSession
 from bot.utils.embeds import meyaya_embed
 from bot.views.voice_picker import VoicePicker
 
 logger = logging.getLogger(__name__)
+VOICECLIP_COOLDOWN_SECONDS = 15.0
 
 
 class VoiceLiveCog(commands.Cog):
     def __init__(self, bot: MeyayaBot) -> None:
         self.bot = bot
         self._sessions: dict[int, VoiceChatSession] = {}
+        self._bgm_sessions: dict[int, tuple[LyriaMusicSession, discord.VoiceClient | None]] = {}
+        self._voiceclip_cooldowns: dict[tuple[int, int], float] = {}
         self._lifecycle_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
         self._voice_overrides: dict[int, str] = {}
         self._empty_since: dict[int, tuple[tuple[VoiceChatSession, int], float]] = {}
@@ -82,9 +89,24 @@ class VoiceLiveCog(commands.Cog):
     async def cog_unload(self) -> None:
         self._empty_watch.cancel()
         self._empty_since.clear()
+        for guild_id in list(self._bgm_sessions):
+            await self._stop_bgm(guild_id)
         for session in list(self._sessions.values()):
             await session.close(reason="voice cog unload")
         self._sessions.clear()
+
+    async def _stop_bgm(self, guild_id: int) -> bool:
+        entry = self._bgm_sessions.pop(guild_id, None)
+        if entry is None:
+            return False
+        music, standalone_vc = entry
+        await music.stop()
+        if standalone_vc is not None and standalone_vc.is_connected():
+            try:
+                await standalone_vc.disconnect(force=True)
+            except Exception:
+                logger.debug("BGM disconnect failed guild=%s", guild_id, exc_info=True)
+        return True
 
     def _lifecycle_lock(self, guild_id: int) -> asyncio.Lock:
         lock = self._lifecycle_locks.get(guild_id)
@@ -416,6 +438,173 @@ class VoiceLiveCog(commands.Cog):
                 return f"Voice saved as **{selected}**, but reconnecting failed. Try `join` again."
             return f"Reconnected with **{selected}**. Microphone listening is **{'on' if listening else 'off'}**."
 
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="voiceclip",
+        aliases=["say", "tts"],
+        description="Have Meyaya send a short voiced audio clip in chat.",
+    )
+    @app_commands.describe(
+        text="Short line for Meyaya to speak (up to 280 characters).",
+        style="Optional delivery style (e.g. playful, dramatic, whispered).",
+    )
+    @commands.guild_only()
+    async def voiceclip(
+        self,
+        ctx: commands.Context[Any],
+        *,
+        text: str,
+        style: str | None = None,
+    ) -> None:
+        if ctx.guild is None:
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
+            return
+        clean = " ".join(text.split()).strip()
+        if not clean:
+            await ctx.send("Give me a short line to speak first.", ephemeral=True)
+            return
+        if len(clean) > MAX_TTS_CHARS:
+            await ctx.send(
+                f"Keep voice clips under {MAX_TTS_CHARS} characters.",
+                ephemeral=True,
+            )
+            return
+        key = (ctx.guild.id, ctx.author.id)
+        now = time.monotonic()
+        remaining = VOICECLIP_COOLDOWN_SECONDS - (
+            now - self._voiceclip_cooldowns.get(key, float("-inf"))
+        )
+        if remaining > 0:
+            await ctx.send(
+                f"Give my voice a breather — try again in {int(remaining) + 1}s.",
+                ephemeral=True,
+            )
+            return
+        build_tts = getattr(self.bot, "build_tts_service", None)
+        tts = build_tts() if callable(build_tts) else None
+        if tts is None or not tts.enabled:
+            await ctx.send("Voice clips are unavailable right now.", ephemeral=True)
+            return
+        await ctx.defer()
+        wav = await tts.synthesize(
+            clean,
+            voice_name=self._voice_for_guild(ctx.guild.id),
+            style=style,
+        )
+        if not wav:
+            await ctx.send(
+                "I couldn't record that voice clip right now. Try again shortly.",
+                ephemeral=True,
+            )
+            return
+        if len(self._voiceclip_cooldowns) >= 2048 and key not in self._voiceclip_cooldowns:
+            self._voiceclip_cooldowns.pop(next(iter(self._voiceclip_cooldowns)))
+        self._voiceclip_cooldowns[key] = time.monotonic()
+        await ctx.send(
+            file=discord.File(BytesIO(wav), filename="meyaya-voice.wav"),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="bgm",
+        description="Stream AI ambient background music in your voice channel, or 'stop' to end it.",
+    )
+    @app_commands.describe(
+        mood="Music mood or style (e.g. 'chill lofi rain beats', 'fantasy dungeon'), or 'stop'.",
+    )
+    @commands.guild_only()
+    async def bgm(self, ctx: commands.Context[Any], *, mood: str = "chill lofi beats") -> None:
+        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
+            return
+        clean_mood = " ".join(mood.split()).strip()
+        if clean_mood.casefold() in {"stop", "off", "end"}:
+            async with self._lifecycle_lock(ctx.guild.id):
+                stopped = await self._stop_bgm(ctx.guild.id)
+            if stopped:
+                await self._send_status(
+                    ctx,
+                    "Ambient Music Stopped",
+                    "Turned off the background music stream.",
+                    tone="info",
+                    icon="🔇",
+                )
+            else:
+                await ctx.send("No background music is playing right now.", ephemeral=True)
+            return
+
+        if ctx.author.voice is None or ctx.author.voice.channel is None:
+            await ctx.send("Join a voice channel first to start ambient music.", ephemeral=True)
+            return
+        channel = ctx.author.voice.channel
+        if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+            await ctx.send("Unsupported voice channel type.", ephemeral=True)
+            return
+
+        await ctx.defer(ephemeral=True)
+        async with self._lifecycle_lock(ctx.guild.id):
+            if ctx.guild.id in self._sessions and self._sessions[ctx.guild.id].is_active:
+                await ctx.send(
+                    "Leave the active live voice chat first before starting standalone ambient BGM.",
+                    ephemeral=True,
+                )
+                return
+            await self._stop_bgm(ctx.guild.id)
+            raw_vc = ctx.guild.voice_client
+            vc: discord.VoiceClient
+            if not isinstance(raw_vc, discord.VoiceClient) or not raw_vc.is_connected():
+                vc = await channel.connect()
+            else:
+                vc = raw_vc
+                if vc.channel != channel:
+                    await vc.move_to(channel)
+            play_source = PcmStreamAudioSource()
+            if not vc.is_playing():
+                vc.play(
+                    play_source,
+                    after=lambda err: logger.error("BGM playback error: %s", err) if err else None,
+                )
+            key_pool = getattr(getattr(self.bot, "_llm_provider", None), "key_pool", None)
+            guild_id = ctx.guild.id
+
+            async def _cleanup() -> None:
+                entry = self._bgm_sessions.get(guild_id)
+                if entry is not None and entry[0] is music:
+                    self._bgm_sessions.pop(guild_id, None)
+                    if vc.is_connected():
+                        try:
+                            await vc.disconnect(force=True)
+                        except Exception:
+                            pass
+
+            music = LyriaMusicSession(
+                api_key=self.bot.settings.gemini_api_key,
+                model=getattr(self.bot.settings, "gemini_music_model", "lyria-realtime-exp"),
+                prompt=clean_mood,
+                play_source=play_source,
+                guild_id=guild_id,
+                key_pool=key_pool,
+                on_finished=_cleanup,
+            )
+            try:
+                await music.start()
+            except Exception:
+                logger.exception("Failed to start Lyria ambient music guild=%s", guild_id)
+                if vc.is_connected():
+                    await vc.disconnect(force=True)
+                await ctx.send(
+                    "Could not start ambient music right now. Try again shortly.",
+                    ephemeral=True,
+                )
+                return
+            self._bgm_sessions[guild_id] = (music, vc)
+        await self._send_status(
+            ctx,
+            "Ambient Music Playing",
+            f"Streaming **{clean_mood[:120]}** in **{channel.name}** (auto-stops in 3 min; use `bgm stop` anytime).",
+            tone="success",
+            icon="🎵",
+        )
+
     @staticmethod
     async def _send_status(
         ctx: commands.Context[Any],
@@ -449,6 +638,9 @@ class VoiceLiveCog(commands.Cog):
             return
 
         guild = member.guild
+        if after.channel is None and guild.id in getattr(self, "_bgm_sessions", ()):
+            async with self._lifecycle_lock(guild.id):
+                await self._stop_bgm(guild.id)
         observed_session = self._sessions.get(guild.id)
         if observed_session is None:
             return

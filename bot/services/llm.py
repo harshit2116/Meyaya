@@ -180,11 +180,16 @@ class LLMProvider(ABC):
         Callers retain domain validation (required fields, IDs, scores, etc.).
         No chat word limit or directive filtering is applied to structured data.
         """
+        kwargs: dict[str, Any] = {
+            "max_output_tokens": max_output_tokens,
+            "timeout_seconds": timeout_seconds,
+        }
+        if getattr(self, "_supports_response_mime_type", False):
+            kwargs["response_mime_type"] = "application/json"
         raw = await self.generate_text(
             system_instruction + "\nReturn exactly one JSON object, without commentary.",
             user_message,
-            max_output_tokens=max_output_tokens,
-            timeout_seconds=timeout_seconds,
+            **kwargs,
         )
         if not raw:
             return None
@@ -193,8 +198,17 @@ class LLMProvider(ABC):
         try:
             result = json.loads(cleaned)
         except (ValueError, TypeError):
-            event("llm_fallback", feature_operation="generate_json", reason="malformed_json")
-            return None
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+            if start >= 0 and end > start:
+                try:
+                    result = json.loads(cleaned[start : end + 1])
+                except (ValueError, TypeError):
+                    event("llm_fallback", feature_operation="generate_json", reason="malformed_json")
+                    return None
+            else:
+                event("llm_fallback", feature_operation="generate_json", reason="malformed_json")
+                return None
         return result if isinstance(result, dict) else None
 
     async def summarize(

@@ -77,6 +77,7 @@ class GeminiPooledService(LLMProvider):
     """Try a healthy key on the SAME model before the existing model fallback."""
 
     provider_name = 'gemini'
+    _supports_response_mime_type = True
 
     def __init__(self, services: Sequence[Any], key_pool: GeminiKeyPool) -> None:
         self.services, self.key_pool = services, key_pool
@@ -125,7 +126,10 @@ class GeminiPooledService(LLMProvider):
             tried.add(index)
             service = self.services[index]
             remaining = deadline - time.monotonic()
-            slice_seconds = remaining / max(1, len(eligible))
+            # Give the first healthy key most of the budget so slower reasoning
+            # or grounded requests are not starved down to half the timeout,
+            # while still reserving a failover slice if a socket hangs.
+            slice_seconds = remaining * 0.72 if len(eligible) > 1 else remaining
             if slice_seconds <= 0:
                 self.key_pool.release(index)
                 break
@@ -173,6 +177,7 @@ class GeminiPooledService(LLMProvider):
         *,
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
+        response_mime_type: str | None = None,
     ) -> str | None:
         return cast(
             str | None,
@@ -183,6 +188,7 @@ class GeminiPooledService(LLMProvider):
                 history=history,
                 max_output_tokens=max_output_tokens,
                 timeout_seconds=timeout_seconds,
+                response_mime_type=response_mime_type,
             ),
         )
 

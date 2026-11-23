@@ -22,6 +22,9 @@ from bot.config.settings import Settings, get_settings
 from bot.database.session import build_async_engine, build_session_factory
 from bot.logging.setup import configure_logging
 from bot.services.chat_memory import ChatMemoryService
+from bot.services.gemini_decisions import GeminiDecisionService
+from bot.services.gemini_embeddings import GeminiEmbeddingService
+from bot.services.gemini_tts import GeminiTTSService
 from bot.services.llm import LLMProvider
 from bot.services.llm_factory import create_llm_provider
 from bot.services.interactions import InteractionService
@@ -132,6 +135,9 @@ class MeyayaBot(commands.Bot):
         self._klipy_service: KlipyService | None = None
         self._chat_memory_service: ChatMemoryService | None = None
         self._llm_provider: LLMProvider | None = None
+        self._decision_service: GeminiDecisionService | None = None
+        self._embedding_service: GeminiEmbeddingService | None = None
+        self._tts_service: GeminiTTSService | None = None
         self._profile_aesthetic_service: ProfileAestheticService | None = None
         tree_obj: Any = self.tree
         tree_obj.on_error = self.on_app_command_error
@@ -247,6 +253,33 @@ class MeyayaBot(commands.Bot):
         )
         self._chat_memory_service = ChatMemoryService(self.redis)
         self._llm_provider = create_llm_provider(self.settings, self.http_session, self.ai_guard, redis=self.redis)
+        shared_key_pool = getattr(self._llm_provider, "key_pool", None)
+        self._decision_service = GeminiDecisionService(
+            self.settings.gemini_keys,
+            self.settings.gemini_decision_model,
+            self.http_session,
+            key_pool=shared_key_pool,
+        )
+        self._embedding_service = GeminiEmbeddingService(
+            self.settings.gemini_keys,
+            (
+                self.settings.gemini_embedding_model,
+                self.settings.gemini_embedding_fallback_model,
+            ),
+            self.http_session,
+            redis=self.redis,
+            key_pool=shared_key_pool,
+        )
+        self._tts_service = GeminiTTSService(
+            self.settings.gemini_keys,
+            (
+                self.settings.gemini_tts_model,
+                *self.settings.gemini_tts_fallback_models,
+            ),
+            self.http_session,
+            default_voice=self.settings.gemini_voice,
+            key_pool=shared_key_pool,
+        )
         self._profile_aesthetic_service = ProfileAestheticService(self)
         await self._load_guild_prefixes()
         self._dashboard_settings_refresh = asyncio.create_task(self._refresh_dashboard_settings())
@@ -452,6 +485,21 @@ class MeyayaBot(commands.Bot):
         """Return the configured LLM provider once the HTTP client is ready."""
 
         return self._llm_provider
+
+    def build_decision_service(self) -> GeminiDecisionService | None:
+        """Return the shared Gemini Decisions API classifier."""
+
+        return self._decision_service
+
+    def build_embedding_service(self) -> GeminiEmbeddingService | None:
+        """Return the shared Gemini Embeddings semantic reranker."""
+
+        return self._embedding_service
+
+    def build_tts_service(self) -> GeminiTTSService | None:
+        """Return the shared Gemini one-shot TTS synthesizer."""
+
+        return self._tts_service
 
     def build_profile_aesthetic_service(self) -> ProfileAestheticService:
         """Return the shared public-profile analyzer and its short-lived asset cache."""

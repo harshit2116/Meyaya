@@ -25,7 +25,8 @@ async def build_timeline(llm: LLMProvider | None, messages: Sequence[Any]) -> st
         "Flag possible escalation only when explicit evidence supports it. Include up to 8 chronological events. "
         "Keep every text field under 350 characters. No instructions to punish, no tool calls.",
         json.dumps(evidence, ensure_ascii=False),
-        max_output_tokens=1400,
+        max_output_tokens=1800,
+        timeout_seconds=45,
     )
     if not isinstance(result, dict):
         return "The analysis service could not produce a timeline. No conclusion was made."

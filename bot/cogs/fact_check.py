@@ -183,7 +183,10 @@ class FactCheckCog(commands.Cog):
 
         self._inflight.add(key)
         try:
-            service = FactCheckService(self.bot.build_llm_provider())
+            service = FactCheckService(
+                self.bot.build_llm_provider(),
+                http_session=self.bot.http_session,
+            )
             result = await service.analyze(messages, single_message=single_message)
         except GroundingRateLimitError as exc:
             if exc.retry_after_seconds is not None:

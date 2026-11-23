@@ -54,6 +54,7 @@ class GeminiService(LLMProvider):
     """Thin wrapper around the Gemini REST API."""
 
     provider_name = "gemini"
+    _supports_response_mime_type = True
 
     def __init__(
         self,
@@ -172,6 +173,7 @@ class GeminiService(LLMProvider):
         *,
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
+        response_mime_type: str | None = None,
     ) -> str | None:
         _failure.set(None)
         state = self.availability
@@ -183,8 +185,13 @@ class GeminiService(LLMProvider):
             state.probing = True
         try:
             result = await self._generate_text(
-                system_instruction, user_message, history,
-                max_output_tokens=max_output_tokens, timeout_seconds=timeout_seconds)
+                system_instruction,
+                user_message,
+                history,
+                max_output_tokens=max_output_tokens,
+                timeout_seconds=timeout_seconds,
+                response_mime_type=response_mime_type,
+            )
             if result and result.strip():
                 state.failures = 0
                 state.retry_at = 0
@@ -208,6 +215,7 @@ class GeminiService(LLMProvider):
         *,
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
+        response_mime_type: str | None = None,
     ) -> str | None:
         """Ask Gemini for a reply, optionally continuing a prior conversation."""
 
@@ -229,6 +237,8 @@ class GeminiService(LLMProvider):
         generation_config: dict[str, object] = {
             "maxOutputTokens": max_output_tokens or MAX_OUTPUT_TOKENS,
         }
+        if response_mime_type:
+            generation_config["responseMimeType"] = response_mime_type
         if self.thinking_level is not None:
             generation_config["thinkingConfig"] = {"thinkingLevel": self.thinking_level}
         elif self.thinking_budget is not None:
@@ -336,55 +346,22 @@ class GeminiService(LLMProvider):
         max_output_tokens: int = 1800,
         timeout_seconds: float = 45,
     ) -> GroundedReply:
-        """Generate source-annotated text, with a compatible endpoint fallback."""
+        """Generate source-annotated text directly via GenerateContent Google Search."""
         _failure.set(None)
 
         if not self.api_key:
             request_failure("missing_api_key")
             raise GroundingError("Gemini API key is not configured")
 
-        interactions_payload = {
-            "model": self.model.removeprefix("models/"),
-            "system_instruction": system_instruction,
-            "input": user_message,
-            "tools": [{"type": "google_search"}],
-            "store": False,
-            "generation_config": {"max_output_tokens": max_output_tokens},
-        }
         headers = {
             "Content-Type": "application/json",
             "x-goog-api-key": self.api_key,
         }
         timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-        rate_limit_retry: int | None = None
-        was_rate_limited = False
 
-        data, status, retry_after = await self._post_grounded_request(
-            GEMINI_INTERACTIONS_ENDPOINT,
-            interactions_payload,
-            headers,
-            timeout,
-            endpoint_name="Interactions",
-        )
-        if status == 200 and data is not None:
-            result = self._extract_grounded_reply(data)
-            if result is not None:
-                return result
-            logger.warning("Gemini Interactions grounding returned no usable model text.")
-        failure = current_gemini_failure()
-        if status in {401, 403} or (status == 400 and failure is not None
-                                   and failure == ('http', (400, 'api_key'))):
-            # Preserve terminal credential errors before endpoint fallback can
-            # overwrite them with a local pacing result.
-            raise GroundingError('Gemini credential was rejected')
-        if status == 429:
-            was_rate_limited = True
-            rate_limit_retry = retry_after
-
-        request_failure("grounding_endpoint_fallback", endpoint="Interactions")
-
-        # The Interactions API is newer and its availability can differ by model,
-        # project, or quota. GenerateContent supports the same Google Search tool.
+        # Call GenerateContent directly with google_search. The Interactions API
+        # frequently returns 404/429 and double-charges local RPM pacing before
+        # GenerateContent can run.
         generation_config: dict[str, object] = {
             "maxOutputTokens": max_output_tokens,
         }
@@ -411,13 +388,14 @@ class GeminiService(LLMProvider):
             if result is not None:
                 return result
             logger.warning("Gemini GenerateContent grounding returned no usable model text.")
+        failure = current_gemini_failure()
+        if status in {401, 403} or (
+            status == 400 and failure is not None and failure == ("http", (400, "api_key"))
+        ):
+            raise GroundingError("Gemini credential was rejected")
         if status == 429:
-            was_rate_limited = True
-            rate_limit_retry = retry_after or rate_limit_retry
-
-        if was_rate_limited:
-            raise GroundingRateLimitError(rate_limit_retry)
-        raise GroundingError("Both grounded Gemini endpoints failed")
+            raise GroundingRateLimitError(retry_after)
+        raise GroundingError("Grounded Gemini request failed")
 
     async def _post_grounded_request(
         self,
@@ -446,8 +424,12 @@ class GeminiService(LLMProvider):
                         _failure.set(('http', (response.status, details.get('error_category'))))
                         request_failure(f"http_{response.status}", attempt=attempt, **details)
                     if response.status == 429:
-                        await self._rate_backoff(details)
-                        retry_after = details.get('retry_after_seconds', retry_after)
+                        # Free-tier google_search grounding returns 429 with an unknown
+                        # quota scope even when normal text generation has full quota.
+                        # Only lock the shared model bucket for explicit minute/daily scopes.
+                        if details.get("quota_scope") in {"minute", "daily"}:
+                            await self._rate_backoff(details)
+                        retry_after = details.get("retry_after_seconds", retry_after)
                         logger.warning(
                             "Gemini %s grounding rate limit hit retry_after=%s detail=%s",
                             endpoint_name,

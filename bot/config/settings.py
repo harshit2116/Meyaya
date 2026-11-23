@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from bot.data.voices import canonical_voice_name
 
@@ -75,8 +76,22 @@ class Settings(BaseSettings):
     # Override with the actual limits shown in AI Studio, especially on paid tiers.
     gemini_model_limits: dict[str, dict[str, int]] = Field(default_factory=lambda: {
         "gemini-3.5-flash-lite": {"rpm": 15, "rpd": 500},
+        "gemini-3.1-flash-lite": {"rpm": 15, "rpd": 500},
+        "gemini-3.8-flash": {"rpm": 5, "rpd": 20},
+        "gemini-3.6-flash": {"rpm": 5, "rpd": 20},
+        "gemini-4-hydrogen": {"rpm": 5, "rpd": 20},
+        "gemini-3-flash-preview": {"rpm": 5, "rpd": 20},
         "gemini-3.5-flash": {"rpm": 5, "rpd": 20},
         "gemini-2.5-flash": {"rpm": 5, "rpd": 20},
+        "gemma-4-26b-a4b-it": {"rpm": 30, "rpd": 14400},
+        "gemma-4-31b-it": {"rpm": 30, "rpd": 14400},
+        "gemini-decision-1": {"rpm": 200, "rpd": 10000},
+        "gemini-embedding-2": {"rpm": 100, "rpd": 1000},
+        "gemini-embedding-001": {"rpm": 100, "rpd": 1000},
+        "gemini-3.8-flash-tts": {"rpm": 3, "rpd": 10},
+        "gemini-3.8-flash-lite-tts": {"rpm": 3, "rpd": 10},
+        "gemini-3.1-flash-tts-preview": {"rpm": 3, "rpd": 10},
+        "gemini-2.5-flash-preview-tts": {"rpm": 3, "rpd": 10},
     }, alias="GEMINI_MODEL_LIMITS")
     ai_user_cooldown_seconds: int = Field(default=5, ge=0, le=300, alias="AI_USER_COOLDOWN_SECONDS")
     chat_batch_delay_seconds: float = Field(default=0.75, ge=0, le=2, alias="CHAT_BATCH_DELAY_SECONDS")
@@ -86,13 +101,60 @@ class Settings(BaseSettings):
     voice_max_sessions: int = Field(default=1, ge=1, le=5, alias="VOICE_MAX_SESSIONS")
     voice_session_minutes: int = Field(default=10, ge=1, le=60, alias="VOICE_SESSION_MINUTES")
     voice_summaries_enabled: bool = Field(default=True, alias="VOICE_SUMMARIES_ENABLED")
-    gemini_fallback_model: str = Field(default="", alias="GEMINI_FALLBACK_MODEL")
+    gemini_fallback_model: str = Field(default="gemini-3.1-flash-lite", alias="GEMINI_FALLBACK_MODEL")
     gemini_model: str = Field(default="gemini-3.5-flash-lite", alias="GEMINI_MODEL")
-    gemini_fast_model: str = Field(default="gemini-3.5-flash-lite", alias="GEMINI_FAST_MODEL")
-    gemini_reasoning_model: str = Field(default="gemini-3.5-flash", alias="GEMINI_REASONING_MODEL")
-    gemini_grounded_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_GROUNDED_MODEL")
+    gemini_fast_model: str = Field(default="gemini-3.1-flash-lite", alias="GEMINI_FAST_MODEL")
+    gemini_light_model: str = Field(default="gemma-4-26b-a4b-it", alias="GEMINI_LIGHT_MODEL")
+    gemini_light_fallback_models: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["gemma-4-31b-it"],
+        alias="GEMINI_LIGHT_FALLBACK_MODELS",
+    )
+    gemini_reasoning_model: str = Field(default="gemini-3.8-flash", alias="GEMINI_REASONING_MODEL")
+    gemini_reasoning_fallback_models: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "gemini-3.6-flash",
+            "gemini-4-hydrogen",
+            "gemini-3-flash-preview",
+        ],
+        alias="GEMINI_REASONING_FALLBACK_MODELS",
+    )
+    gemini_grounded_model: str = Field(default="gemini-3.8-flash", alias="GEMINI_GROUNDED_MODEL")
+    gemini_grounded_fallback_models: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "gemini-3.6-flash",
+            "gemini-4-hydrogen",
+            "gemini-3-flash-preview",
+        ],
+        alias="GEMINI_GROUNDED_FALLBACK_MODELS",
+    )
     gemini_live_model: str = Field(
-        default="gemini-3.1-flash-live-preview", alias="GEMINI_LIVE_MODEL"
+        default="gemini-3.8-live", alias="GEMINI_LIVE_MODEL"
+    )
+    gemini_live_fallback_model: str = Field(
+        default="gemini-2.5-flash-native-audio-latest", alias="GEMINI_LIVE_FALLBACK_MODEL"
+    )
+    gemini_embedding_model: str = Field(
+        default="gemini-embedding-2", alias="GEMINI_EMBEDDING_MODEL"
+    )
+    gemini_embedding_fallback_model: str = Field(
+        default="gemini-embedding-001", alias="GEMINI_EMBEDDING_FALLBACK_MODEL"
+    )
+    gemini_decision_model: str = Field(
+        default="gemini-decision-1", alias="GEMINI_DECISION_MODEL"
+    )
+    gemini_tts_model: str = Field(
+        default="gemini-3.8-flash-tts", alias="GEMINI_TTS_MODEL"
+    )
+    gemini_tts_fallback_models: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            "gemini-3.8-flash-lite-tts",
+            "gemini-3.1-flash-tts-preview",
+            "gemini-2.5-flash-preview-tts",
+        ],
+        alias="GEMINI_TTS_FALLBACK_MODELS",
+    )
+    gemini_music_model: str = Field(
+        default="lyria-realtime-exp", alias="GEMINI_MUSIC_MODEL"
     )
     gemini_voice: str = Field(default="Leda", alias="GEMINI_VOICE")
     ffmpeg_executable: str = Field(default="ffmpeg", alias="FFMPEG_EXECUTABLE")
@@ -129,14 +191,42 @@ class Settings(BaseSettings):
     @field_validator("gemini_model_limits")
     @classmethod
     def validate_model_limits(cls, value: dict[str, dict[str, int]]) -> dict[str, dict[str, int]]:
-        if len(value) > 20:
-            raise ValueError("GEMINI_MODEL_LIMITS supports at most 20 models")
+        if len(value) > 30:
+            raise ValueError("GEMINI_MODEL_LIMITS supports at most 30 models")
         for model, limits in value.items():
             if not model or len(model) > 120 or set(limits) != {"rpm", "rpd"}:
                 raise ValueError("Each model needs rpm and rpd limits")
             if not 1 <= limits['rpm'] <= 10000 or not 0 <= limits['rpd'] <= 10000000:
                 raise ValueError("rpm must be positive; rpd=0 disables the local daily cap")
         return value
+
+    @field_validator(
+        "gemini_light_fallback_models",
+        "gemini_reasoning_fallback_models",
+        "gemini_grounded_fallback_models",
+        "gemini_tts_fallback_models",
+        mode="before",
+    )
+    @classmethod
+    def parse_model_list(cls, value: object) -> list[str]:
+        """Allow comma-separated or JSON lists of model names in .env files."""
+
+        if value is None:
+            return []
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return []
+            if stripped.startswith("["):
+                import json
+
+                parsed = json.loads(stripped)
+                if isinstance(parsed, list):
+                    return [str(item).strip() for item in parsed if str(item).strip()]
+            return [part.strip() for part in stripped.split(",") if part.strip()]
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        raise ValueError("Model fallback list must be a list or comma-separated string")
 
     @field_validator("monitor_channel_ids", mode="before")
     @classmethod

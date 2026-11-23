@@ -265,23 +265,37 @@ class MonitorCog(commands.Cog):
         if now - last < MONITOR_COOLDOWN_SECONDS:
             return
 
-        # The local detector only selects candidates. Gemini independently verifies
-        # the language before a warning can affect the moderation counter.
-        llm = self.bot.build_llm_provider()
+        # The local detector only selects candidates. Prefer the high-quota
+        # Decisions API first, falling back to generative verification only when
+        # the decision is ambiguous or unavailable.
         confirmed_non_english = False
-        if llm is not None:
+        decided = False
+        build_decisions = getattr(self.bot, "build_decision_service", None)
+        decisions = build_decisions() if callable(build_decisions) else None
+        if decisions is not None:
             try:
-                system = build_moderation_instruction()
-                resp = await llm.generate(
-                    system,
-                    content,
-                    max_output_tokens=12,
-                    timeout_seconds=8,
-                )
-                if resp is not None:
-                    confirmed_non_english = self._is_confirmed_non_english(resp.text)
+                verdict = await decisions.is_non_english(content)
+                if verdict is not None:
+                    confirmed_non_english = verdict
+                    decided = True
             except Exception:
-                logger.exception("Gemini language verification failed")
+                logger.warning("Gemini Decisions language check unavailable; falling back")
+
+        if not decided:
+            llm = self.bot.build_llm_provider()
+            if llm is not None:
+                try:
+                    system = build_moderation_instruction()
+                    resp = await llm.generate(
+                        system,
+                        content,
+                        max_output_tokens=12,
+                        timeout_seconds=8,
+                    )
+                    if resp is not None:
+                        confirmed_non_english = self._is_confirmed_non_english(resp.text)
+                except Exception:
+                    logger.exception("Gemini language verification failed")
 
         if not confirmed_non_english:
             # Silence is intentional for English, ambiguity, or verifier failure.

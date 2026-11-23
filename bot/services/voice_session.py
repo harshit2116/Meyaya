@@ -237,6 +237,7 @@ class VoiceChatSession:
             api_key=self.bot.settings.gemini_api_key,
             key_pool=getattr(getattr(self.bot, '_llm_provider', None), 'key_pool', None),
             model=self.bot.settings.gemini_live_model,
+            fallback_model=getattr(self.bot.settings, "gemini_live_fallback_model", "") or None,
             voice_name=self.voice_name,
             system_instruction=build_voice_system_instruction(
                 extra_instruction=self.bot.settings.gemini_live_system_instruction,

@@ -51,6 +51,8 @@ class OwnerHealth:
                 dependencies.append({'name': 'Redis', 'status': 'disabled', 'latency_ms': None})
             provider = getattr(self.bot, '_llm_provider', None)
             services = list(getattr(provider, 'providers', {}).items())
+            for index, light in enumerate(getattr(provider, 'light_providers', ())):
+                services.append((f'light-{index}', light))
             fallback = getattr(provider, 'fallback', None)
             if fallback is not None:
                 services.append(('fallback', fallback))

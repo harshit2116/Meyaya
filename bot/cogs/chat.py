@@ -285,6 +285,16 @@ class ChatCog(commands.Cog):
         text = re.sub(rf'<@!?{self.bot.user.id}>', '', message.content or '').strip()
         named_hostility = direct_hostility(text, directed=False)
         hostile = named_hostility or direct_hostility(text, directed=directed)
+        if hostile:
+            build_decisions = getattr(self.bot, 'build_decision_service', None)
+            decisions = build_decisions() if callable(build_decisions) else None
+            if decisions is not None:
+                try:
+                    verdict = await decisions.is_extreme_hostility(text)
+                    if verdict is False:
+                        hostile = False
+                except Exception:
+                    logger.debug("Hostility decision check skipped", exc_info=True)
         previous_text = (reply_context.content + ' ' + reply_context.embed_summary
                          if reply_context is not None and is_reply_to_meyaya else followup_question)
         low_effort = not hostile and is_low_effort_reply(text, previous_text=previous_text,
@@ -770,7 +780,7 @@ class ChatCog(commands.Cog):
         ) = await asyncio.gather(
             self._build_context_lines(context_message),
             self._context_reads.read('memories', lambda: self._load_memories(guild_id, message.author.id, user_text)),
-            self._context_reads.read('lore', lambda: self._load_server_lore(guild_id)),
+            self._context_reads.read('lore', lambda: self._load_server_lore(guild_id, user_text)),
             load_history(),
             self._context_reads.read('channel', lambda: self._recent_proactive_messages(message, allow_fetch=False)),
         )
@@ -1110,7 +1120,17 @@ class ChatCog(commands.Cog):
 
         async with self.bot.db_session() as session:
             repo = MemoryRepository(session)
-            records = await repo.recall(guild_id, user_id, query)
+            records = await repo.recall(guild_id, user_id, query, limit=40)
+        build_embeddings = getattr(self.bot, "build_embedding_service", None)
+        embeddings = build_embeddings() if callable(build_embeddings) else None
+        if embeddings is not None and query and len(records) > 4:
+            try:
+                records = await embeddings.rerank_memories(query, records, limit=24)
+            except Exception:
+                logger.debug("Semantic memory rerank skipped", exc_info=True)
+                records = records[:24]
+        else:
+            records = records[:24]
         lines = []
         candidate_added = False
         for record in records:
@@ -1337,6 +1357,17 @@ class ChatCog(commands.Cog):
         if llm is None:
             return
 
+        if not followup_question and not mass_ping:
+            build_decisions = getattr(self.bot, "build_decision_service", None)
+            decisions = build_decisions() if callable(build_decisions) else None
+            if decisions is not None:
+                try:
+                    worth_it = await decisions.should_proactively_reply(content)
+                    if worth_it is False:
+                        return
+                except Exception:
+                    logger.debug("Proactive decision gate skipped", exc_info=True)
+
         # Redis and other awaits above allow another candidate to claim this guild.
         if guild_id in self._proactive_inflight:
             return
@@ -1360,7 +1391,7 @@ class ChatCog(commands.Cog):
             ) = await asyncio.gather(
                 self._build_context_lines(message),
                 self._context_reads.read('memories', lambda: self._load_memories(guild_id, message.author.id, content)),
-                self._context_reads.read('lore', lambda: self._load_server_lore(guild_id)),
+                self._context_reads.read('lore', lambda: self._load_server_lore(guild_id, content)),
                 self._context_reads.read('history', recent_history),
                 self._context_reads.read('channel', lambda: self._recent_proactive_messages(message)),
             )
@@ -1952,13 +1983,20 @@ class ChatCog(commands.Cog):
                 return False
         return True
 
-    async def _load_server_lore(self, guild_id: int | None) -> list[str]:
+    async def _load_server_lore(self, guild_id: int | None, query: str = "") -> list[str]:
         """Load public shared lore without mixing it with member facts."""
 
         if guild_id is None:
             return []
         async with self.bot.db_session() as session:
-            records = await ServerLoreRepository(session).list_current(guild_id)
+            records = await ServerLoreRepository(session).list_current(guild_id, limit=24)
+        build_embeddings = getattr(self.bot, "build_embedding_service", None)
+        embeddings = build_embeddings() if callable(build_embeddings) else None
+        if embeddings is not None and query and len(records) > 4:
+            try:
+                records = await embeddings.rerank_lore(query, records, limit=12)
+            except Exception:
+                logger.debug("Semantic lore rerank skipped", exc_info=True)
         return [
             self._format_lore(record)
             for record in records
