@@ -7,7 +7,7 @@ import json
 import logging
 import secrets
 from collections import OrderedDict
-from contextlib import nullcontext
+from contextlib import AsyncExitStack, nullcontext
 from datetime import UTC, datetime
 from io import BytesIO
 from time import monotonic
@@ -184,7 +184,11 @@ class FantasyCog(commands.Cog):
         def available() -> None:
             if any(user_id in self.pending for user_id in ids):
                 raise commands.CommandError("Finish the open awakening or rebirth before battling.")
-            if any(user_id in self.duel_users for user_id in ids):
+            if any(
+                (activity := self.duel_users.get(user_id)) is not None
+                and not isinstance(activity, DungeonView)
+                for user_id in ids
+            ):
                 raise commands.CommandError("One of these fighters already has an open duel.")
             if len(self.duel_users) >= 32:
                 raise commands.CommandError("The arenas are busy. Try again shortly.")
@@ -194,7 +198,8 @@ class FantasyCog(commands.Cog):
                 )
 
         available()
-        await self.check_dungeon_activity(*ids)
+        # Versus duels use temporary snapshots and never touch saved dungeon
+        # progression, HP, or rewards.
         members = (left, right)
         loaded: list[Any] = await asyncio.gather(
             *(self.get_profile(member.id) for member in members), return_exceptions=True
@@ -207,12 +212,26 @@ class FantasyCog(commands.Cog):
         }
         if any(profile is None for profile in profiles.values()):
             raise commands.CommandError("Both fighters need a saved identity. Use `/awaken` first.")
-        # Recheck after database awaits; admission and reservation are atomic on this loop.
-        available()
-        view = cast(Any, DuelChallengeView)(self, left, right, profiles)
-        self.track_view(view)
-        for user_id in ids:
-            self.duel_users[user_id] = view
+        # Recheck after database awaits; pause any live dungeon UI without
+        # altering saved descent progress.
+        dungeons: dict[int, Any] = {
+            user_id: activity
+            for user_id in sorted(ids)
+            if isinstance((activity := self.duel_users.get(user_id)), DungeonView)
+        }
+        async with AsyncExitStack() as stack:
+            for user_id in sorted(dungeons):
+                await stack.enter_async_context(dungeons[user_id].lock)
+            available()
+            for user_id, dungeon in dungeons.items():
+                if self.duel_users.get(user_id) is not dungeon:
+                    raise commands.CommandError("Your activity changed. Try `/versus` again.")
+            view = cast(Any, DuelChallengeView)(self, left, right, profiles)
+            self.track_view(view)
+            for dungeon in dungeons.values():
+                dungeon.finish()
+            for user_id in ids:
+                self.duel_users[user_id] = view
         self.duel_cooldowns[left.id] = monotonic()
         self.duel_cooldowns.move_to_end(left.id)
         while len(self.duel_cooldowns) > 512:
@@ -1148,11 +1167,14 @@ class FantasyCog(commands.Cog):
         control = ""
         if getattr(ctx, "interaction", None) is None and getattr(ctx, "view", None) is not None:
             control = " ".join(ctx.view.read_rest().split()).casefold()
-        if control and (ctx.author.id != AYAYA_USER_ID or (ctx.prefix or "").strip().casefold() != "uwu"):
-            await ctx.send(view=cast(Any, dungeon_notice)("These dungeon controls are owner-only and use the `uwu` prefix."))
-            return
-        if control and control not in {"restart", "skip", "skip floor"}:
-            await ctx.send(view=cast(Any, dungeon_notice)("Use `uwu dungeon restart`, `uwu dungeon skip`, or `uwu dungeon skip floor`."))
+        if control and (
+            ctx.author.id != AYAYA_USER_ID
+            or (ctx.prefix or "").strip().casefold() != "uwu"
+            or control not in {"restart", "skip", "skip floor"}
+        ):
+            await ctx.send(
+                view=cast(Any, dungeon_notice)("Use `/dungeon` to enter or resume the Tenfold Descent.")
+            )
             return
         await ctx.defer()
         owner = ctx.author.id

@@ -18,8 +18,10 @@ RELATIONSHIP_RULES = (
     "End normal chat with exactly one hidden assessment: <relationship>neutral</relationship>, "
     "<relationship>kind</relationship>, <relationship>annoying</relationship>, or "
     "<relationship>rude</relationship>. Judge only the current speaker's new message, not "
-    "quotes, history, or your own response. Use annoying for persistent teasing, rude for direct "
-    "hostility, kind for warmth or sincere apologies, and neutral otherwise."
+    "quotes, history, or your own response. Use rude ONLY for genuinely extreme, mean-spirited "
+    "direct hostility or personal insults aimed at Meyaya; use annoying only for persistent "
+    "unwanted irritation; use kind for warmth or sincere apologies; treat relaxed banter, "
+    "joking, playful roasting, mild complaints, and ordinary chat as neutral."
 )
 VISIBLE_ONLY_RULES = (
     "Return visible text only. Memory writes, lore writes, relationship assessments, actions "

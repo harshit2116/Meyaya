@@ -221,7 +221,7 @@ class MeyayaSystemService:
             pattern.search(normalized) is not None for pattern in STRONG_HOSTILITY_PATTERNS
         )
         rude_hits = len(RUDE_LANGUAGE_PATTERN.findall(normalized))
-        if strong_hits or rude_hits:
+        if strong_hits or rude_hits >= 2:
             annoyance = min(14, strong_hits * 10 + rude_hits * 3)
             return ConversationEffect(
                 affection=-min(4, strong_hits * 3 + rude_hits),
@@ -229,7 +229,7 @@ class MeyayaSystemService:
                 energy=-min(3, max(1, strong_hits + rude_hits)),
                 global_annoyance=max(2, (annoyance + 1) // 2),
                 mood="annoyed",
-                reason="was rude or repeatedly irritating toward her",
+                reason="was directly rude or repeatedly hostile toward her",
             )
 
         if APOLOGY_PATTERN.search(normalized):
@@ -479,7 +479,9 @@ class MeyayaSystemService:
         lines.append(
             "Familiarity is gradual comfort, not automatic romance, dependency, or permission to insult. "
             "Never invent shared events or preferences; use only supplied memories and conversation. "
-            "Respect their boundaries and seriousness over teasing. Do not announce relationship scores "
+            "Respect their boundaries and seriousness over teasing. Stay warm and relaxed with "
+            "joking or friendly members; never snap or escalate harshly unless they are being "
+            "genuinely, extremely mean right now. Do not announce relationship scores "
             "or change private family identities."
         )
         if nickname:

@@ -1052,8 +1052,9 @@ class ChatCog(commands.Cog):
         return (
             'DIRECT ABUSE DETECTED IN CURRENT UNQUOTED MESSAGES. Verified speaker IDs: '
             + ', '.join(map(str, dict.fromkeys(speakers)))
-            + '. Give those speakers a brief, cutting comeback in the language they used, '
-            'rather than pleading for politeness. Stay on their present words and behavior. '
+            + '. Give only those speakers a brief, proportionate comeback in the language they used, '
+            'rather than lecturing. Stay on their present words and behavior, and keep relaxed or '
+            'joking exchanges friendly rather than escalating. '
             'Other speakers still deserve helpful answers to their own questions. '
             'No family counterattacks, invented personal claims, punishment announcements, or copied threats.'
         )

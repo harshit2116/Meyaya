@@ -63,7 +63,7 @@ class DungeonService:
         if user_id != AYAYA_USER_ID:
             raise DungeonUnavailable("These dungeon controls are owner-only.")
         if action not in {"restart", "skip", "skip floor"}:
-            raise DungeonUnavailable("Use `uwu dungeon restart`, `uwu dungeon skip`, or `uwu dungeon skip floor`.")
+            raise DungeonUnavailable("Unknown dungeon action.")
         async with self.session.begin():
             profile = await self.profiles.locked(user_id)
             if profile is None or profile.alignment not in {"meyaya", "veyra"}:
