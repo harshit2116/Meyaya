@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from hashlib import blake2b
@@ -20,6 +21,15 @@ MAX_REPLY_WORDS = 220
 class ChatMessage(TypedDict):
     role: Literal["user", "assistant"]
     content: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImageAttachment:
+    """A bounded, normalized image passed directly to a multimodal LLM."""
+
+    mime_type: str
+    data: bytes
+    filename: str = ""
 
 
 REMEMBER_PATTERN = re.compile(r"<remember>(.*?)</remember>", re.IGNORECASE | re.DOTALL)
@@ -132,14 +142,20 @@ class LLMProvider(ABC):
         *,
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
+        images: Sequence[ImageAttachment] | None = None,
     ) -> LLMReply | None:
         """Generate a chat reply with provider-independent Meyaya directives."""
+        kwargs: dict[str, Any] = {
+            "history": history,
+            "max_output_tokens": max_output_tokens,
+            "timeout_seconds": timeout_seconds,
+        }
+        if images and getattr(self, "_supports_images", False):
+            kwargs["images"] = images
         raw_text = await self.generate_text(
             system_instruction,
             user_message,
-            history=history,
-            max_output_tokens=max_output_tokens,
-            timeout_seconds=timeout_seconds,
+            **kwargs,
         )
         if not raw_text:
             return None

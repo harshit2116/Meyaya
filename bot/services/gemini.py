@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+from collections.abc import Sequence
 import logging
 import json
 import re
@@ -18,6 +20,7 @@ from bot.services.model_quota import quota_day
 
 from bot.services.llm import (
     ChatMessage,
+    ImageAttachment,
     LLMProvider,
     GroundedCitation,
     GroundedReply,
@@ -55,6 +58,7 @@ class GeminiService(LLMProvider):
 
     provider_name = "gemini"
     _supports_response_mime_type = True
+    _supports_images = True
 
     def __init__(
         self,
@@ -174,6 +178,7 @@ class GeminiService(LLMProvider):
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
         response_mime_type: str | None = None,
+        images: Sequence[ImageAttachment] | None = None,
     ) -> str | None:
         _failure.set(None)
         state = self.availability
@@ -191,6 +196,7 @@ class GeminiService(LLMProvider):
                 max_output_tokens=max_output_tokens,
                 timeout_seconds=timeout_seconds,
                 response_mime_type=response_mime_type,
+                images=images,
             )
             if result and result.strip():
                 state.failures = 0
@@ -216,6 +222,7 @@ class GeminiService(LLMProvider):
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
         response_mime_type: str | None = None,
+        images: Sequence[ImageAttachment] | None = None,
     ) -> str | None:
         """Ask Gemini for a reply, optionally continuing a prior conversation."""
 
@@ -225,14 +232,26 @@ class GeminiService(LLMProvider):
             return None
 
         url = GEMINI_ENDPOINT.format(model=self.model)
-        contents = [
+        contents: list[dict[str, Any]] = [
             {
                 "role": "model" if item["role"] == "assistant" else "user",
                 "parts": [{"text": item["content"]}],
             }
             for item in history or []
         ]
-        contents.append({"role": "user", "parts": [{"text": user_message}]})
+        user_parts: list[dict[str, Any]] = []
+        if images:
+            for image in images:
+                user_parts.append(
+                    {
+                        "inlineData": {
+                            "mimeType": image.mime_type,
+                            "data": base64.b64encode(image.data).decode("ascii"),
+                        }
+                    }
+                )
+        user_parts.append({"text": user_message})
+        contents.append({"role": "user", "parts": user_parts})
 
         generation_config: dict[str, object] = {
             "maxOutputTokens": max_output_tokens or MAX_OUTPUT_TOKENS,

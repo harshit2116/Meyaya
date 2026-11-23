@@ -8,7 +8,7 @@ import time
 from typing import Any, cast
 
 from bot.logging.telemetry import event
-from bot.services.llm import ChatMessage, GroundedReply, GroundingError, LLMProvider
+from bot.services.llm import ChatMessage, GroundedReply, GroundingError, ImageAttachment, LLMProvider
 
 
 @dataclass(slots=True)
@@ -78,6 +78,7 @@ class GeminiPooledService(LLMProvider):
 
     provider_name = 'gemini'
     _supports_response_mime_type = True
+    _supports_images = True
 
     def __init__(self, services: Sequence[Any], key_pool: GeminiKeyPool) -> None:
         self.services, self.key_pool = services, key_pool
@@ -178,6 +179,7 @@ class GeminiPooledService(LLMProvider):
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
         response_mime_type: str | None = None,
+        images: Sequence[ImageAttachment] | None = None,
     ) -> str | None:
         return cast(
             str | None,
@@ -189,6 +191,7 @@ class GeminiPooledService(LLMProvider):
                 max_output_tokens=max_output_tokens,
                 timeout_seconds=timeout_seconds,
                 response_mime_type=response_mime_type,
+                images=images,
             ),
         )
 

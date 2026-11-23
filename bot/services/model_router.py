@@ -13,6 +13,7 @@ from bot.services.llm import (
     GroundedReply,
     GroundingError,
     GroundingRateLimitError,
+    ImageAttachment,
     LLMProvider,
 )
 from bot.services.ai_guard import guarded, AILimitReached
@@ -62,6 +63,7 @@ class ModelRouter(LLMProvider):
     provider_name = "router"
     model = "feature-routed"
     _supports_response_mime_type = True
+    _supports_images = True
 
     def __init__(
         self,
@@ -110,6 +112,7 @@ class ModelRouter(LLMProvider):
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
         response_mime_type: str | None = None,
+        images: Sequence[ImageAttachment] | None = None,
     ) -> str | None:
         kwargs: dict[str, Any] = {
             "max_output_tokens": max_output_tokens,
@@ -117,6 +120,8 @@ class ModelRouter(LLMProvider):
         }
         if response_mime_type and getattr(provider, "_supports_response_mime_type", False):
             kwargs["response_mime_type"] = response_mime_type
+        if images and getattr(provider, "_supports_images", False):
+            kwargs["images"] = images
         try:
             return await provider.generate_text(
                 system_instruction,
@@ -175,6 +180,7 @@ class ModelRouter(LLMProvider):
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
         response_mime_type: str | None = None,
+        images: Sequence[ImageAttachment] | None = None,
     ) -> str | None:
         # One wall-clock budget for primary attempts, backoff and model fallback.
         try:
@@ -186,6 +192,7 @@ class ModelRouter(LLMProvider):
                     max_output_tokens=max_output_tokens,
                     timeout_seconds=timeout_seconds,
                     response_mime_type=response_mime_type,
+                    images=images,
                 )
         except TimeoutError:
             cast(Any, record_route_deadline)()
@@ -204,6 +211,7 @@ class ModelRouter(LLMProvider):
         max_output_tokens: int | None = None,
         timeout_seconds: float | None = None,
         response_mime_type: str | None = None,
+        images: Sequence[ImageAttachment] | None = None,
     ) -> str | None:
         feature = (current_model_context().get("feature") or "").strip().casefold()
         tier, provider = self.selected_provider()
@@ -258,6 +266,7 @@ class ModelRouter(LLMProvider):
                         max_output_tokens=max_output_tokens,
                         timeout_seconds=candidate_budget,
                         response_mime_type=response_mime_type,
+                        images=images,
                     )
             except TimeoutError:
                 if index == 0:
