@@ -261,6 +261,7 @@ class LocalDashboard(Dashboard):
                 owner_id=details.get('owner_id') or summary.get('owner_id') or saved.get('owner_id'),
                 owner_name=details.get('owner_name') or summary.get('owner_name') or saved.get('owner_name'),
                 icon_url=rest_server_info(dict(metadata, id=str(gid))).get('icon_url') or saved.get('icon_url'),
+                joined_at=details.get('bot_joined_at') or saved.get('joined_at'),
                 prefix=config.command_prefix if config else 'uwu',
                 autoresponder=config.autoresponder_enabled if config else False,
                 features=feature_states(getattr(config, 'disabled_features', None) or ()),

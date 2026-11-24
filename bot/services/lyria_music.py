@@ -116,6 +116,8 @@ class LyriaMusicSession:
 
     async def _stream_loop(self) -> None:
         key = self._acquire_key()
+        status = "unavailable"
+        failure: str | None = "stream_not_started"
         try:
             self._client = genai.Client(
                 api_key=key,
@@ -131,6 +133,7 @@ class LyriaMusicSession:
                     )
                     await session.play()
                     event("lyria_bgm_started", guild_id=self.guild_id, model=self.model)
+                    status, failure = "success", None
                     async for message in session.receive():
                         if self._stop_event.is_set():
                             break
@@ -145,6 +148,8 @@ class LyriaMusicSession:
         except (asyncio.CancelledError, TimeoutError):
             pass
         except Exception as exc:
+            if status != "success":
+                status, failure = "error", type(exc).__name__
             event(
                 "lyria_bgm_error",
                 guild_id=self.guild_id,
@@ -154,6 +159,9 @@ class LyriaMusicSession:
             logger.warning("Lyria music stream stopped guild=%s error=%s", self.guild_id, type(exc).__name__)
         finally:
             self._active = False
+            # No latency: stream length would skew the dashboard's model latency figures.
+            event("llm_request", operation="music_stream", provider="lyria", model=self.model,
+                  guild_id=self.guild_id, status=status, fallback_reason=failure)
             await self._close_client()
             if callable(self.on_finished):
                 with suppress(Exception):

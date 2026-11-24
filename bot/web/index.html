@@ -83,7 +83,7 @@
       <section id="view-overview" class="view">
         <div class="toolbar"><div><h2>Your little universe</h2><p>Live operations and per-server controls.</p></div><div class="row"><input id="search" aria-label="Find a server" placeholder="Find a server"><button id="refresh" class="quiet">Refresh</button></div></div>
         <section class="panel attention-panel"><h2>Needs attention</h2><p class="details">Permissions, allowances, command failures, and voice diagnostics.</p><div id="attention-items">Checking your servers…</div></section>
-        <div class="browse-controls"><label>Sort servers<select id="server-sort"><option value="name">Name</option><option value="activity">Most active</option><option value="members">Most members</option><option value="joined">Recently joined</option></select></label><label>Show<select id="server-filter"><option value="all">All servers</option><option value="active">Active today</option><option value="quota">Allowance exhausted</option><option value="unavailable">Unavailable</option></select></label></div>
+        <div class="browse-controls"><label>Sort servers<select id="server-sort"><option value="joined" selected>Recently added</option><option value="joined_oldest">Oldest added</option><option value="activity">Most active (today)</option><option value="week_activity">Most active (7 days)</option><option value="members">Most members</option><option value="name">Name (A-Z)</option><option value="name_desc">Name (Z-A)</option></select></label><label>Show<select id="server-filter"><option value="all">All servers</option><option value="active">Active today</option><option value="quota">Allowance exhausted</option><option value="unavailable">Unavailable</option></select></label></div>
         <section class="server-group" aria-labelledby="current-servers-title">
           <div class="server-group-heading"><h2 id="current-servers-title">Current servers</h2><span id="current-server-count" class="badge">0</span></div>
           <p class="details">Servers Meyaya is currently in.</p>
@@ -123,7 +123,7 @@
         <section id="operations-summary" class="stats operations-summary"></section>
         <section class="panel operations-panel"><h3>Command speed</h3><p class="details">Callback time including response delivery; excludes argument parsing and checks. Stage times can overlap and do not add up to the total. Latest 2,000 callbacks from this process.</p><div id="operations-commands" class="operation-list"></div></section>
         <div class="operations-columns">
-          <section class="panel operations-panel"><h3>Usage by feature</h3><div id="operations-features" class="operation-list"></div></section>
+          <section class="panel operations-panel"><h3>AI usage by feature</h3><div id="operations-features" class="operation-list"></div></section>
           <section class="panel operations-panel"><h3>Usage by model</h3><div id="operations-models" class="operation-list"></div></section>
         </div>
         <section class="panel operations-panel"><h3>Recent model outcomes</h3><p class="details">The latest 30 requests from this bot process, with no message content.</p><div id="operations-recent" class="operation-list"></div></section>

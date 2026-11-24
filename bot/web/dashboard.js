@@ -439,13 +439,30 @@ function renderServers() {
     .filter(server => filter === "all" || (filter === "active" && (server.today_chats + server.today_commands > 0)) ||
       (filter === "quota" && !isFormerServer(server) && !server.exempt && server.today_chats >= server.limit) ||
       (filter === "unavailable" && (isFormerServer(server) || server.available === false)));
-  const sort = $("server-sort").value;
-  visible.sort((a,b) => {
-    const score = server => sort === "activity" ? (server.today_chats + (server.today_bonus_chats ?? 0) + server.today_commands) :
-      sort === "members" ? (server.members ?? -1) : sort === "joined" ? (Date.parse(server.joined_at) || 0) : 0;
+  const sort = $("server-sort").value || "joined";
+  const joinedMs = server => {
+    const parsed = Date.parse(server.joined_at || "");
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  visible.sort((a, b) => {
+    if (sort === "joined") {
+      const aj = joinedMs(a), bj = joinedMs(b);
+      if (aj !== bj) return (bj ?? -Infinity) - (aj ?? -Infinity);
+      return a.name.localeCompare(b.name);
+    }
+    if (sort === "joined_oldest") {
+      const aj = joinedMs(a), bj = joinedMs(b);
+      if (aj !== bj) return (aj ?? Infinity) - (bj ?? Infinity);
+      return a.name.localeCompare(b.name);
+    }
+    if (sort === "name_desc") return b.name.localeCompare(a.name);
+    if (sort === "name") return a.name.localeCompare(b.name);
+    const score = server => sort === "activity" ? ((server.today_chats ?? 0) + (server.today_bonus_chats ?? 0) + (server.today_commands ?? 0)) :
+      sort === "week_activity" ? ((server.week_chats ?? 0) + (server.week_voice_sessions ?? 0) + (server.week_commands ?? 0)) :
+      sort === "members" ? (server.members ?? -1) : 0;
     return score(b) - score(a) || a.name.localeCompare(b.name);
   });
-  const signature = JSON.stringify(visible);
+  const signature = `${sort}:${JSON.stringify(visible)}`;
   if (signature === lastServerRender && $("servers").children.length + $("former-servers").children.length) return;
   lastServerRender = signature;
   const current = visible.filter(server => !isFormerServer(server));
@@ -458,12 +475,22 @@ function renderServers() {
     const card = element("button", undefined, "server-tile"); card.type = "button";
     const icon = serverIcon(server), owner = element("p", `Owner · ${server.owner_name || (isFormerServer(server) ? "Not previously recorded" : "Loading…")}`, "server-owner");
     const activity = element("div", undefined, "server-tile-activity");
+    const joinedDate = server.joined_at ? new Date(server.joined_at) : null;
+    const joinedMetric = metric(
+      "Bot joined",
+      joinedDate && !Number.isNaN(joinedDate.getTime())
+        ? joinedDate.toLocaleDateString(undefined, {year: "numeric", month: "short", day: "numeric"})
+        : "Not recorded"
+    );
+    joinedMetric.querySelector("b").classList.add("metric-date");
+    if (joinedDate && !Number.isNaN(joinedDate.getTime())) joinedMetric.title = joinedDate.toLocaleString();
     activity.append(
       metric("AI chats today", known(server.today_chats + (server.today_bonus_chats ?? 0))),
       metric("AI chats / 7 days", known(server.week_chats)),
       metric("Voice sessions today", server.today_voice_sessions ?? 0),
       metric("Voice sessions / 7 days", server.week_voice_sessions ?? 0),
-      metric("Commands today", known(server.today_commands))
+      metric("Commands today", known(server.today_commands)),
+      joinedMetric
     );
     card.append(icon, element("h3", server.name), owner, activity, element("span", server.id, "id"), element("span", "View server →", "tile-link"));
     if (server.membership === "removed" || (server.local && server.available === false)) card.append(element("span", "No longer in server · saved records", "details"));
@@ -560,11 +587,18 @@ async function loadRequests(older) {
     if (!older) $("request-items").replaceChildren();
     for (const item of data.items) {
       const entry = element("article", undefined, "discord-exchange");
-      const user = discordMessage(item.user_name, item.content);
-      user.querySelector(".discord-message-heading").replaceChildren(memberIdentity(item));
-      const reply = discordMessage("Meyaya", item.response ?? "Reply not recorded.", true);
+      const sentAt = item.created_at ? new Date(item.created_at) : null;
+      const validSent = sentAt && !Number.isNaN(sentAt.getTime()) ? sentAt : null;
+      const replyAt = validSent
+        ? new Date(validSent.getTime() + (typeof item.latency_ms === "number" ? Math.max(0, item.latency_ms) : 0))
+        : null;
+      const user = discordMessage(item.user_name, item.content, false, validSent);
+      const userHeading = user.querySelector(".discord-message-heading");
+      userHeading.replaceChildren(memberIdentity(item));
+      if (item.kind === "auto_chat") userHeading.append(element("span", "Automatic reply", "conversation-type auto-reply"));
+      if (validSent) userHeading.append(messageTime(validSent));
+      const reply = discordMessage("Meyaya", item.response ?? "Reply not recorded.", true, replyAt);
       if (item.outcome) reply.append(element("p", `${item.outcome.replaceAll("_", " ")}${item.latency_ms == null ? "" : ` · ${(item.latency_ms / 1000).toFixed(2)}s`}`, "details"));
-      if (item.kind === "auto_chat") user.querySelector(".discord-message-heading").append(element("span", "Automatic reply", "conversation-type auto-reply"));
       entry.append(user, reply); $("request-items").append(entry);
     }
     requestCursor = data.next_cursor; $("request-more").hidden = !requestCursor;
@@ -626,7 +660,7 @@ function renderOperationGroup(target, items) {
   if (!items.length) { $(target).append(element("p", "No model requests recorded yet.", "details")); return; }
   for (const item of items) {
     const row = element("article", undefined, "operation-row");
-    row.append(element("h4", item.name), element("p", `${item.requests} requests - ${item.successes} successful - ${item.failures} failed`, "details"));
+    row.append(element("h4", item.name), element("p", `${item.requests} requests - ${item.successes} successful - ${item.failures} failed (${item.error_rate ?? 0}% error rate) - ${item.rate_limited ?? 0} rate-limit hits`, "details"));
     const values = element("div", undefined, "operation-values");
     values.append(element("span", `${item.tokens.toLocaleString()} tokens`), element("span", item.average_latency_ms === null ? "No latency" : `${item.average_latency_ms} ms average`));
     row.append(values); $(target).append(row);
@@ -661,6 +695,8 @@ async function loadOperations() {
     for (const [label, value] of [
       ["Model requests", summary.requests],
       ["Success rate", `${summary.success_rate}%`],
+      ["Error rate", `${summary.error_rate ?? 0}%`],
+      ["Rate-limit hits (429)", summary.rate_limited ?? 0],
       ["Failures", summary.failures],
       ["Cancelled model attempts", summary.cancelled ?? 0],
       ["Chat turns", data.chat_turns?.turns ?? 0],
@@ -954,11 +990,16 @@ async function loadVoiceSummaries(older) {
     for (const item of data.items) {
       const row = element("article", undefined, "memory-entry");
       const heading = element("div", undefined, "record-heading");
-      heading.append(element("h3", item.channel_name || "Voice channel"), element("time", new Date(item.started_at).toLocaleString(), "details"));
+      const startedTime = item.started_at ? messageTime(item.started_at, "Started ") : null;
+      heading.append(element("h3", item.channel_name || "Voice channel"));
+      if (startedTime) heading.append(startedTime);
       row.append(heading);
       const duration = `${Math.floor(item.duration_seconds / 60)}m ${item.duration_seconds % 60}s`;
       const names = item.participants.map(person => person.name || "Member");
-      row.append(element("p", `${duration} · Speakers: ${names.join(", ") || "None detected"}`, "details"));
+      const endedText = item.ended_at && item.status !== "recording"
+        ? ` · Ended ${new Date(item.ended_at).toLocaleString()}`
+        : "";
+      row.append(element("p", `${duration}${endedText} · Speakers: ${names.join(", ") || "None detected"}`, "details"));
       const fallbacks = {no_speech: "No intelligible member speech was available to summarize.", recording: "Voice conversation is in progress.", queued: "The recap is being prepared.", skipped: "The recap queue was full or shutting down.", interrupted: "The recap was interrupted by a shutdown or restart."};
       const fallback = fallbacks[item.status] || "A summary couldn't be generated for this session.";
       row.append(element("p", item.summary || fallback, "record-value voice-summary-text"));
@@ -1002,10 +1043,19 @@ async function loadCommandHistory(older) {
   finally { if (version === commandHistoryVersion) $("command-history-more").disabled = false; }
 }
 
-function discordMessage(name, content, isBot = false) {
+function messageTime(value, prefix = "") {
+  const date = value instanceof Date ? value : new Date(value);
+  const stamp = element("time", `${prefix}${date.toLocaleString()}`, "details");
+  if (!Number.isNaN(date.getTime())) stamp.dateTime = date.toISOString();
+  return stamp;
+}
+
+function discordMessage(name, content, isBot = false, timestamp = null) {
   const row = element("div", undefined, `discord-message${isBot ? " discord-bot-message" : ""}`);
   const heading = element("div", undefined, "discord-message-heading");
   heading.append(element("strong", name));
+  if (isBot) heading.append(element("span", "APP", "discord-app-badge"));
+  if (timestamp) heading.append(messageTime(timestamp));
   row.append(heading, element("div", content, "discord-message-text"));
   return row;
 }

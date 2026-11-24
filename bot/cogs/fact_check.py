@@ -12,13 +12,15 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.app import MeyayaBot
-from bot.logging.telemetry import discord_context
+from bot.logging.telemetry import discord_context, event
 from bot.services.fact_check import (
     MAX_ARGUMENT_CHARACTERS,
     MAX_ARGUMENT_MESSAGES,
     MAX_MESSAGE_CHARACTERS,
     FactCheckMessage,
+    FactCheckResult,
     FactCheckService,
+    grounding_cooldown_remaining,
 )
 from bot.services.llm import GroundingError, GroundingRateLimitError
 from bot.utils.embeds import meyaya_embed
@@ -29,6 +31,8 @@ MESSAGE_LINK = re.compile(
     re.IGNORECASE,
 )
 FACT_CHECK_COOLDOWN_SECONDS = 60
+FACT_CHECK_CACHE_SECONDS = 1800
+MAX_CACHED_CHECKS = 128
 MAX_DISCORD_CHUNK = 1900
 logger = logging.getLogger(__name__)
 
@@ -44,6 +48,9 @@ class FactCheckCog(commands.Cog):
         self.bot = bot
         self._last_check: dict[tuple[int, int], float] = {}
         self._inflight: set[tuple[int, int]] = set()
+        # Guild-scoped, keyed by message ID and text so edits or other authors never reuse a report.
+        self._results: dict[tuple[int, bool, tuple[tuple[int, str], ...]],
+                            tuple[float, FactCheckResult]] = {}
 
     @commands.hybrid_command(  # type: ignore[arg-type]
         name="argumenttimeline",
@@ -173,6 +180,13 @@ class FactCheckCog(commands.Cog):
         if key in self._inflight:
             await ctx.send("You already have a fact check running.", ephemeral=True)
             return
+        cache_key = (ctx.guild.id, single_message,
+                     tuple((message.message_id, message.content) for message in messages))
+        cached = self._results.get(cache_key)
+        if cached is not None and now - cached[0] < FACT_CHECK_CACHE_SECONDS:
+            event("fact_check_cache_hit", message_count=len(messages))
+            await self._send_result(ctx, cached[1])
+            return
         remaining = FACT_CHECK_COOLDOWN_SECONDS - (now - self._last_check.get(key, float("-inf")))
         if remaining > 0:
             await ctx.send(
@@ -189,15 +203,10 @@ class FactCheckCog(commands.Cog):
             )
             result = await service.analyze(messages, single_message=single_message)
         except GroundingRateLimitError as exc:
-            if exc.retry_after_seconds is not None:
-                detail = f" Try again in about {exc.retry_after_seconds} seconds."
-            else:
-                detail = (
-                    " Please try again later."
-                )
+            wait = exc.retry_after_seconds or grounding_cooldown_remaining() or 60
             await ctx.send(
-                "Source checking is temporarily busy, so Meyaya did not make a "
-                f"fact-check conclusion.{detail}"
+                "Source checking hit its search limit, so Meyaya did not make a fact-check "
+                f"conclusion. Try again <t:{int(time.time()) + wait}:R>."
             )
             return
         except GroundingError:
@@ -222,7 +231,13 @@ class FactCheckCog(commands.Cog):
         if len(self._last_check) >= 2048 and key not in self._last_check:
             self._last_check.pop(next(iter(self._last_check)))
         self._last_check[key] = time.monotonic()
+        if len(self._results) >= MAX_CACHED_CHECKS and cache_key not in self._results:
+            self._results.pop(next(iter(self._results)))
+        self._results[cache_key] = (time.monotonic(), result)
+        await self._send_result(ctx, result)
 
+    @staticmethod
+    async def _send_result(ctx: commands.Context[Any], result: FactCheckResult) -> None:
         heading = (
             f"Checked **{result.message_count}** message(s) with "
             f"{result.source_count} web source(s).\n\n"

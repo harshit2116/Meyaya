@@ -15,6 +15,7 @@ from discord.ext import commands, tasks
 
 from bot.app import MeyayaBot
 from bot.data.voices import canonical_voice_name
+from bot.logging.telemetry import discord_context
 from bot.services.ai_guard import AILimitReached
 from bot.services.audio import PcmStreamAudioSource
 from bot.services.chat_blacklist import acknowledge_silently
@@ -453,6 +454,7 @@ class VoiceLiveCog(commands.Cog):
         style="Optional delivery style (e.g. playful, dramatic, whispered).",
     )
     @commands.guild_only()
+    @discord_context("voiceclip")
     async def voiceclip(
         self,
         ctx: commands.Context[Any],
@@ -545,6 +547,7 @@ class VoiceLiveCog(commands.Cog):
         lyrics_only="Set True to sing your exact text verbatim instead of writing new lyrics.",
     )
     @commands.guild_only()
+    @discord_context("sing")
     async def sing(
         self,
         ctx: commands.Context[Any],
@@ -638,6 +641,7 @@ class VoiceLiveCog(commands.Cog):
         mood="Music mood or style (e.g. 'chill lofi rain beats', 'fantasy dungeon'), or 'stop'.",
     )
     @commands.guild_only()
+    @discord_context("bgm")
     async def bgm(self, ctx: commands.Context[Any], *, mood: str = "chill lofi beats") -> None:
         if ctx.guild is None or not isinstance(ctx.author, discord.Member):
             await ctx.send("This command can only be used in a server.", ephemeral=True)

@@ -56,6 +56,11 @@ async def server_report(bot, usage_report=None):
                 "owner_name": guild.owner.display_name if guild.owner else None,
                 "icon_url": str(guild.icon.url) if guild.icon else None,
                 "available": not guild.unavailable,
+                "joined_at": (
+                    guild.me.joined_at.isoformat()
+                    if guild.me and guild.me.joined_at
+                    else None
+                ),
                 "readable_channels": accessible,
                 "can_timeout": bool(permissions and permissions.moderate_members),
                 "prefix": bot.prefix_for_guild(guild.id),

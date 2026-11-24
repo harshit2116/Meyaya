@@ -23,7 +23,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from bot.app import MeyayaBot
 from bot.logging.health import ProviderUnavailable, health
-from bot.logging.telemetry import current_model_diagnostic, discord_context, model_context
+from bot.logging.telemetry import current_model_diagnostic, discord_context, event, model_context
 from bot.services.optional_context import OptionalContext
 from bot.utils.application_emojis import LOADING_EMOJI_NAMES, application_emojis
 from bot.utils.command_timing import timing_stage
@@ -241,6 +241,8 @@ class ChatCog(commands.Cog):
             return
         moderation: Any = self.bot.get_cog("ModerationCog")
         if moderation and await moderation.should_block(message):
+            return
+        if not self._can_reply_here(message):
             return
         if not self.bot.chat_allowed(message.guild.id, message.channel.id):
             await self._redirect_chat(message)
@@ -536,12 +538,18 @@ class ChatCog(commands.Cog):
                 if len(authors) == 1 and len(entries) > 1 and await self.bot.chat_blacklist.inspect(key[0], latest.author.id, text):
                     state.processing = []
                     continue
-                if len(authors) > 1:
-                    result = await self._respond_to_group(entries)
-                elif len(entries) == 1:
-                    result = await self._respond_to_message(latest, text, entries[0].reply_context)
-                else:
-                    result = await self._respond_to_message(latest, text, entries[-1].reply_context, batch=entries)
+                try:
+                    if len(authors) > 1:
+                        result = await self._respond_to_group(entries)
+                    elif len(entries) == 1:
+                        result = await self._respond_to_message(latest, text, entries[0].reply_context)
+                    else:
+                        result = await self._respond_to_message(latest, text, entries[-1].reply_context, batch=entries)
+                except discord.Forbidden:
+                    # Permissions can change mid-generation; skip quietly instead of crashing the turn.
+                    event("chat_reply_forbidden", guild_id=key[0], channel_id=key[1])
+                    state.processing = []
+                    continue
                 if result is CHAT_INTERRUPTED:
                     state.entries = entries + state.entries
                     state.pending_chars = sum(len(item.text) for item in state.entries)
@@ -909,10 +917,13 @@ class ChatCog(commands.Cog):
                     else 'provider_unavailable')
             if self.bot.chat_blacklist.is_blocked(message.guild.id, message.author.id):
                 return
+            diagnostic = current_model_diagnostic()
             error_id = health.capture(ProviderUnavailable(), command='chat', guild_id=guild_id,
                                       channel_id=message.channel.id, stage='ai_generation', invocation='chat',
                                       latency_ms=round((generation_ready - context_ready) * 1000, 2),
-                                      **current_model_diagnostic())
+                                      provider=diagnostic.get('provider'), model=diagnostic.get('model'),
+                                      request_id=diagnostic.get('request_id'),
+                                      reason=diagnostic.get('reason') or diagnostic.get('fallback_reason'))
             await message.reply("My AI service isn't available right now. Please try again shortly."
                                 f"\nError ID: `{error_id}`", mention_author=False)
             return
@@ -1625,6 +1636,23 @@ class ChatCog(commands.Cog):
         """Accept small formatting variations of Gemini's silence token."""
 
         return is_silence(text)
+
+    @staticmethod
+    def _can_reply_here(message: discord.Message) -> bool:
+        """Skip AI work where Meyaya cannot post a reply (send or read-history missing)."""
+
+        me = getattr(message.guild, "me", None)
+        permissions_for = getattr(message.channel, "permissions_for", None)
+        if me is None or permissions_for is None:
+            return True
+        permissions = permissions_for(me)
+        if isinstance(message.channel, discord.Thread):
+            if message.channel.locked and not permissions.manage_threads:
+                return False
+            can_send = permissions.send_messages_in_threads
+        else:
+            can_send = permissions.send_messages
+        return bool(can_send and permissions.read_message_history)
 
     def _usable_custom_emojis(self, message: discord.Message) -> tuple[discord.Emoji, ...]:
         """Return usable custom emojis, preferring the current server's collection."""

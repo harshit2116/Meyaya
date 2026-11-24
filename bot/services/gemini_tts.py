@@ -15,7 +15,7 @@ import wave
 import aiohttp
 
 from bot.data.voices import canonical_voice_name
-from bot.logging.telemetry import event
+from bot.logging.telemetry import event, observe, record_response, request_failure
 from bot.services.gemini_keys import GeminiKeyPool
 
 logger = logging.getLogger(__name__)
@@ -106,6 +106,11 @@ class GeminiTTSService:
     def enabled(self) -> bool:
         return bool(self.api_keys and self.models)
 
+    @property
+    def model(self) -> str:
+        return self.models[0] if self.models else "unknown"
+
+    @observe("tts")
     async def synthesize(
         self,
         text: str,
@@ -181,6 +186,7 @@ class GeminiTTSService:
                                 self.key_pool.block(index)
                                 continue
                             if response.status == 429:
+                                request_failure("http_429", model=model)
                                 self._blocked_until[(model, index)] = (
                                     time.monotonic() + KEY_COOLDOWN_SECONDS
                                 )
@@ -199,6 +205,7 @@ class GeminiTTSService:
 
                 wav = self._extract_wav(data)
                 if wav is not None:
+                    record_response({**data, "modelVersion": model})
                     event("gemini_tts_ok", model=model, bytes=len(wav))
                     return wav
         return None

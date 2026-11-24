@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 import re
 import tempfile
+import time
 from typing import Any
 import wave
 
@@ -100,6 +101,8 @@ async def capture_lyria_pcm(
     target_bytes = min(MAX_BGM_BYTES, max(LYRIA_BYTES_PER_SECOND * 6, int(duration_seconds * LYRIA_BYTES_PER_SECOND)))
     buf = bytearray()
     client: Any = None
+    started = time.monotonic()
+    failure: str | None = None
     try:
         client = genai.Client(api_key=selected_key, http_options={"api_version": "v1alpha"})
         async with asyncio.timeout(max(12.0, duration_seconds + 8.0)):
@@ -125,6 +128,7 @@ async def capture_lyria_pcm(
                 with suppress(Exception):
                     await session.stop()
     except (TimeoutError, Exception) as exc:
+        failure = type(exc).__name__
         logger.debug("Lyria capture ended early: %s (captured=%s bytes)", type(exc).__name__, len(buf))
     finally:
         if key_index is not None and key_pool is not None:
@@ -139,7 +143,12 @@ async def capture_lyria_pcm(
                 with suppress(Exception):
                     close()
 
-    return bytes(buf[:target_bytes]) if len(buf) >= LYRIA_BYTES_PER_SECOND * 4 else None
+    captured = len(buf) >= LYRIA_BYTES_PER_SECOND * 4
+    event("llm_request", operation="music_capture", provider="lyria", model=model,
+          latency_ms=round((time.monotonic() - started) * 1000, 2),
+          status="success" if captured else "unavailable",
+          fallback_reason=None if captured else (failure or "short_capture"))
+    return bytes(buf[:target_bytes]) if captured else None
 
 
 async def mix_song_mp3(

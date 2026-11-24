@@ -6,6 +6,7 @@ from bot.prompts.fact_check import build_fact_check_instruction
 
 from dataclasses import dataclass
 import json
+import math
 import time
 
 import aiohttp
@@ -26,6 +27,12 @@ MAX_MESSAGE_CHARACTERS = 1_200
 MAX_PUBLIC_SOURCES = 10
 NATIVE_GROUNDING_COOLDOWN_SECONDS = 300.0
 _native_grounding_cooldown_until = 0.0
+
+
+def grounding_cooldown_remaining() -> int:
+    """Whole seconds until native Google Search grounding is retried."""
+
+    return max(0, math.ceil(_native_grounding_cooldown_until - time.monotonic()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +98,8 @@ class FactCheckService:
             )
             if fallback is not None:
                 return fallback
+            # Google Search is still cooling down; retrying it now only adds another 429.
+            raise GroundingRateLimitError(grounding_cooldown_remaining() or None)
         try:
             grounded = await self.llm.grounded_generate(
                 system,

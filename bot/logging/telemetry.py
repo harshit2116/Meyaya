@@ -77,6 +77,7 @@ class OperationalTelemetry:
                 "output_tokens": self._integer(payload.get("output_tokens")),
                 "total_tokens": self._integer(payload.get("total_tokens")),
                 "failed_attempts": self._integer(payload.get("failed_requests")),
+                "rate_limited": self._integer(payload.get("rate_limited_attempts")),
                 "fallback_reason": (
                     str(payload["fallback_reason"])[:160]
                     if payload.get("fallback_reason")
@@ -110,6 +111,8 @@ class OperationalTelemetry:
                 "cancelled": sum(item['status'] == 'cancelled' for item in records),
                 "recovered_attempts": sum(item["failed_attempts"] for item in records),
                 "success_rate": round(successes * 100 / len(records), 1) if records else 0,
+                "error_rate": round(failures * 100 / len(records), 1) if records else 0,
+                "rate_limited": sum(item["rate_limited"] for item in records),
                 "average_latency_ms": (
                     round(sum(latencies) / len(latencies), 1) if latencies else None
                 ),
@@ -202,6 +205,7 @@ class OperationalTelemetry:
                     "requests": 0,
                     "successes": 0,
                     "failures": 0,
+                    "rate_limited": 0,
                     "tokens": 0,
                     "latency_total": 0.0,
                     "latency_count": 0,
@@ -210,6 +214,7 @@ class OperationalTelemetry:
             group["requests"] += 1
             group["successes"] += item["status"] == "success"
             group["failures"] += item["status"] in {"error", "unavailable"}
+            group["rate_limited"] += item["rate_limited"]
             group["tokens"] += item["total_tokens"] or 0
             if item["latency_ms"] is not None:
                 group["latency_total"] += item["latency_ms"]
@@ -220,6 +225,7 @@ class OperationalTelemetry:
             latency_count = group.pop("latency_count")
             latency = round(latency_total / latency_count, 1) if latency_count else None
             group["average_latency_ms"] = latency
+            group["error_rate"] = round(group["failures"] * 100 / group["requests"], 1)
             result.append(group)
         return sorted(result, key=lambda item: (-item["requests"], item["name"]))
 
@@ -329,6 +335,8 @@ def request_failure(reason: str, **fields: Any) -> None:
     if metrics is not None:
         metrics["fallback_reason"] = reason
         metrics["failed_requests"] += 1
+        if reason == "http_429":
+            metrics["rate_limited_attempts"] = metrics.get("rate_limited_attempts", 0) + 1
     event(
         "llm_attempt_failed", request_id=(metrics or {}).get("request_id"), reason=reason, **fields
     )
@@ -347,6 +355,7 @@ def observe(operation: str) -> _AsyncMethodDecorator:
                 "total_tokens": None,
                 "returned_model": None,
                 "failed_requests": 0,
+                "rate_limited_attempts": 0,
                 "fallback_reason": None,
             }
             token = _metrics.set(metrics)
