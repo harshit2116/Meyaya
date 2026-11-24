@@ -5,8 +5,34 @@ from __future__ import annotations
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+import time
 
 import structlog
+
+
+class VoiceCryptoLogFilter(logging.Filter):
+    """Rate-limit harmless UDP/DAVE packet CryptoError log bursts from voice_recv."""
+
+    def __init__(self, interval_seconds: float = 60.0) -> None:
+        super().__init__()
+        self.interval_seconds = interval_seconds
+        self._last_logged = 0.0
+        self._suppressed = 0
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if "CryptoError decoding packet data" not in message:
+            return True
+        now = time.monotonic()
+        if now - self._last_logged < self.interval_seconds:
+            self._suppressed += 1
+            return False
+        if self._suppressed:
+            record.msg = f"{record.getMessage()} (suppressed {self._suppressed} similar packet warnings)"
+            record.args = ()
+            self._suppressed = 0
+        self._last_logged = now
+        return True
 
 
 class DiscordRateLimitHandler(logging.Handler):
@@ -25,6 +51,9 @@ def configure_logging() -> None:
     discord_http = logging.getLogger("discord.http")
     if not any(isinstance(handler, DiscordRateLimitHandler) for handler in discord_http.handlers):
         discord_http.addHandler(DiscordRateLimitHandler(level=logging.WARNING))
+    voice_recv = logging.getLogger("discord.ext.voice_recv")
+    if not any(isinstance(item, VoiceCryptoLogFilter) for item in voice_recv.filters):
+        voice_recv.addFilter(VoiceCryptoLogFilter())
     telemetry = logging.getLogger("meyaya.telemetry")
     if not telemetry.handlers:
         try:

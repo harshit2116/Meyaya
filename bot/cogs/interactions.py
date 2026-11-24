@@ -19,6 +19,12 @@ from bot.views.interactions import InteractionResponseView
 from bot.views.help import HelpView, can_attach_help_art
 
 logger = logging.getLogger(__name__)
+STANDALONE_SLASH_INTERACTIONS: frozenset[str] = frozenset(
+    {"hug", "kiss", "pat", "slap", "cuddle", "poke"}
+)
+INTERACTION_BY_NAME: dict[str, InteractionDefinition] = {
+    definition.name: definition for definition in INTERACTION_DEFINITIONS
+}
 
 
 def log_reaction_media(command: str, invocation: str, gif_url: str | None) -> None:
@@ -43,13 +49,21 @@ class InteractionsCog(commands.Cog):
 
     async def cog_load(self) -> None:
         for definition in INTERACTION_DEFINITIONS:
-            app_command = self._build_app_command(definition)
-            self.bot.tree.add_command(app_command)
-            self._app_commands.append(app_command)
+            if definition.name in STANDALONE_SLASH_INTERACTIONS:
+                app_command = self._build_app_command(definition)
+                self.bot.tree.add_command(app_command)
+                self._app_commands.append(app_command)
 
             text_command = self._build_text_command(definition)
             self.bot.add_command(text_command)
             self._text_commands.append(text_command)
+
+        act_app = self._build_app_act_command()
+        self.bot.tree.add_command(act_app)
+        self._app_commands.append(act_app)
+        act_text = self._build_text_act_command()
+        self.bot.add_command(act_text)
+        self._text_commands.append(act_text)
 
         for app_command in (self._build_app_gif_command(), self._build_app_help_command()):
             self.bot.tree.add_command(app_command)
@@ -143,6 +157,97 @@ class InteractionsCog(commands.Cog):
             callback,
             name=definition.name,
             help=f"Send a {definition.name} interaction.",
+        )
+
+    def _build_app_act_command(self) -> app_commands.Command[Any, ..., None]:
+        choices = [
+            app_commands.Choice(name=definition.name, value=definition.name)
+            for definition in INTERACTION_DEFINITIONS
+        ]
+
+        @app_commands.describe(
+            action="Social reaction to send (e.g. bonk, boop, headpat, dance, cry).",
+            target="Member to react toward (defaults to yourself).",
+        )
+        @app_commands.choices(action=choices)
+        async def callback(
+            interaction: discord.Interaction,
+            action: app_commands.Choice[str],
+            target: discord.Member | None = None,
+        ) -> None:
+            if interaction.guild is None:
+                await interaction.response.send_message(
+                    "This command only works inside a server.", ephemeral=True
+                )
+                return
+            definition = INTERACTION_BY_NAME.get(action.value)
+            if definition is None:
+                await interaction.response.send_message(
+                    "Unknown social action.", ephemeral=True
+                )
+                return
+            chosen_target = target or interaction.user
+            await interaction.response.defer()
+            bot = cast(MeyayaBot, interaction.client)
+            async with bot.db_session() as session:
+                service = bot.build_interaction_service(session)
+                result = await service.perform(
+                    interaction.user.id,
+                    chosen_target.id,
+                    definition,
+                    guild_id=interaction.guild.id,
+                    actor_name=interaction.user.display_name,
+                )
+                embed, view = self._build_interaction_render(
+                    bot, definition, interaction.user, chosen_target, result
+                )
+                log_reaction_media(definition.name, "slash", result.gif_url)
+                if view is not None:
+                    await interaction.followup.send(embed=embed, view=view)
+                else:
+                    await interaction.followup.send(embed=embed)
+
+        return app_commands.Command(
+            name="act",
+            description="Send any social reaction (boop, bonk, headpat, dance, and more).",
+            callback=callback,
+        )
+
+    def _build_text_act_command(self) -> commands.Command[Any, ..., Any]:
+        async def callback(
+            ctx: commands.Context[commands.Bot],
+            action: str,
+            target: discord.Member | None = None,
+        ) -> None:
+            if ctx.guild is None:
+                await ctx.send("This command only works inside a server.")
+                return
+            definition = INTERACTION_BY_NAME.get(action.strip().casefold())
+            if definition is None:
+                valid = ", ".join(INTERACTION_BY_NAME)
+                await ctx.send(f"Unknown action `{action}`. Available: {valid}")
+                return
+            chosen_target = target or ctx.author
+            bot = cast(MeyayaBot, ctx.bot)
+            async with bot.db_session() as session:
+                service = bot.build_interaction_service(session)
+                result = await service.perform(
+                    ctx.author.id,
+                    chosen_target.id,
+                    definition,
+                    guild_id=ctx.guild.id,
+                    actor_name=ctx.author.display_name,
+                )
+                embed, view = self._build_interaction_render(
+                    bot, definition, ctx.author, chosen_target, result
+                )
+                log_reaction_media(definition.name, "prefix", result.gif_url)
+                await ctx.send(embed=embed, view=view or discord.utils.MISSING)
+
+        return commands.Command(
+            callback,
+            name="act",
+            help="Send any social reaction (boop, bonk, headpat, dance, and more).",
         )
 
     def _build_text_gif_command(self) -> commands.Command[Any, ..., Any]:

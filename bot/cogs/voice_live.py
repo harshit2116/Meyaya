@@ -16,7 +16,7 @@ from discord.ext import commands, tasks
 from bot.app import MeyayaBot
 from bot.data.voices import canonical_voice_name
 from bot.logging.telemetry import discord_context
-from bot.services.ai_guard import AILimitReached
+from bot.services.ai_guard import AILimitReached, multi_step_ai_scope
 from bot.services.audio import PcmStreamAudioSource
 from bot.services.chat_blacklist import acknowledge_silently
 from bot.services.gemini_tts import MAX_TTS_CHARS, encode_discord_audio
@@ -31,6 +31,7 @@ from bot.views.voice_picker import VoicePicker
 logger = logging.getLogger(__name__)
 VOICECLIP_COOLDOWN_SECONDS = 15.0
 SING_COOLDOWN_SECONDS = 30.0
+BGM_COOLDOWN_SECONDS = 15.0
 
 
 class VoiceLiveCog(commands.Cog):
@@ -40,6 +41,7 @@ class VoiceLiveCog(commands.Cog):
         self._bgm_sessions: dict[int, tuple[LyriaMusicSession, discord.VoiceClient | None]] = {}
         self._voiceclip_cooldowns: dict[tuple[int, int], float] = {}
         self._sing_cooldowns: dict[tuple[int, int], float] = {}
+        self._bgm_cooldowns: dict[tuple[int, int], float] = {}
         self._lifecycle_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
         self._voice_overrides: dict[int, str] = {}
         self._empty_since: dict[int, tuple[tuple[VoiceChatSession, int], float]] = {}
@@ -106,13 +108,31 @@ class VoiceLiveCog(commands.Cog):
         if entry is None:
             return False
         music, standalone_vc = entry
-        await music.stop()
-        if standalone_vc is not None and standalone_vc.is_connected():
-            try:
-                await standalone_vc.disconnect(force=True)
-            except Exception:
-                logger.debug("BGM disconnect failed guild=%s", guild_id, exc_info=True)
+        try:
+            await music.stop()
+            if standalone_vc is not None and standalone_vc.is_connected():
+                try:
+                    await standalone_vc.disconnect(force=True)
+                except Exception:
+                    logger.debug("BGM disconnect failed guild=%s", guild_id, exc_info=True)
+        finally:
+            guard = getattr(self.bot, "ai_guard", None)
+            if guard is not None:
+                guard.end_voice(guild_id)
         return True
+
+    def _can_control_bgm(self, member: discord.abc.User, guild_id: int) -> bool:
+        entry = self._bgm_sessions.get(guild_id)
+        if entry is None or self._is_manager(member):
+            return True
+        channel = getattr(entry[1], "channel", None)
+        if channel is None:
+            return True
+        return (
+            isinstance(member, discord.Member)
+            and member.voice is not None
+            and member.voice.channel == channel
+        )
 
     def _lifecycle_lock(self, guild_id: int) -> asyncio.Lock:
         lock = self._lifecycle_locks.get(guild_id)
@@ -499,6 +519,9 @@ class VoiceLiveCog(commands.Cog):
                 ephemeral=True,
             )
             return
+        if not getattr(getattr(self.bot, "settings", None), "ai_enabled", True):
+            await ctx.send("Meyaya's AI features are temporarily paused.", ephemeral=True)
+            return
         build_tts = getattr(self.bot, "build_tts_service", None)
         tts = build_tts() if callable(build_tts) else None
         if tts is None or not tts.enabled:
@@ -506,11 +529,24 @@ class VoiceLiveCog(commands.Cog):
             return
         voice_name = self._voice_for_guild(ctx.guild.id)
         await ctx.defer()
-        wav = await tts.synthesize(
-            clean,
-            voice_name=voice_name,
-            style=style,
-        )
+        guard = getattr(self.bot, "ai_guard", None)
+        try:
+            if guard is not None:
+                async with guard.request():
+                    wav = await tts.synthesize(
+                        clean,
+                        voice_name=voice_name,
+                        style=style,
+                    )
+            else:
+                wav = await tts.synthesize(
+                    clean,
+                    voice_name=voice_name,
+                    style=style,
+                )
+        except AILimitReached as exc:
+            await ctx.send(str(exc), ephemeral=True)
+            return
         if not wav:
             await ctx.send(
                 "I couldn't record that voice clip right now. Try again shortly.",
@@ -589,6 +625,9 @@ class VoiceLiveCog(commands.Cog):
             )
             return
 
+        if not getattr(getattr(self.bot, "settings", None), "ai_enabled", True):
+            await ctx.send("Meyaya's AI features are temporarily paused.", ephemeral=True)
+            return
         build_tts = getattr(self.bot, "build_tts_service", None)
         tts = build_tts() if callable(build_tts) else None
         if tts is None or not tts.enabled:
@@ -598,18 +637,43 @@ class VoiceLiveCog(commands.Cog):
         voice_name = self._voice_for_guild(ctx.guild.id)
         key_pool = getattr(getattr(self.bot, "_llm_provider", None), "key_pool", None)
         await ctx.defer()
-        result = await compose_song(
-            prompt=raw_prompt,
-            style=style,
-            verbatim_lyrics=verbatim,
-            llm=self.bot.build_llm_provider(),
-            tts=tts,
-            api_key=self.bot.settings.gemini_api_key,
-            music_model=getattr(self.bot.settings, "gemini_music_model", "lyria-realtime-exp"),
-            voice_name=voice_name,
-            ffmpeg_executable=getattr(self.bot.settings, "ffmpeg_executable", "ffmpeg"),
-            key_pool=key_pool,
-        )
+        guard = getattr(self.bot, "ai_guard", None)
+        try:
+            if guard is not None:
+                async with guard.request():
+                    with multi_step_ai_scope():
+                        result = await compose_song(
+                            prompt=raw_prompt,
+                            style=style,
+                            verbatim_lyrics=verbatim,
+                            llm=self.bot.build_llm_provider(),
+                            tts=tts,
+                            api_key=self.bot.settings.gemini_api_key,
+                            music_model=getattr(
+                                self.bot.settings, "gemini_music_model", "lyria-realtime-exp"
+                            ),
+                            voice_name=voice_name,
+                            ffmpeg_executable=getattr(self.bot.settings, "ffmpeg_executable", "ffmpeg"),
+                            key_pool=key_pool,
+                        )
+            else:
+                result = await compose_song(
+                    prompt=raw_prompt,
+                    style=style,
+                    verbatim_lyrics=verbatim,
+                    llm=self.bot.build_llm_provider(),
+                    tts=tts,
+                    api_key=self.bot.settings.gemini_api_key,
+                    music_model=getattr(
+                        self.bot.settings, "gemini_music_model", "lyria-realtime-exp"
+                    ),
+                    voice_name=voice_name,
+                    ffmpeg_executable=getattr(self.bot.settings, "ffmpeg_executable", "ffmpeg"),
+                    key_pool=key_pool,
+                )
+        except AILimitReached as exc:
+            await ctx.send(str(exc), ephemeral=True)
+            return
         if result is None:
             await ctx.send(
                 "I couldn't record that song right now. Try again shortly.",
@@ -649,6 +713,12 @@ class VoiceLiveCog(commands.Cog):
         clean_mood = " ".join(mood.split()).strip()
         if clean_mood.casefold() in {"stop", "off", "end"}:
             async with self._lifecycle_lock(ctx.guild.id):
+                if not self._can_control_bgm(ctx.author, ctx.guild.id):
+                    await ctx.send(
+                        "Join Meyaya's voice channel or have Manage Server to stop the background music.",
+                        ephemeral=True,
+                    )
+                    return
                 stopped = await self._stop_bgm(ctx.guild.id)
             if stopped:
                 await self._send_status(
@@ -662,12 +732,27 @@ class VoiceLiveCog(commands.Cog):
                 await ctx.send("No background music is playing right now.", ephemeral=True)
             return
 
+        if not getattr(getattr(self.bot, "settings", None), "ai_enabled", True):
+            await ctx.send("Meyaya's AI features are temporarily paused.", ephemeral=True)
+            return
         if ctx.author.voice is None or ctx.author.voice.channel is None:
             await ctx.send("Join a voice channel first to start ambient music.", ephemeral=True)
             return
         channel = ctx.author.voice.channel
         if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
             await ctx.send("Unsupported voice channel type.", ephemeral=True)
+            return
+
+        bgm_key = (ctx.guild.id, ctx.author.id)
+        now = time.monotonic()
+        remaining = BGM_COOLDOWN_SECONDS - (
+            now - self._bgm_cooldowns.get(bgm_key, float("-inf"))
+        )
+        if remaining > 0:
+            await ctx.send(
+                f"Give the DJ a breather - try again in {int(remaining) + 1}s.",
+                ephemeral=True,
+            )
             return
 
         await ctx.defer(ephemeral=True)
@@ -678,15 +763,34 @@ class VoiceLiveCog(commands.Cog):
                     ephemeral=True,
                 )
                 return
+            if not self._can_control_bgm(ctx.author, ctx.guild.id):
+                await ctx.send(
+                    "Ambient music is already playing in another voice channel. Join that channel "
+                    "or ask a server manager to move it.",
+                    ephemeral=True,
+                )
+                return
             await self._stop_bgm(ctx.guild.id)
+            guard = getattr(self.bot, "ai_guard", None)
+            if guard is not None:
+                try:
+                    await guard.start_voice(ctx.guild.id)
+                except AILimitReached as exc:
+                    await ctx.send(str(exc), ephemeral=True)
+                    return
             raw_vc = ctx.guild.voice_client
             vc: discord.VoiceClient
-            if not isinstance(raw_vc, discord.VoiceClient) or not raw_vc.is_connected():
-                vc = await channel.connect()
-            else:
-                vc = raw_vc
-                if vc.channel != channel:
-                    await vc.move_to(channel)
+            try:
+                if not isinstance(raw_vc, discord.VoiceClient) or not raw_vc.is_connected():
+                    vc = await channel.connect()
+                else:
+                    vc = raw_vc
+                    if vc.channel != channel:
+                        await vc.move_to(channel)
+            except Exception:
+                if guard is not None:
+                    guard.end_voice(ctx.guild.id)
+                raise
             play_source = PcmStreamAudioSource()
             if not vc.is_playing():
                 vc.play(
@@ -700,11 +804,13 @@ class VoiceLiveCog(commands.Cog):
                 entry = self._bgm_sessions.get(guild_id)
                 if entry is not None and entry[0] is music:
                     self._bgm_sessions.pop(guild_id, None)
+                    if guard is not None:
+                        guard.end_voice(guild_id)
                     if vc.is_connected():
                         try:
                             await vc.disconnect(force=True)
                         except Exception:
-                            pass
+                            logger.debug("BGM cleanup disconnect failed guild=%s", guild_id, exc_info=True)
 
             music = LyriaMusicSession(
                 api_key=self.bot.settings.gemini_api_key,
@@ -719,6 +825,8 @@ class VoiceLiveCog(commands.Cog):
                 await music.start()
             except Exception:
                 logger.exception("Failed to start Lyria ambient music guild=%s", guild_id)
+                if guard is not None:
+                    guard.end_voice(guild_id)
                 if vc.is_connected():
                     await vc.disconnect(force=True)
                 await ctx.send(
@@ -727,6 +835,9 @@ class VoiceLiveCog(commands.Cog):
                 )
                 return
             self._bgm_sessions[guild_id] = (music, vc)
+            if len(self._bgm_cooldowns) >= 2048 and bgm_key not in self._bgm_cooldowns:
+                self._bgm_cooldowns.pop(next(iter(self._bgm_cooldowns)))
+            self._bgm_cooldowns[bgm_key] = time.monotonic()
         await self._send_status(
             ctx,
             "Ambient Music Playing",

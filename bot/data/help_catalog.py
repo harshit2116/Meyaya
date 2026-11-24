@@ -85,6 +85,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
     "Profile Studio": ("profilecheck", "aura", "duostyle", "callingcard"),
     "Social": ("roast", "compliment", "rank", "impersonate"),
     "Social Reactions": (
+        "act",
         "hug",
         "pat",
         "headpat",
@@ -265,8 +266,8 @@ COMMANDS: tuple[HelpCommand, ...] = (
     ),
     HelpCommand(
         "moderation",
-        "moderation [feature] [enabled]",
-        "Manage new-member probation, cross-channel spam, and invite blocking.",
+        "moderation [rules|lockdown|unlock|raidlockdown|raidunlock]",
+        "Manage new-member probation, cross-channel spam, invite blocking, and channel lockdowns.",
         "Server Admin",
     ),
     HelpCommand(
@@ -326,6 +327,12 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "listen [on|off|status]",
         "Toggle microphone listening while staying in voice chat.",
         "Voice Chat",
+    ),
+    HelpCommand(
+        "act",
+        "act <action> [member]",
+        "Send any social reaction (boop, bonk, headpat, dance, and more).",
+        "Social Reactions",
     ),
     HelpCommand("hug", "hug [member]", "Give someone a warm hug.", "Social Reactions"),
     HelpCommand("kiss", "kiss [member]", "Give someone a playful kiss.", "Social Reactions"),

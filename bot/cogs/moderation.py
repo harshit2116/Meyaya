@@ -190,11 +190,14 @@ class ModerationCog(commands.Cog):
         if before.content != after.content or before.attachments != after.attachments:
             await self.should_block(after)
 
-    @commands.hybrid_command(  # type: ignore[arg-type]
-        name="moderation", description="Show or change Meyaya's moderation settings."
+    @commands.hybrid_group(  # type: ignore[arg-type]
+        name="moderation",
+        fallback="rules",
+        description="Show or change Meyaya's moderation settings and lockdowns.",
+        invoke_without_command=True,
     )
     @commands.has_guild_permissions(manage_guild=True)
-    @app_commands.default_permissions(manage_guild=True)
+    @app_commands.default_permissions(manage_channels=True)
     async def moderation(
         self,
         ctx: commands.Context[Any],
@@ -271,43 +274,68 @@ class ModerationCog(commands.Cog):
                 allowed_mentions=discord.AllowedMentions.none(),
             )
 
-    @commands.hybrid_command(  # type: ignore[arg-type]
+    @moderation.command(  # type: ignore[arg-type]
         name="lockdown", description="Lock one text channel until it is unlocked again."
     )
     @commands.has_guild_permissions(manage_channels=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
-    @app_commands.default_permissions(manage_channels=True)
+    async def moderation_lockdown(
+        self, ctx: commands.Context[Any], channel: discord.TextChannel | None = None
+    ) -> None:
+        await self._lock_command(ctx, channel)
+
+    @moderation.command(  # type: ignore[arg-type]
+        name="unlock", description="Unlock a channel and restore its permissions."
+    )
+    @commands.has_guild_permissions(manage_channels=True)
+    @commands.bot_has_guild_permissions(manage_roles=True)
+    async def moderation_unlock(
+        self, ctx: commands.Context[Any], channel: discord.TextChannel | None = None
+    ) -> None:
+        await self._lock_command(ctx, channel, unlock=True)
+
+    @moderation.command(  # type: ignore[arg-type]
+        name="raidlockdown", description="Lock every text channel in this server."
+    )
+    @commands.has_guild_permissions(manage_guild=True)
+    @commands.bot_has_guild_permissions(manage_roles=True)
+    async def moderation_raidlockdown(self, ctx: commands.Context[Any]) -> None:
+        await self._lock_command(ctx, None, raid=True)
+
+    @moderation.command(  # type: ignore[arg-type]
+        name="raidunlock", description="End a raid lockdown and restore channel permissions."
+    )
+    @commands.has_guild_permissions(manage_guild=True)
+    @commands.bot_has_guild_permissions(manage_roles=True)
+    async def moderation_raidunlock(self, ctx: commands.Context[Any]) -> None:
+        await self._lock_command(ctx, None, raid=True, unlock=True)
+
+    # Prefix-only shortcuts retain written command ergonomics without consuming global slash slots.
+    @commands.command(name="lockdown")
+    @commands.has_guild_permissions(manage_channels=True)
+    @commands.bot_has_guild_permissions(manage_roles=True)
     async def lockdown(
         self, ctx: commands.Context[Any], channel: discord.TextChannel | None = None
     ) -> None:
         await self._lock_command(ctx, channel)
 
-    @commands.hybrid_command(  # type: ignore[arg-type]
-        name="unlock", description="Unlock a channel and restore its permissions."
-    )
+    @commands.command(name="unlock")
     @commands.has_guild_permissions(manage_channels=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
-    @app_commands.default_permissions(manage_channels=True)
     async def unlock(
         self, ctx: commands.Context[Any], channel: discord.TextChannel | None = None
     ) -> None:
         await self._lock_command(ctx, channel, unlock=True)
 
-    @commands.hybrid_command(  # type: ignore[arg-type]
-        name="raidlockdown", description="Lock every text channel in this server."
-    )
+    @commands.command(name="raidlockdown")
     @commands.has_guild_permissions(manage_guild=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
-    @app_commands.default_permissions(manage_guild=True)
     async def raidlockdown(self, ctx: commands.Context[Any]) -> None:
         await self._lock_command(ctx, None, raid=True)
 
-    @commands.hybrid_command(  # type: ignore[arg-type]
-        name="raidunlock", description="End a raid lockdown and restore channel permissions."
-    )
+    @commands.command(name="raidunlock")
     @commands.has_guild_permissions(manage_guild=True)
     @commands.bot_has_guild_permissions(manage_roles=True)
-    @app_commands.default_permissions(manage_guild=True)
     async def raidunlock(self, ctx: commands.Context[Any]) -> None:
         await self._lock_command(ctx, None, raid=True, unlock=True)
 

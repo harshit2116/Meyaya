@@ -212,8 +212,16 @@ async def mix_song_mp3(
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            async with asyncio.timeout(15):
-                _, _ = await proc.communicate()
+            try:
+                async with asyncio.timeout(15):
+                    _, _ = await proc.communicate()
+            finally:
+                if proc.returncode is None:
+                    with suppress(ProcessLookupError, OSError):
+                        proc.kill()
+                    with suppress(OSError, TimeoutError):
+                        async with asyncio.timeout(2):
+                            await proc.wait()
             if proc.returncode == 0 and out_path.exists():
                 mixed = out_path.read_bytes()
                 if mixed:

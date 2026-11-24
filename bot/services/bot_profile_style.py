@@ -48,11 +48,11 @@ async def _request_style(bot: Any, guild_id: int) -> None:
         echoed = isinstance(result, dict) and all(
             result.get(key) == value for key, value in STYLE_PAYLOAD.items()
         )
-        logger.info(
+        logger.debug(
             "guild_name_style request_succeeded guild_id=%s style_echoed=%s", guild_id, echoed
         )
         if not echoed:
-            logger.warning(
+            logger.debug(
                 "guild_name_style guild_id=%s reason=style_fields_not_echoed_verify_in_Discord",
                 guild_id,
             )

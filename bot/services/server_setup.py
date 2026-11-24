@@ -12,6 +12,45 @@ from bot.models.moderation import ModerationSettings
 from bot.repositories.guild_settings import GuildSettingsRepository
 
 MODERATION_FEATURES = ("probation", "cross_spam", "anti_invite")
+CORE_PERMISSIONS: tuple[tuple[str, str], ...] = (
+    ("view_channel", "View Channel"),
+    ("send_messages", "Send Messages"),
+    ("send_messages_in_threads", "Send Messages in Threads"),
+    ("embed_links", "Embed Links"),
+    ("attach_files", "Attach Files"),
+    ("read_message_history", "Read Message History"),
+    ("use_external_emojis", "Use External Emojis"),
+)
+
+
+def permission_checklist(
+    guild: Any,
+    *,
+    channel_id: int | None = None,
+    moderation_enabled: bool = True,
+) -> str | None:
+    """Return a concise summary of Meyaya's Discord permissions in this server."""
+    me = getattr(guild, "me", None)
+    if me is None:
+        return None
+    channel = guild.get_channel(channel_id) if channel_id and hasattr(guild, "get_channel") else None
+    permissions_for = getattr(channel, "permissions_for", None)
+    perms = permissions_for(me) if callable(permissions_for) else getattr(me, "guild_permissions", None)
+    if perms is None:
+        return None
+    missing_core = [label for attr, label in CORE_PERMISSIONS if not getattr(perms, attr, False)]
+    lines: list[str] = []
+    if missing_core:
+        lines.append(
+            "Missing core: "
+            + ", ".join(missing_core)
+            + " (cards, embeds, voice clips, or threads may not work until granted)."
+        )
+    else:
+        lines.append("Core permissions look good (chat, cards, files, threads, emojis).")
+    if moderation_enabled and not getattr(perms, "manage_messages", False):
+        lines.append("Missing moderation: Manage Messages (required for probation/spam/invite deletion).")
+    return "\n".join(lines)
 
 
 async def load_setup(bot: Any, guild_id: int) -> dict[str, Any]:

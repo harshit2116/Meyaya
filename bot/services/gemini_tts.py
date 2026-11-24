@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from collections.abc import Sequence
+from contextlib import suppress
 from io import BytesIO
 import logging
 import re
@@ -52,6 +53,7 @@ async def encode_discord_audio(
 ) -> tuple[bytes, str]:
     """Encode WAV to MP3 for universal inline Discord Desktop+Mobile playback, falling back to WAV."""
     ffmpeg_bin = resolve_ffmpeg_executable(ffmpeg_executable)
+    proc: asyncio.subprocess.Process | None = None
     try:
         proc = await asyncio.create_subprocess_exec(
             ffmpeg_bin,
@@ -78,6 +80,13 @@ async def encode_discord_audio(
             return stdout, "meyaya-voice.mp3"
     except (OSError, TimeoutError):
         pass
+    finally:
+        if proc is not None and proc.returncode is None:
+            with suppress(ProcessLookupError, OSError):
+                proc.kill()
+            with suppress(OSError, TimeoutError):
+                async with asyncio.timeout(2):
+                    await proc.wait()
     return wav_bytes, "meyaya-voice.wav"
 
 

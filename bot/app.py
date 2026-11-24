@@ -590,10 +590,6 @@ class MeyayaBot(commands.Bot):
         delay = time.monotonic() - checked_at
         if delay >= 1:
             logger.info("slow_message_gate moderation_ms=%.0f", delay * 1000)
-        # Temporary owner-only uwu veyra visual test; no command registration.
-        admin: Any = self.get_cog("AdminCog")
-        if admin and await admin.handle_veyra_glitch_test(message):
-            return
         await self.process_commands(message)
 
     async def on_interaction(self, interaction: discord.Interaction) -> None:

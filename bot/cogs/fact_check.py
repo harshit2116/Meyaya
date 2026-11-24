@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import logging
 import re
 import time
@@ -13,6 +14,7 @@ from discord.ext import commands
 
 from bot.app import MeyayaBot
 from bot.logging.telemetry import discord_context, event
+from bot.services.chat_vision import extract_chat_images
 from bot.services.fact_check import (
     MAX_ARGUMENT_CHARACTERS,
     MAX_ARGUMENT_MESSAGES,
@@ -22,7 +24,7 @@ from bot.services.fact_check import (
     FactCheckService,
     grounding_cooldown_remaining,
 )
-from bot.services.llm import GroundingError, GroundingRateLimitError
+from bot.services.llm import GroundingError, GroundingRateLimitError, ImageAttachment
 from bot.utils.embeds import meyaya_embed
 
 MESSAGE_LINK = re.compile(
@@ -49,8 +51,10 @@ class FactCheckCog(commands.Cog):
         self._last_check: dict[tuple[int, int], float] = {}
         self._inflight: set[tuple[int, int]] = set()
         # Guild-scoped, keyed by message ID and text so edits or other authors never reuse a report.
-        self._results: dict[tuple[int, bool, tuple[tuple[int, str], ...]],
-                            tuple[float, FactCheckResult]] = {}
+        self._results: dict[
+            tuple[int, bool, tuple[tuple[int, str], ...], tuple[tuple[str, int], ...]],
+            tuple[float, FactCheckResult],
+        ] = {}
 
     @commands.hybrid_command(  # type: ignore[arg-type]
         name="argumenttimeline",
@@ -127,9 +131,24 @@ class FactCheckCog(commands.Cog):
                     )
                 selected = await self._message_from_link(ctx, message)
             evidence = self._to_evidence(selected)
+            images = await extract_chat_images(
+                [selected],
+                http_session=getattr(self.bot, "http_session", None),
+                max_images=2,
+            )
             if evidence is None:
-                raise FactCheckInputError("That message has no text to fact-check.")
-            await self._run_check(ctx, [evidence], single_message=True)
+                if not images:
+                    raise FactCheckInputError("That message has no text or image to fact-check.")
+                handle = getattr(selected.author, "name", None) or str(selected.author)
+                display_name = getattr(selected.author, "display_name", handle)
+                evidence = FactCheckMessage(
+                    message_id=selected.id,
+                    author_id=selected.author.id,
+                    author_label=f"{display_name} (@{handle}, Discord ID {selected.author.id})",
+                    content="[attached image]",
+                    jump_url=selected.jump_url,
+                )
+            await self._run_check(ctx, [evidence], single_message=True, images=images)
         except FactCheckInputError as exc:
             await ctx.send(str(exc), ephemeral=ctx.interaction is not None)
 
@@ -173,6 +192,7 @@ class FactCheckCog(commands.Cog):
         messages: list[FactCheckMessage],
         *,
         single_message: bool,
+        images: Sequence[ImageAttachment] | None = None,
     ) -> None:
         assert ctx.guild is not None
         key = (ctx.guild.id, ctx.author.id)
@@ -180,8 +200,13 @@ class FactCheckCog(commands.Cog):
         if key in self._inflight:
             await ctx.send("You already have a fact check running.", ephemeral=True)
             return
-        cache_key = (ctx.guild.id, single_message,
-                     tuple((message.message_id, message.content) for message in messages))
+        image_sig = tuple((img.filename, len(img.data)) for img in (images or ()))
+        cache_key = (
+            ctx.guild.id,
+            single_message,
+            tuple((message.message_id, message.content) for message in messages),
+            image_sig,
+        )
         cached = self._results.get(cache_key)
         if cached is not None and now - cached[0] < FACT_CHECK_CACHE_SECONDS:
             event("fact_check_cache_hit", message_count=len(messages))
@@ -201,7 +226,11 @@ class FactCheckCog(commands.Cog):
                 self.bot.build_llm_provider(),
                 http_session=self.bot.http_session,
             )
-            result = await service.analyze(messages, single_message=single_message)
+            result = await service.analyze(
+                messages,
+                single_message=single_message,
+                images=images or None,
+            )
         except GroundingRateLimitError as exc:
             wait = exc.retry_after_seconds or grounding_cooldown_remaining() or 60
             await ctx.send(

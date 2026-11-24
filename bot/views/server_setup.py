@@ -11,7 +11,7 @@ import discord
 from bot.utils.components_v2 import MeyayaView
 from sqlalchemy.exc import SQLAlchemyError
 
-from bot.services.server_setup import save_setup
+from bot.services.server_setup import MODERATION_FEATURES, permission_checklist, save_setup
 from bot.utils.embeds import meyaya_embed
 
 logger = logging.getLogger(__name__)
@@ -164,6 +164,14 @@ class ServerSetupView(MeyayaView):
         if self.step in {"features", "review"}:
             for name, (label, description) in FEATURES.items():
                 embed.add_field(name=f"{'On' if self.choices[name] else 'Off'} - {label}", value=description, inline=False)
+        get_guild = getattr(self.bot, "get_guild", None)
+        guild = get_guild(self.guild_id) if callable(get_guild) else None
+        mod_on = any(bool(self.choices.get(name)) for name in MODERATION_FEATURES)
+        perm_summary = permission_checklist(
+            guild, channel_id=channel, moderation_enabled=mod_on
+        )
+        if perm_summary:
+            embed.add_field(name="Permission check", value=perm_summary, inline=False)
         embed.add_field(name="Before you save", value="Changes apply only after Save. Chat access covers mentions, replies, and automatic replies; commands keep their usual access. Moderation needs Manage Messages in the affected channels.", inline=False)
         return embed
 

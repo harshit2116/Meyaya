@@ -15,6 +15,7 @@ import logging
 import time
 import colorsys
 from typing import Any
+from urllib.parse import urlparse
 from weakref import WeakValueDictionary
 
 import aiohttp
@@ -317,9 +318,17 @@ class ProfileAestheticService:
     async def _fetch_asset(self, url: str) -> bytes | None:
         if not url or self.bot.http_session is None:
             return None
+        parsed = urlparse(url)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname not in {"cdn.discordapp.com", "media.discordapp.net"}
+            or parsed.username
+            or parsed.password
+        ):
+            return None
         try:
             async with self.bot.http_session.get(
-                url, timeout=aiohttp.ClientTimeout(total=8)
+                url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=False
             ) as response:
                 if response.status != 200:
                     return None
