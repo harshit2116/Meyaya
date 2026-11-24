@@ -16,10 +16,10 @@ from discord.ext import commands, tasks
 from bot.app import MeyayaBot
 from bot.data.voices import canonical_voice_name
 from bot.logging.telemetry import discord_context
-from bot.services.ai_guard import AILimitReached, multi_step_ai_scope
+from bot.services.ai_guard import AILimitReached
 from bot.services.audio import PcmStreamAudioSource
 from bot.services.chat_blacklist import acknowledge_silently
-from bot.services.gemini_tts import MAX_TTS_CHARS, encode_discord_audio
+from bot.services.gemini_tts import MAX_TTS_CHARS, encode_discord_audio, resolve_ffmpeg_executable
 from bot.services.lyria_music import LyriaMusicSession
 from bot.services.song_studio import MAX_SONG_LYRICS_CHARS, compose_song
 from bot.services.voice_session import VoiceChatSession
@@ -42,6 +42,7 @@ class VoiceLiveCog(commands.Cog):
         self._voiceclip_cooldowns: dict[tuple[int, int], float] = {}
         self._sing_cooldowns: dict[tuple[int, int], float] = {}
         self._bgm_cooldowns: dict[tuple[int, int], float] = {}
+        self._vc_singing: set[int] = set()
         self._lifecycle_locks: WeakValueDictionary[int, asyncio.Lock] = WeakValueDictionary()
         self._voice_overrides: dict[int, str] = {}
         self._empty_since: dict[int, tuple[tuple[VoiceChatSession, int], float]] = {}
@@ -575,7 +576,7 @@ class VoiceLiveCog(commands.Cog):
     @commands.hybrid_command(  # type: ignore[arg-type]
         name="sing",
         aliases=["song"],
-        description="Have Meyaya sing a short song with AI backing music in chat.",
+        description="Have Meyaya sing a short song with AI backing music in your voice channel.",
     )
     @app_commands.describe(
         prompt="Song topic, or exact lyrics (prefix also supports 'style | lyrics').",
@@ -592,9 +593,48 @@ class VoiceLiveCog(commands.Cog):
         style: str | None = None,
         lyrics_only: bool = False,
     ) -> None:
-        if ctx.guild is None:
+        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
             await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
+        if ctx.author.voice is None or ctx.author.voice.channel is None:
+            await ctx.send("Join a voice channel first so I can sing for you!", ephemeral=True)
+            return
+        channel = ctx.author.voice.channel
+        if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+            await ctx.send("Unsupported voice channel type.", ephemeral=True)
+            return
+        perms = channel.permissions_for(ctx.guild.me)
+        if not (perms.connect and perms.speak):
+            await ctx.send(
+                "I need Connect and Speak permissions in your voice channel to sing there.",
+                ephemeral=True,
+            )
+            return
+
+        guild_id = ctx.guild.id
+        active_session = self._sessions.get(guild_id)
+        if active_session is not None and active_session.is_active:
+            active_channel = getattr(active_session.voice_client, "channel", None)
+            if active_channel is not None and active_channel != channel:
+                await ctx.send(
+                    f"I'm currently in **{active_channel.name}**. Join that voice channel to hear me sing!",
+                    ephemeral=True,
+                )
+                return
+            if getattr(active_session, "_song_playing", False):
+                await ctx.send("I'm already singing right now! Wait for this song to finish.", ephemeral=True)
+                return
+        elif not self._can_control_bgm(ctx.author, guild_id):
+            await ctx.send(
+                "Ambient music is already playing in another voice channel. Join that channel "
+                "or ask a server manager to move it.",
+                ephemeral=True,
+            )
+            return
+        if guild_id in self._vc_singing:
+            await ctx.send("I'm already preparing or singing a song in this server!", ephemeral=True)
+            return
+
         raw_prompt = prompt.strip()
         verbatim = lyrics_only or ("\n" in raw_prompt) or ("[" in raw_prompt and "]" in raw_prompt)
         if not style and "|" in raw_prompt:
@@ -613,7 +653,7 @@ class VoiceLiveCog(commands.Cog):
             )
             return
 
-        key = (ctx.guild.id, ctx.author.id)
+        key = (guild_id, ctx.author.id)
         now = time.monotonic()
         remaining = SING_COOLDOWN_SECONDS - (
             now - self._sing_cooldowns.get(key, float("-inf"))
@@ -634,14 +674,20 @@ class VoiceLiveCog(commands.Cog):
             await ctx.send("Singing is unavailable right now.", ephemeral=True)
             return
 
-        voice_name = self._voice_for_guild(ctx.guild.id)
+        voice_name = self._voice_for_guild(guild_id)
         key_pool = getattr(getattr(self.bot, "_llm_provider", None), "key_pool", None)
+        ffmpeg_bin = resolve_ffmpeg_executable(
+            getattr(self.bot.settings, "ffmpeg_executable", "ffmpeg")
+        )
+        self._vc_singing.add(guild_id)
         await ctx.defer()
-        guard = getattr(self.bot, "ai_guard", None)
         try:
-            if guard is not None:
-                async with guard.request():
-                    with multi_step_ai_scope():
+            guard = getattr(self.bot, "ai_guard", None)
+            try:
+                # Non-verbatim mode calls @guarded llm.generate_json; only wrap
+                # verbatim mode in guard.request() to avoid holding two slots.
+                if guard is not None and verbatim:
+                    async with guard.request():
                         result = await compose_song(
                             prompt=raw_prompt,
                             style=style,
@@ -653,49 +699,162 @@ class VoiceLiveCog(commands.Cog):
                                 self.bot.settings, "gemini_music_model", "lyria-realtime-exp"
                             ),
                             voice_name=voice_name,
-                            ffmpeg_executable=getattr(self.bot.settings, "ffmpeg_executable", "ffmpeg"),
+                            ffmpeg_executable=ffmpeg_bin,
                             key_pool=key_pool,
                         )
-            else:
-                result = await compose_song(
-                    prompt=raw_prompt,
-                    style=style,
-                    verbatim_lyrics=verbatim,
-                    llm=self.bot.build_llm_provider(),
-                    tts=tts,
-                    api_key=self.bot.settings.gemini_api_key,
-                    music_model=getattr(
-                        self.bot.settings, "gemini_music_model", "lyria-realtime-exp"
-                    ),
-                    voice_name=voice_name,
-                    ffmpeg_executable=getattr(self.bot.settings, "ffmpeg_executable", "ffmpeg"),
-                    key_pool=key_pool,
+                else:
+                    result = await compose_song(
+                        prompt=raw_prompt,
+                        style=style,
+                        verbatim_lyrics=verbatim,
+                        llm=self.bot.build_llm_provider(),
+                        tts=tts,
+                        api_key=self.bot.settings.gemini_api_key,
+                        music_model=getattr(
+                            self.bot.settings, "gemini_music_model", "lyria-realtime-exp"
+                        ),
+                        voice_name=voice_name,
+                        ffmpeg_executable=ffmpeg_bin,
+                        key_pool=key_pool,
+                    )
+            except AILimitReached as exc:
+                await ctx.send(str(exc), ephemeral=True)
+                return
+            if result is None:
+                await ctx.send(
+                    "I couldn't prepare that song right now. Try again shortly.",
+                    ephemeral=True,
                 )
-        except AILimitReached as exc:
-            await ctx.send(str(exc), ephemeral=True)
-            return
-        if result is None:
-            await ctx.send(
-                "I couldn't record that song right now. Try again shortly.",
-                ephemeral=True,
+                return
+
+            if len(self._sing_cooldowns) >= 2048 and key not in self._sing_cooldowns:
+                self._sing_cooldowns.pop(next(iter(self._sing_cooldowns)))
+            self._sing_cooldowns[key] = time.monotonic()
+            remember_command_result(
+                ctx,
+                sung_lyrics=result.lyrics,
+                style=result.style,
+                voice=voice_name,
+                has_backing_track=result.has_backing_track,
+                channel_name=channel.name,
             )
+
+            await self._play_song_in_vc(
+                ctx,
+                ctx.guild,
+                channel,
+                audio_bytes=result.audio_bytes,
+                ffmpeg_bin=ffmpeg_bin,
+                lyrics=result.lyrics,
+                has_backing_track=result.has_backing_track,
+            )
+        finally:
+            self._vc_singing.discard(guild_id)
+
+    async def _play_song_in_vc(
+        self,
+        ctx: commands.Context[Any],
+        guild: discord.Guild,
+        channel: discord.VoiceChannel | discord.StageChannel,
+        *,
+        audio_bytes: bytes,
+        ffmpeg_bin: str,
+        lyrics: str,
+        has_backing_track: bool,
+    ) -> None:
+        guild_id = guild.id
+        backing_note = "with AI backing music" if has_backing_track else "a cappella"
+        preview = lyrics[:220] + ("..." if len(lyrics) > 220 else "")
+
+        session = self._sessions.get(guild_id)
+        if session is not None and session.is_active:
+            await self._send_status(
+                ctx,
+                f"Singing in {channel.name}",
+                f"Performing live {backing_note}!\n> {preview}",
+                tone="success",
+                icon="🎤",
+            )
+            try:
+                await session.play_song(audio_bytes, executable=ffmpeg_bin)
+            except Exception:
+                logger.exception("Live VC song playback failed guild=%s", guild_id)
+                await ctx.send("I hit a snag trying to sing in voice chat. Try again shortly.", ephemeral=True)
             return
 
-        if len(self._sing_cooldowns) >= 2048 and key not in self._sing_cooldowns:
-            self._sing_cooldowns.pop(next(iter(self._sing_cooldowns)))
-        self._sing_cooldowns[key] = time.monotonic()
-        remember_command_result(
-            ctx,
-            sung_lyrics=result.lyrics,
-            style=result.style,
-            voice=voice_name,
-            has_backing_track=result.has_backing_track,
+        guard = getattr(self.bot, "ai_guard", None)
+        vc: discord.VoiceClient | None = None
+        acquired_voice = False
+        async with self._lifecycle_lock(guild_id):
+            await self._stop_bgm(guild_id)
+            if guard is not None:
+                try:
+                    await guard.start_voice(guild_id)
+                    acquired_voice = True
+                except AILimitReached as exc:
+                    await ctx.send(str(exc), ephemeral=True)
+                    return
+            try:
+                raw_vc = guild.voice_client
+                if not isinstance(raw_vc, discord.VoiceClient) or not raw_vc.is_connected():
+                    vc = await channel.connect()
+                else:
+                    vc = raw_vc
+                    if vc.channel != channel:
+                        await vc.move_to(channel)
+            except Exception:
+                if acquired_voice and guard is not None:
+                    guard.end_voice(guild_id)
+                logger.exception("Failed connecting to VC for singing guild=%s", guild_id)
+                await ctx.send("I couldn't connect to your voice channel right now.", ephemeral=True)
+                return
+
+        assert vc is not None
+        loop = asyncio.get_running_loop()
+        finished: asyncio.Future[None] = loop.create_future()
+        source = discord.FFmpegPCMAudio(
+            BytesIO(audio_bytes),
+            pipe=True,
+            executable=ffmpeg_bin,
+            before_options="-nostdin -loglevel error",
+            options="-vn -t 90",
         )
-        await send_native_file(
-            ctx,
-            file=discord.File(BytesIO(result.audio_bytes), filename=result.filename),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+
+        def _done(error: Exception | None) -> None:
+            if not finished.done():
+                if error:
+                    finished.set_exception(RuntimeError("VC song playback failed"))
+                else:
+                    finished.set_result(None)
+
+        try:
+            await self._send_status(
+                ctx,
+                f"Singing in {channel.name}",
+                f"Joined **{channel.name}** and performing live {backing_note}!\n> {preview}",
+                tone="success",
+                icon="🎤",
+            )
+            if vc.is_playing():
+                vc.stop()
+            vc.play(source, after=lambda err: loop.call_soon_threadsafe(_done, err))
+            await asyncio.wait_for(finished, timeout=100)
+        except Exception:
+            logger.exception("Standalone VC song playback failed guild=%s", guild_id)
+        finally:
+            try:
+                if vc.is_playing():
+                    vc.stop()
+            except Exception:
+                pass
+            source.cleanup()
+            if vc.is_connected() and guild_id not in self._sessions and guild_id not in self._bgm_sessions:
+                try:
+                    await vc.disconnect(force=True)
+                except Exception:
+                    logger.debug("VC sing disconnect failed guild=%s", guild_id, exc_info=True)
+            if acquired_voice and guard is not None:
+                guard.end_voice(guild_id)
 
     @commands.hybrid_command(  # type: ignore[arg-type]
         name="bgm",

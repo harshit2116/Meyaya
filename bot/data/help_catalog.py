@@ -526,7 +526,7 @@ COMMANDS: tuple[HelpCommand, ...] = (
     HelpCommand(
         "sing",
         "sing <topic or style | lyrics>",
-        "Have Meyaya sing a short song with AI backing music right in chat.",
+        "Have Meyaya sing a short song with AI backing music in your voice channel.",
         "Voice Chat",
     ),
     HelpCommand(

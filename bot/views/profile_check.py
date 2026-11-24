@@ -134,35 +134,56 @@ class ProfileCheckOpinionView(MeyayaView):
         channel_id = getattr(interaction.channel, "id", None)
         try:
             images = await self._prepare_images()
-            guard = getattr(self.bot, "ai_guard", None)
             with model_context("profile_opinion", self.guild_id, channel_id, interaction.user.id):
-                opinion = await self._generate_opinion(llm, guard, images)
+                opinion = await self._generate_opinion(llm, images)
         except AILimitReached as exc:
+            await self._restore_button(interaction)
             await interaction.followup.send(str(exc), ephemeral=True)
             return
         except Exception:
             logger.exception("Profile opinion failed guild=%s", self.guild_id)
+            await self._restore_button(interaction)
             await interaction.followup.send(
                 "I couldn't put together my opinion right now. Try again shortly.",
                 ephemeral=True,
             )
             return
-        finally:
-            self._clear_assets()
-            self.stop()
 
         if not opinion:
+            await self._restore_button(interaction)
             await interaction.followup.send(
-                "I couldn't see enough of that profile right now. Try again shortly.",
+                "I couldn't put together my opinion right now (I might be on a short cooldown). Try again in a few seconds.",
                 ephemeral=True,
             )
             return
 
-        sent = await interaction.followup.send(
-            content=opinion,
-            allowed_mentions=discord.AllowedMentions.none(),
-            wait=True,
-        )
+        self._clear_assets()
+        self.stop()
+
+        sent: Any = None
+        if interaction.message is not None:
+            try:
+                sent = await interaction.message.reply(
+                    opinion,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+            except discord.HTTPException:
+                sent = None
+        if sent is None and interaction.channel is not None and hasattr(interaction.channel, "send"):
+            try:
+                channel_obj: Any = interaction.channel
+                sent = await channel_obj.send(
+                    opinion,
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+            except discord.HTTPException:
+                sent = None
+        if sent is None:
+            sent = await interaction.followup.send(
+                content=opinion,
+                allowed_mentions=discord.AllowedMentions.none(),
+                wait=True,
+            )
         if sent is not None and channel_id is not None:
             remember_output_message(
                 self.bot,
@@ -181,10 +202,19 @@ class ProfileCheckOpinionView(MeyayaView):
             )
         event("profile_opinion_sent", guild_id=self.guild_id, images=len(images))
 
+    async def _restore_button(self, interaction: discord.Interaction) -> None:
+        self._used = False
+        self.opinion_button.disabled = False
+        self.opinion_button.label = "Meyaya's Opinion"
+        if interaction.message is not None:
+            try:
+                await interaction.message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
     async def _generate_opinion(
         self,
         llm: Any,
-        guard: Any,
         images: list[ImageAttachment],
     ) -> str | None:
         context_lines = [
@@ -207,23 +237,15 @@ class ProfileCheckOpinionView(MeyayaView):
             f"Give your Meyaya opinion and 1-2 improvement ideas for {self.target_name}'s Discord "
             f"profile.\nProfilecheck metrics (JSON): {json.dumps(self.review, ensure_ascii=False)}"
         )
-        if guard is not None:
-            async with guard.request():
-                reply = await llm.generate(
-                    system,
-                    prompt,
-                    max_output_tokens=320,
-                    timeout_seconds=20,
-                    images=images or None,
-                )
-        else:
-            reply = await llm.generate(
-                system,
-                prompt,
-                max_output_tokens=320,
-                timeout_seconds=20,
-                images=images or None,
-            )
+        # ModelRouter.generate_text is already decorated with @guarded, so calling
+        # guard.request() again here would deadlock against inflight_users.
+        reply = await llm.generate(
+            system,
+            prompt,
+            max_output_tokens=320,
+            timeout_seconds=20,
+            images=images or None,
+        )
         text = getattr(reply, "text", None)
         if not isinstance(text, str) or not text.strip():
             return None
