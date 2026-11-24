@@ -36,6 +36,7 @@ from bot.services.profilecheck_render import ProfileCheckRenderer
 from bot.services.profiles import ProfileService
 from bot.utils.command_context import remember_command_result
 from bot.utils.image_work import image_work
+from bot.views.profile_check import ProfileCheckOpinionView
 
 
 def profile_review_result(visual: ProfileVisual) -> dict[str, Any]:
@@ -120,8 +121,21 @@ class ProfileStudioCog(commands.Cog):
         prepared = monotonic()
         review = profile_review_result(visual)
         remember_command_result(ctx, **review)
-        await ctx.send(file=discord.File(BytesIO(rendered), filename=f"meyaya-profile-check.{extension}"),
-                       allowed_mentions=discord.AllowedMentions.none())
+        opinion_view = ProfileCheckOpinionView(
+            bot=self.bot,
+            guild_id=ctx.guild.id,
+            invoker_id=ctx.author.id,
+            target_id=target.id,
+            target_name=visual.name,
+            review=review,
+            avatar_bytes=visual.avatar,
+            banner_bytes=visual.banner,
+        )
+        await ctx.send(
+            file=discord.File(BytesIO(rendered), filename=f"meyaya-profile-check.{extension}"),
+            view=opinion_view,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
         logging.getLogger(__name__).log(
             logging.INFO if monotonic() - started >= 2 else logging.DEBUG,
             "profilecheck inspect_ms=%.1f prepare_ms=%.1f upload_ms=%.1f",

@@ -2423,7 +2423,8 @@ class ChatCog(commands.Cog):
             with timing_stage('context_ms'):
                 lines.extend(await self._context_reads.read('profile', lambda: self._profile_context_lines(message)))
 
-        lines.extend(command_knowledge(self.bot, message.content))
+        server_prefix = self.bot.prefix_for_guild(message.guild.id if message.guild else None)
+        lines.extend(command_knowledge(self.bot, message.content, prefix=server_prefix))
         voice = getattr(message.guild, 'voice_client', None)
         connected = bool(voice and voice.is_connected())
         voice_enabled = bool(message.guild and getattr(self.bot, 'feature_enabled', lambda *_: True)(message.guild.id, 'Voice Chat'))
