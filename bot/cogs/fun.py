@@ -596,6 +596,7 @@ class FunCog(commands.Cog):
         *,
         max_members: int = 6,
         autofill_limit: int = 5,
+        fill_remaining: bool = False,
     ) -> list[discord.Member]:
         explicit = [m for m in explicit_members if m is not None and not m.bot]
         chosen: list[discord.Member] = []
@@ -612,16 +613,57 @@ class FunCog(commands.Cog):
         for member in explicit:
             _add_member(member)
 
-        if not explicit and len(chosen) < autofill_limit and hasattr(ctx.channel, "history"):
+        should_autofill = (fill_remaining or not explicit) and len(chosen) < autofill_limit
+        if should_autofill and hasattr(ctx.channel, "history"):
+            recent_pool: list[discord.Member] = []
+            recent_ids: set[int] = set()
             try:
-                async for msg in ctx.channel.history(limit=25):
+                async for msg in ctx.channel.history(limit=40):
                     author = msg.author
-                    if isinstance(author, discord.Member):
-                        _add_member(author)
-                    if len(chosen) >= autofill_limit:
-                        break
+                    if (
+                        isinstance(author, discord.Member)
+                        and not author.bot
+                        and author.id not in seen_ids
+                        and author.id not in recent_ids
+                    ):
+                        recent_ids.add(author.id)
+                        recent_pool.append(author)
             except (discord.Forbidden, discord.HTTPException):
                 pass
+            if recent_pool:
+                RNG.shuffle(recent_pool)
+                for member in recent_pool:
+                    _add_member(member)
+                    if len(chosen) >= autofill_limit:
+                        break
+
+        if should_autofill and len(chosen) < autofill_limit and ctx.guild is not None:
+            guild_members = list(getattr(ctx.guild, "members", ()) or ())
+            active_statuses = {discord.Status.online, discord.Status.idle, discord.Status.dnd}
+            active_pool = [
+                m
+                for m in guild_members
+                if isinstance(m, discord.Member)
+                and not m.bot
+                and m.id not in seen_ids
+                and getattr(m, "status", None) in active_statuses
+            ]
+            RNG.shuffle(active_pool)
+            for member in active_pool:
+                _add_member(member)
+                if len(chosen) >= autofill_limit:
+                    break
+            if len(chosen) < autofill_limit:
+                fallback_pool = [
+                    m
+                    for m in guild_members
+                    if isinstance(m, discord.Member) and not m.bot and m.id not in seen_ids
+                ]
+                RNG.shuffle(fallback_pool)
+                for member in fallback_pool:
+                    _add_member(member)
+                    if len(chosen) >= autofill_limit:
+                        break
         return chosen
 
     async def _build_dancers(self, members: list[discord.Member]) -> list[DiscoDancer]:
@@ -746,6 +788,7 @@ class FunCog(commands.Cog):
             (member1, member2, member3, member4, member5),
             max_members=6,
             autofill_limit=6,
+            fill_remaining=True,
         )
         await ctx.defer()
         dancers = await self._build_dancers(chosen)

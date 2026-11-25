@@ -165,6 +165,9 @@ def _render_solosamba_sync(
         dec_err = Path(tmpdir) / "dec.err"
         enc_err = Path(tmpdir) / "enc.err"
 
+        duration_sec = total_frames / max(1, fps)
+        fade_start = max(0.0, duration_sec - 0.4)
+
         dec_cmd = [
             ffmpeg_bin,
             "-hide_banner",
@@ -172,6 +175,8 @@ def _render_solosamba_sync(
             "error",
             "-i",
             str(base_video_path),
+            "-t",
+            f"{duration_sec + 0.1:.2f}",
             "-f",
             "rawvideo",
             "-pix_fmt",
@@ -202,6 +207,12 @@ def _render_solosamba_sync(
             "0:v:0",
             "-map",
             "1:a:0",
+            "-t",
+            f"{duration_sec:.2f}",
+            "-vf",
+            f"fade=t=out:st={fade_start:.2f}:d=0.4",
+            "-af",
+            f"afade=t=out:st={fade_start:.2f}:d=0.4",
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -215,7 +226,9 @@ def _render_solosamba_sync(
             "-bufsize",
             "3500k",
             "-c:a",
-            "copy",
+            "aac",
+            "-b:a",
+            "128k",
             "-shortest",
             "-movflags",
             "+faststart",
