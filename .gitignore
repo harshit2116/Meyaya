@@ -36,6 +36,7 @@ pip-audit*.json
 /compose.yaml
 
 # Local credentials and deployment-specific overrides
+/bot/assets/disco/track.m4a
 /secrets/
 /certs/
 *.pem

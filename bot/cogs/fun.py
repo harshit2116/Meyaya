@@ -7,6 +7,7 @@ import asyncio
 import logging
 import json
 from io import BytesIO
+from pathlib import Path
 from random import Random
 from secrets import SystemRandom
 from typing import Any, cast
@@ -18,6 +19,14 @@ from discord.ext import commands
 from bot.app import MeyayaBot
 from bot.logging.telemetry import discord_context
 from bot.prompts.composer import build_system_instruction
+from bot.services.disco_party import (
+    DEFAULT_AUDIO_PATH,
+    DiscoBusyError,
+    DiscoDancer,
+    DiscoPartyRenderer,
+    fetch_avatar_bytes,
+)
+from bot.utils.components_v2 import send_native_file
 from bot.utils.embeds import meyaya_embed, score_bar
 from bot.utils.image_work import image_work, animation_work, BoundedImageGate
 from bot.utils.command_context import remember_command_result
@@ -65,6 +74,12 @@ class FunCog(commands.Cog):
         self._standalone_avatar_loader: Any = None
         self.pair_views: set[Any] = set()
         self._random_pair_picker: Any = None
+        settings = getattr(bot, "settings", None)
+        audio_cfg = getattr(settings, "disco_audio_path", "") if settings is not None else ""
+        self._disco_renderer = DiscoPartyRenderer(
+            audio_path=Path(audio_cfg) if audio_cfg else DEFAULT_AUDIO_PATH,
+            ffmpeg_executable=getattr(settings, "ffmpeg_executable", "ffmpeg") if settings else "ffmpeg",
+        )
 
     async def cog_unload(self) -> None:
         for view in tuple(self.pair_views):
@@ -563,6 +578,112 @@ class FunCog(commands.Cog):
         if "all out of energy for now" in text.casefold():
             return fallback
         return text[:400] or fallback
+
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="disco",
+        aliases=["party", "samba"],
+        description="Create a rainbow disco dance party video starring Meyaya and server members.",
+    )
+    @commands.cooldown(1, 30, commands.BucketType.member)
+    @app_commands.describe(
+        member1="Optional server member to invite onto the dance floor",
+        member2="Optional second member",
+        member3="Optional third member",
+        member4="Optional fourth member",
+        member5="Optional fifth member",
+    )
+    @commands.guild_only()
+    async def disco(
+        self,
+        ctx: commands.Context[Any],
+        member1: discord.Member | None = None,
+        member2: discord.Member | None = None,
+        member3: discord.Member | None = None,
+        member4: discord.Member | None = None,
+        member5: discord.Member | None = None,
+    ) -> None:
+        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
+            return
+        perms = ctx.channel.permissions_for(ctx.guild.me) if hasattr(ctx.channel, "permissions_for") else None
+        if perms is not None and not perms.attach_files:
+            await ctx.send("I need Attach Files permission in this channel to drop the disco video!", ephemeral=True)
+            return
+
+        explicit = [
+            member
+            for member in (member1, member2, member3, member4, member5)
+            if member is not None and not member.bot
+        ]
+        chosen: list[discord.Member] = []
+        seen_ids: set[int] = set()
+
+        def _add_member(m: discord.Member) -> None:
+            if m.bot or m.id in seen_ids or len(chosen) >= 6:
+                return
+            seen_ids.add(m.id)
+            chosen.append(m)
+
+        _add_member(ctx.author)
+        for member in explicit:
+            _add_member(member)
+
+        if not explicit and len(chosen) < 5 and hasattr(ctx.channel, "history"):
+            try:
+                async for msg in ctx.channel.history(limit=25):
+                    author = msg.author
+                    if isinstance(author, discord.Member):
+                        _add_member(author)
+                    if len(chosen) >= 5:
+                        break
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+        await ctx.defer()
+        http_session = getattr(self.bot, "http_session", None)
+        avatar_urls = [
+            member.display_avatar.with_size(256).with_format("png").url
+            for member in chosen
+        ]
+        avatars = await asyncio.gather(
+            *(fetch_avatar_bytes(http_session, url) for url in avatar_urls)
+        )
+        dancers: list[DiscoDancer] = [
+            DiscoDancer(
+                user_id=member.id,
+                display_name=member.display_name,
+                avatar_bytes=avatar,
+                is_meyaya=False,
+            )
+            for member, avatar in zip(chosen, avatars, strict=True)
+        ]
+        dancers.append(DiscoDancer(user_id=0, display_name="Meyaya", is_meyaya=True))
+
+        upload_limit = getattr(ctx.interaction, "filesize_limit", None) or ctx.guild.filesize_limit
+        try:
+            video_bytes = await self._disco_renderer.render(dancers, max_bytes=upload_limit)
+        except DiscoBusyError as exc:
+            await ctx.send(str(exc), ephemeral=True)
+            return
+        if not video_bytes:
+            await ctx.send(
+                "I couldn't render the disco party video right now. Try again shortly!",
+                ephemeral=True,
+            )
+            return
+
+        names = [member.display_name for member in chosen] + ["Meyaya"]
+        remember_command_result(
+            ctx,
+            dancers=names,
+            mode="3d_samba_disco",
+        )
+        await send_native_file(
+            ctx,
+            content=f"🕺 **Samba Disco Party!** Starring {', '.join(names)}",
+            file=discord.File(BytesIO(video_bytes), filename="meyaya-disco.mp4"),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
     @staticmethod
     def _clean_input(value: str) -> str:

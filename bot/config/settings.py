@@ -158,6 +158,9 @@ class Settings(BaseSettings):
     )
     gemini_voice: str = Field(default="Leda", alias="GEMINI_VOICE")
     ffmpeg_executable: str = Field(default="ffmpeg", alias="FFMPEG_EXECUTABLE")
+    disco_audio_path: str = Field(
+        default="bot/assets/disco/track.m4a", alias="DISCO_AUDIO_PATH"
+    )
     jungkook_roleplay_avatar_url: str = Field(default="", alias="JUNGKOOK_ROLEPLAY_AVATAR_URL")
     alya_roleplay_avatar_url: str = Field(default="", alias="ALYA_ROLEPLAY_AVATAR_URL")
     gemini_live_system_instruction: str = Field(
