@@ -21,7 +21,7 @@ ROTATION_MINUTES = 5
 
 # Activity names follow Discord's Playing/Watching/Streaming label.
 PRESENCES = (
-    (discord.ActivityType.playing, "Uma Samba! Try uwu samba or uwu solo"),
+    (discord.ActivityType.playing, "Uma Samba! Try uwu samba or uwu disco"),
     (discord.ActivityType.watching, "your friends spin on uwu disco"),
     (discord.ActivityType.streaming, "Origin.exe | endings are negotiable"),
     (discord.ActivityType.playing, "concert mode in VC! Try uwu sing"),

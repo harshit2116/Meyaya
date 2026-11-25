@@ -26,6 +26,13 @@ from bot.services.voice_session import VoiceChatSession
 from bot.utils.command_context import remember_command_result
 from bot.utils.components_v2 import send_native_file
 from bot.utils.embeds import meyaya_embed
+from bot.utils.render_status import (
+    RenderStatus,
+    RetryContextAdapter,
+    RetryRenderView,
+    format_missing_permissions,
+    missing_voice_permissions,
+)
 from bot.views.voice_picker import VoicePicker
 
 logger = logging.getLogger(__name__)
@@ -198,6 +205,13 @@ class VoiceLiveCog(commands.Cog):
         channel = member.voice.channel
         if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
             await ctx.send("Unsupported channel type for voice chat.", ephemeral=True)
+            return
+        missing_vc = missing_voice_permissions(channel, ctx.guild.me)
+        if missing_vc:
+            await ctx.send(
+                format_missing_permissions(missing_vc, channel.name, "join and talk there"),
+                ephemeral=True,
+            )
             return
 
         await ctx.defer(ephemeral=True)
@@ -573,21 +587,9 @@ class VoiceLiveCog(commands.Cog):
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @commands.hybrid_command(  # type: ignore[arg-type]
-        name="sing",
-        aliases=["song"],
-        description="Have Meyaya sing a short song with AI backing music in your voice channel.",
-    )
-    @app_commands.describe(
-        prompt="Song topic, or exact lyrics (prefix also supports 'style | lyrics').",
-        style="Optional music and singing style (e.g. 'Hindi romantic ballad', 'upbeat anime pop').",
-        lyrics_only="Set True to sing your exact text verbatim instead of writing new lyrics.",
-    )
-    @commands.guild_only()
-    @discord_context("sing")
-    async def sing(
+    async def _run_sing(
         self,
-        ctx: commands.Context[Any],
+        ctx: Any,
         *,
         prompt: str,
         style: str | None = None,
@@ -603,15 +605,25 @@ class VoiceLiveCog(commands.Cog):
         if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
             await ctx.send("Unsupported voice channel type.", ephemeral=True)
             return
-        perms = channel.permissions_for(ctx.guild.me)
-        if not (perms.connect and perms.speak):
+        missing_vc = missing_voice_permissions(channel, ctx.guild.me)
+        if missing_vc:
             await ctx.send(
-                "I need Connect and Speak permissions in your voice channel to sing there.",
+                format_missing_permissions(missing_vc, channel.name, "sing there"),
                 ephemeral=True,
             )
             return
 
         guild_id = ctx.guild.id
+
+        async def _retry(interaction: discord.Interaction) -> None:
+            retry_ctx = RetryContextAdapter(self.bot, interaction, command=self.sing)
+            await self._run_sing(
+                retry_ctx,
+                prompt=prompt,
+                style=style,
+                lyrics_only=lyrics_only,
+            )
+
         active_session = self._sessions.get(guild_id)
         if active_session is not None and active_session.is_active:
             active_channel = getattr(active_session.voice_client, "channel", None)
@@ -622,7 +634,14 @@ class VoiceLiveCog(commands.Cog):
                 )
                 return
             if getattr(active_session, "_song_playing", False):
-                await ctx.send("I'm already singing right now! Wait for this song to finish.", ephemeral=True)
+                retry_view = RetryRenderView(
+                    bot=self.bot, owner_id=ctx.author.id, retry_callback=_retry
+                )
+                await ctx.send(
+                    "⏳ I'm already singing right now! Click **Retry** once this song finishes.",
+                    view=retry_view,
+                    ephemeral=True,
+                )
                 return
         elif not self._can_control_bgm(ctx.author, guild_id):
             await ctx.send(
@@ -632,15 +651,23 @@ class VoiceLiveCog(commands.Cog):
             )
             return
         if guild_id in self._vc_singing:
-            await ctx.send("I'm already preparing or singing a song in this server!", ephemeral=True)
+            retry_view = RetryRenderView(
+                bot=self.bot, owner_id=ctx.author.id, retry_callback=_retry
+            )
+            await ctx.send(
+                "⏳ I'm already preparing or singing a song in this server - click **Retry** shortly!",
+                view=retry_view,
+                ephemeral=True,
+            )
             return
 
         raw_prompt = prompt.strip()
         verbatim = lyrics_only or ("\n" in raw_prompt) or ("[" in raw_prompt and "]" in raw_prompt)
-        if not style and "|" in raw_prompt:
+        parsed_style = style
+        if not parsed_style and "|" in raw_prompt:
             maybe_style, maybe_lyrics = raw_prompt.split("|", 1)
             if maybe_style.strip() and maybe_lyrics.strip():
-                style = maybe_style.strip()
+                parsed_style = maybe_style.strip()
                 raw_prompt = maybe_lyrics.strip()
                 verbatim = True
         if not raw_prompt:
@@ -659,8 +686,9 @@ class VoiceLiveCog(commands.Cog):
             now - self._sing_cooldowns.get(key, float("-inf"))
         )
         if remaining > 0:
+            ready_ts = int(time.time() + remaining) + 1
             await ctx.send(
-                f"Give my voice a breather - try another song in {int(remaining) + 1}s.",
+                f"Give my voice a breather - ready for another song <t:{ready_ts}:R>.",
                 ephemeral=True,
             )
             return
@@ -681,16 +709,37 @@ class VoiceLiveCog(commands.Cog):
         )
         self._vc_singing.add(guild_id)
         await ctx.defer()
+        initial_stage = (
+            f"🎼 Warming up vocals and mixing backing music for **{channel.name}**..."
+            if verbatim
+            else f"✍️ Writing custom lyrics and warming up vocals for **{channel.name}**..."
+        )
         try:
-            guard = getattr(self.bot, "ai_guard", None)
-            try:
-                # Non-verbatim mode calls @guarded llm.generate_json; only wrap
-                # verbatim mode in guard.request() to avoid holding two slots.
-                if guard is not None and verbatim:
-                    async with guard.request():
+            async with RenderStatus(ctx, initial_stage) as status:
+                guard = getattr(self.bot, "ai_guard", None)
+                try:
+                    # Non-verbatim mode calls @guarded llm.generate_json; only wrap
+                    # verbatim mode in guard.request() to avoid holding two slots.
+                    if guard is not None and verbatim:
+                        async with guard.request():
+                            result = await compose_song(
+                                prompt=raw_prompt,
+                                style=parsed_style,
+                                verbatim_lyrics=verbatim,
+                                llm=self.bot.build_llm_provider(),
+                                tts=tts,
+                                api_key=self.bot.settings.gemini_api_key,
+                                music_model=getattr(
+                                    self.bot.settings, "gemini_music_model", "lyria-realtime-exp"
+                                ),
+                                voice_name=voice_name,
+                                ffmpeg_executable=ffmpeg_bin,
+                                key_pool=key_pool,
+                            )
+                    else:
                         result = await compose_song(
                             prompt=raw_prompt,
-                            style=style,
+                            style=parsed_style,
                             verbatim_lyrics=verbatim,
                             llm=self.bot.build_llm_provider(),
                             tts=tts,
@@ -702,42 +751,33 @@ class VoiceLiveCog(commands.Cog):
                             ffmpeg_executable=ffmpeg_bin,
                             key_pool=key_pool,
                         )
-                else:
-                    result = await compose_song(
-                        prompt=raw_prompt,
-                        style=style,
-                        verbatim_lyrics=verbatim,
-                        llm=self.bot.build_llm_provider(),
-                        tts=tts,
-                        api_key=self.bot.settings.gemini_api_key,
-                        music_model=getattr(
-                            self.bot.settings, "gemini_music_model", "lyria-realtime-exp"
-                        ),
-                        voice_name=voice_name,
-                        ffmpeg_executable=ffmpeg_bin,
-                        key_pool=key_pool,
+                except AILimitReached as exc:
+                    await ctx.send(str(exc), ephemeral=True)
+                    return
+                if result is None:
+                    retry_view = RetryRenderView(
+                        bot=self.bot, owner_id=ctx.author.id, retry_callback=_retry
                     )
-            except AILimitReached as exc:
-                await ctx.send(str(exc), ephemeral=True)
-                return
-            if result is None:
-                await ctx.send(
-                    "I couldn't prepare that song right now. Try again shortly.",
-                    ephemeral=True,
-                )
-                return
+                    await ctx.send(
+                        "⚠️ I couldn't finish mixing that song right now - click **Retry** to try again!",
+                        view=retry_view,
+                        ephemeral=True,
+                    )
+                    return
 
-            if len(self._sing_cooldowns) >= 2048 and key not in self._sing_cooldowns:
-                self._sing_cooldowns.pop(next(iter(self._sing_cooldowns)))
-            self._sing_cooldowns[key] = time.monotonic()
-            remember_command_result(
-                ctx,
-                sung_lyrics=result.lyrics,
-                style=result.style,
-                voice=voice_name,
-                has_backing_track=result.has_backing_track,
-                channel_name=channel.name,
-            )
+                if len(self._sing_cooldowns) >= 2048 and key not in self._sing_cooldowns:
+                    self._sing_cooldowns.pop(next(iter(self._sing_cooldowns)))
+                self._sing_cooldowns[key] = time.monotonic()
+                remember_command_result(
+                    ctx,
+                    sung_lyrics=result.lyrics,
+                    style=result.style,
+                    voice=voice_name,
+                    has_backing_track=result.has_backing_track,
+                    channel_name=channel.name,
+                )
+                await status.update(f"🎙️ Song ready - stepping into **{channel.name}** to perform!")
+                await status.finish()
 
             await self._play_song_in_vc(
                 ctx,
@@ -750,6 +790,28 @@ class VoiceLiveCog(commands.Cog):
             )
         finally:
             self._vc_singing.discard(guild_id)
+
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="sing",
+        aliases=["song"],
+        description="Have Meyaya sing a short song with AI backing music in your voice channel.",
+    )
+    @app_commands.describe(
+        prompt="Song topic, or exact lyrics (prefix also supports 'style | lyrics').",
+        style="Optional music and singing style (e.g. 'Hindi romantic ballad', 'upbeat anime pop').",
+        lyrics_only="Set True to sing your exact text verbatim instead of writing new lyrics.",
+    )
+    @commands.guild_only()
+    @discord_context("sing")
+    async def sing(
+        self,
+        ctx: commands.Context[Any],
+        *,
+        prompt: str,
+        style: str | None = None,
+        lyrics_only: bool = False,
+    ) -> None:
+        await self._run_sing(ctx, prompt=prompt, style=style, lyrics_only=lyrics_only)
 
     async def _play_song_in_vc(
         self,
@@ -901,6 +963,13 @@ class VoiceLiveCog(commands.Cog):
         if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
             await ctx.send("Unsupported voice channel type.", ephemeral=True)
             return
+        missing_vc = missing_voice_permissions(channel, ctx.guild.me)
+        if missing_vc:
+            await ctx.send(
+                format_missing_permissions(missing_vc, channel.name, "stream ambient music there"),
+                ephemeral=True,
+            )
+            return
 
         bgm_key = (ctx.guild.id, ctx.author.id)
         now = time.monotonic()
@@ -908,8 +977,9 @@ class VoiceLiveCog(commands.Cog):
             now - self._bgm_cooldowns.get(bgm_key, float("-inf"))
         )
         if remaining > 0:
+            ready_ts = int(time.time() + remaining) + 1
             await ctx.send(
-                f"Give the DJ a breather - try again in {int(remaining) + 1}s.",
+                f"Give the DJ a breather - ready again <t:{ready_ts}:R>.",
                 ephemeral=True,
             )
             return

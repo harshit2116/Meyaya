@@ -36,6 +36,13 @@ from bot.utils.image_work import image_work, animation_work, BoundedImageGate
 from bot.utils.command_context import remember_command_result
 from bot.utils.display_mentions import display_mentions
 from bot.utils.member_names import MemberNames
+from bot.utils.render_status import (
+    RenderStatus,
+    RetryContextAdapter,
+    RetryRenderView,
+    format_missing_permissions,
+    missing_text_permissions,
+)
 from bot.cogs.ship import RandomShipCommand
 
 logger = logging.getLogger(__name__)
@@ -685,9 +692,87 @@ class FunCog(commands.Cog):
             for member, avatar in zip(members, avatars, strict=True)
         ]
 
+    async def _run_disco_render(
+        self,
+        ctx: Any,
+        explicit_members: tuple[discord.Member | None, ...],
+    ) -> None:
+        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
+            return
+        missing = missing_text_permissions(ctx.channel, ctx.guild.me, require_attach=True)
+        if missing:
+            ch_name = f"#{getattr(ctx.channel, 'name', 'this-channel')}"
+            await ctx.send(
+                format_missing_permissions(missing, ch_name, "post the disco party video"),
+                ephemeral=True,
+            )
+            return
+        if not self._disco_renderer.stage_path.exists():
+            await ctx.send(
+                "The disco stage assets are not available on this host right now.",
+                ephemeral=True,
+            )
+            return
+
+        chosen = await self._collect_party_members(
+            ctx,
+            explicit_members,
+            max_members=6,
+            autofill_limit=5,
+        )
+        await ctx.defer()
+
+        async def _retry(interaction: discord.Interaction) -> None:
+            retry_ctx = RetryContextAdapter(self.bot, interaction, command=self.disco)
+            await self._run_disco_render(retry_ctx, explicit_members)
+
+        retry_view = RetryRenderView(bot=self.bot, owner_id=ctx.author.id, retry_callback=_retry)
+        async with RenderStatus(
+            ctx,
+            "🪩 Loading avatars and lighting up the 3D rainbow disco floor...",
+        ) as status:
+            dancers = await self._build_dancers(chosen)
+            dancers.append(DiscoDancer(user_id=0, display_name="Meyaya", is_meyaya=True))
+            await status.update(
+                f"🎬 Rendering 3D Chaotic Samba with **{len(chosen)} dancers + Meyaya**..."
+            )
+            upload_limit = (
+                getattr(ctx.interaction, "filesize_limit", None) or ctx.guild.filesize_limit
+            )
+            try:
+                video_bytes = await self._disco_renderer.render(dancers, max_bytes=upload_limit)
+            except DiscoBusyError as exc:
+                await ctx.send(
+                    f"⏳ {exc}",
+                    view=retry_view,
+                    ephemeral=True,
+                )
+                return
+            if not video_bytes:
+                await ctx.send(
+                    "⚠️ The disco video timed out or hit a snag - click **Retry** to spin it again!",
+                    view=retry_view,
+                    ephemeral=True,
+                )
+                return
+
+            names = [member.display_name for member in chosen] + ["Meyaya"]
+            remember_command_result(
+                ctx,
+                dancers=names,
+                mode="3d_samba_disco",
+            )
+            await send_native_file(
+                ctx,
+                content=f"🕺 **Samba Disco Party!** Starring {', '.join(names)}",
+                file=discord.File(BytesIO(video_bytes), filename="meyaya-disco.mp4"),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+
     @commands.hybrid_command(  # type: ignore[arg-type]
         name="disco",
-        aliases=["party", "samba"],
+        aliases=["party", "danceparty"],
         description="Create a rainbow disco dance party video starring Meyaya and server members.",
     )
     @commands.cooldown(1, 30, commands.BucketType.member)
@@ -708,53 +793,102 @@ class FunCog(commands.Cog):
         member4: discord.Member | None = None,
         member5: discord.Member | None = None,
     ) -> None:
+        await self._run_disco_render(ctx, (member1, member2, member3, member4, member5))
+
+    async def _run_samba_render(
+        self,
+        ctx: Any,
+        explicit_members: tuple[discord.Member | None, ...],
+    ) -> None:
         if ctx.guild is None or not isinstance(ctx.author, discord.Member):
             await ctx.send("This command can only be used in a server.", ephemeral=True)
             return
-        perms = ctx.channel.permissions_for(ctx.guild.me) if hasattr(ctx.channel, "permissions_for") else None
-        if perms is not None and not perms.attach_files:
-            await ctx.send("I need Attach Files permission in this channel to drop the disco video!", ephemeral=True)
-            return
-
-        chosen = await self._collect_party_members(
-            ctx,
-            (member1, member2, member3, member4, member5),
-            max_members=6,
-            autofill_limit=5,
-        )
-        await ctx.defer()
-        dancers = await self._build_dancers(chosen)
-        dancers.append(DiscoDancer(user_id=0, display_name="Meyaya", is_meyaya=True))
-
-        upload_limit = getattr(ctx.interaction, "filesize_limit", None) or ctx.guild.filesize_limit
-        try:
-            video_bytes = await self._disco_renderer.render(dancers, max_bytes=upload_limit)
-        except DiscoBusyError as exc:
-            await ctx.send(str(exc), ephemeral=True)
-            return
-        if not video_bytes:
+        missing = missing_text_permissions(ctx.channel, ctx.guild.me, require_attach=True)
+        if missing:
+            ch_name = f"#{getattr(ctx.channel, 'name', 'this-channel')}"
             await ctx.send(
-                "I couldn't render the disco party video right now. Try again shortly!",
+                format_missing_permissions(missing, ch_name, "post the Solo Samba video"),
+                ephemeral=True,
+            )
+            return
+        if (
+            not self._solosamba_renderer.base_video_path.exists()
+            or not self._solosamba_renderer.tracks_path.exists()
+        ):
+            await ctx.send(
+                "The Solo Samba stage assets are not available on this host right now.",
                 ephemeral=True,
             )
             return
 
-        names = [member.display_name for member in chosen] + ["Meyaya"]
-        remember_command_result(
+        chosen = await self._collect_party_members(
             ctx,
-            dancers=names,
-            mode="3d_samba_disco",
+            explicit_members,
+            max_members=6,
+            autofill_limit=6,
+            fill_remaining=True,
         )
-        await send_native_file(
+        await ctx.defer()
+
+        async def _retry(interaction: discord.Interaction) -> None:
+            retry_ctx = RetryContextAdapter(self.bot, interaction, command=self.samba)
+            await self._run_samba_render(retry_ctx, explicit_members)
+
+        retry_view = RetryRenderView(bot=self.bot, owner_id=ctx.author.id, retry_callback=_retry)
+        solo_name = chosen[0].display_name if chosen else ctx.author.display_name
+        crew_names = [member.display_name for member in chosen[1:]]
+        async with RenderStatus(
             ctx,
-            content=f"🕺 **Samba Disco Party!** Starring {', '.join(names)}",
-            file=discord.File(BytesIO(video_bytes), filename="meyaya-disco.mp4"),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+            "🕺 Casting the Solo Samba crew and fetching avatars...",
+        ) as status:
+            dancers = await self._build_dancers(chosen)
+            crew_label = f" + {len(crew_names)} cameos" if crew_names else ""
+            await status.update(
+                f"🎬 Rendering Solo Samba starring **{solo_name}**{crew_label}..."
+            )
+            upload_limit = (
+                getattr(ctx.interaction, "filesize_limit", None) or ctx.guild.filesize_limit
+            )
+            try:
+                video_bytes = await self._solosamba_renderer.render(
+                    dancers, max_bytes=upload_limit
+                )
+            except DiscoBusyError as exc:
+                await ctx.send(
+                    f"⏳ {exc}",
+                    view=retry_view,
+                    ephemeral=True,
+                )
+                return
+            if not video_bytes:
+                await ctx.send(
+                    "⚠️ The Solo Samba video timed out or hit a snag - click **Retry** to try again!",
+                    view=retry_view,
+                    ephemeral=True,
+                )
+                return
+
+            remember_command_result(
+                ctx,
+                solo_star=solo_name,
+                crew=crew_names,
+                mode="solo_samba",
+            )
+            caption = f"🕺 **Solo Samba!** Solo star: **{solo_name}**"
+            if crew_names:
+                caption += f" | Crew: {', '.join(crew_names)} + Meyaya"
+            else:
+                caption += " | Intro cameo: Meyaya"
+            await send_native_file(
+                ctx,
+                content=caption,
+                file=discord.File(BytesIO(video_bytes), filename="meyaya-solosamba.mp4"),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
 
     @commands.hybrid_command(  # type: ignore[arg-type]
-        name="solosamba",
-        aliases=["solo"],
+        name="samba",
+        aliases=["solo", "solosamba"],
         description="Put your PFP on the Solo Samba dancer's face with friends and Meyaya in the intro.",
     )
     @commands.cooldown(1, 30, commands.BucketType.member)
@@ -766,7 +900,7 @@ class FunCog(commands.Cog):
         member5="Optional fifth friend",
     )
     @commands.guild_only()
-    async def solosamba(
+    async def samba(
         self,
         ctx: commands.Context[Any],
         member1: discord.Member | None = None,
@@ -775,56 +909,7 @@ class FunCog(commands.Cog):
         member4: discord.Member | None = None,
         member5: discord.Member | None = None,
     ) -> None:
-        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
-            await ctx.send("This command can only be used in a server.", ephemeral=True)
-            return
-        perms = ctx.channel.permissions_for(ctx.guild.me) if hasattr(ctx.channel, "permissions_for") else None
-        if perms is not None and not perms.attach_files:
-            await ctx.send("I need Attach Files permission in this channel to drop the Solo Samba video!", ephemeral=True)
-            return
-
-        chosen = await self._collect_party_members(
-            ctx,
-            (member1, member2, member3, member4, member5),
-            max_members=6,
-            autofill_limit=6,
-            fill_remaining=True,
-        )
-        await ctx.defer()
-        dancers = await self._build_dancers(chosen)
-
-        upload_limit = getattr(ctx.interaction, "filesize_limit", None) or ctx.guild.filesize_limit
-        try:
-            video_bytes = await self._solosamba_renderer.render(dancers, max_bytes=upload_limit)
-        except DiscoBusyError as exc:
-            await ctx.send(str(exc), ephemeral=True)
-            return
-        if not video_bytes:
-            await ctx.send(
-                "I couldn't render the Solo Samba video right now. Try again shortly!",
-                ephemeral=True,
-            )
-            return
-
-        solo_name = chosen[0].display_name if chosen else ctx.author.display_name
-        crew_names = [member.display_name for member in chosen[1:]]
-        remember_command_result(
-            ctx,
-            solo_star=solo_name,
-            crew=crew_names,
-            mode="solo_samba",
-        )
-        caption = f"🕺 **Solo Samba!** Solo star: **{solo_name}**"
-        if crew_names:
-            caption += f" | Crew: {', '.join(crew_names)} + Meyaya"
-        else:
-            caption += " | Intro cameo: Meyaya"
-        await send_native_file(
-            ctx,
-            content=caption,
-            file=discord.File(BytesIO(video_bytes), filename="meyaya-solosamba.mp4"),
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        await self._run_samba_render(ctx, (member1, member2, member3, member4, member5))
 
     @staticmethod
     def _clean_input(value: str) -> str:
