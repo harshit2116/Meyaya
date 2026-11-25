@@ -26,6 +26,10 @@ from bot.services.disco_party import (
     DiscoPartyRenderer,
     fetch_avatar_bytes,
 )
+from bot.services.solosamba import (
+    DEFAULT_BASE_VIDEO_PATH,
+    SoloSambaRenderer,
+)
 from bot.utils.components_v2 import send_native_file
 from bot.utils.embeds import meyaya_embed, score_bar
 from bot.utils.image_work import image_work, animation_work, BoundedImageGate
@@ -76,9 +80,15 @@ class FunCog(commands.Cog):
         self._random_pair_picker: Any = None
         settings = getattr(bot, "settings", None)
         audio_cfg = getattr(settings, "disco_audio_path", "") if settings is not None else ""
+        ffmpeg_bin = getattr(settings, "ffmpeg_executable", "ffmpeg") if settings else "ffmpeg"
         self._disco_renderer = DiscoPartyRenderer(
             audio_path=Path(audio_cfg) if audio_cfg else DEFAULT_AUDIO_PATH,
-            ffmpeg_executable=getattr(settings, "ffmpeg_executable", "ffmpeg") if settings else "ffmpeg",
+            ffmpeg_executable=ffmpeg_bin,
+        )
+        ss_video_cfg = getattr(settings, "solosamba_video_path", "") if settings is not None else ""
+        self._solosamba_renderer = SoloSambaRenderer(
+            base_video_path=Path(ss_video_cfg) if ss_video_cfg else DEFAULT_BASE_VIDEO_PATH,
+            ffmpeg_executable=ffmpeg_bin,
         )
 
     async def cog_unload(self) -> None:
@@ -579,6 +589,60 @@ class FunCog(commands.Cog):
             return fallback
         return text[:400] or fallback
 
+    async def _collect_party_members(
+        self,
+        ctx: commands.Context[Any],
+        explicit_members: tuple[discord.Member | None, ...],
+        *,
+        max_members: int = 6,
+        autofill_limit: int = 5,
+    ) -> list[discord.Member]:
+        explicit = [m for m in explicit_members if m is not None and not m.bot]
+        chosen: list[discord.Member] = []
+        seen_ids: set[int] = set()
+
+        def _add_member(m: discord.Member) -> None:
+            if m.bot or m.id in seen_ids or len(chosen) >= max_members:
+                return
+            seen_ids.add(m.id)
+            chosen.append(m)
+
+        if isinstance(ctx.author, discord.Member):
+            _add_member(ctx.author)
+        for member in explicit:
+            _add_member(member)
+
+        if not explicit and len(chosen) < autofill_limit and hasattr(ctx.channel, "history"):
+            try:
+                async for msg in ctx.channel.history(limit=25):
+                    author = msg.author
+                    if isinstance(author, discord.Member):
+                        _add_member(author)
+                    if len(chosen) >= autofill_limit:
+                        break
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+        return chosen
+
+    async def _build_dancers(self, members: list[discord.Member]) -> list[DiscoDancer]:
+        http_session = getattr(self.bot, "http_session", None)
+        avatar_urls = [
+            member.display_avatar.with_size(256).with_format("png").url
+            for member in members
+        ]
+        avatars = await asyncio.gather(
+            *(fetch_avatar_bytes(http_session, url) for url in avatar_urls)
+        )
+        return [
+            DiscoDancer(
+                user_id=member.id,
+                display_name=member.display_name,
+                avatar_bytes=avatar,
+                is_meyaya=False,
+            )
+            for member, avatar in zip(members, avatars, strict=True)
+        ]
+
     @commands.hybrid_command(  # type: ignore[arg-type]
         name="disco",
         aliases=["party", "samba"],
@@ -610,53 +674,14 @@ class FunCog(commands.Cog):
             await ctx.send("I need Attach Files permission in this channel to drop the disco video!", ephemeral=True)
             return
 
-        explicit = [
-            member
-            for member in (member1, member2, member3, member4, member5)
-            if member is not None and not member.bot
-        ]
-        chosen: list[discord.Member] = []
-        seen_ids: set[int] = set()
-
-        def _add_member(m: discord.Member) -> None:
-            if m.bot or m.id in seen_ids or len(chosen) >= 6:
-                return
-            seen_ids.add(m.id)
-            chosen.append(m)
-
-        _add_member(ctx.author)
-        for member in explicit:
-            _add_member(member)
-
-        if not explicit and len(chosen) < 5 and hasattr(ctx.channel, "history"):
-            try:
-                async for msg in ctx.channel.history(limit=25):
-                    author = msg.author
-                    if isinstance(author, discord.Member):
-                        _add_member(author)
-                    if len(chosen) >= 5:
-                        break
-            except (discord.Forbidden, discord.HTTPException):
-                pass
-
-        await ctx.defer()
-        http_session = getattr(self.bot, "http_session", None)
-        avatar_urls = [
-            member.display_avatar.with_size(256).with_format("png").url
-            for member in chosen
-        ]
-        avatars = await asyncio.gather(
-            *(fetch_avatar_bytes(http_session, url) for url in avatar_urls)
+        chosen = await self._collect_party_members(
+            ctx,
+            (member1, member2, member3, member4, member5),
+            max_members=6,
+            autofill_limit=5,
         )
-        dancers: list[DiscoDancer] = [
-            DiscoDancer(
-                user_id=member.id,
-                display_name=member.display_name,
-                avatar_bytes=avatar,
-                is_meyaya=False,
-            )
-            for member, avatar in zip(chosen, avatars, strict=True)
-        ]
+        await ctx.defer()
+        dancers = await self._build_dancers(chosen)
         dancers.append(DiscoDancer(user_id=0, display_name="Meyaya", is_meyaya=True))
 
         upload_limit = getattr(ctx.interaction, "filesize_limit", None) or ctx.guild.filesize_limit
@@ -682,6 +707,79 @@ class FunCog(commands.Cog):
             ctx,
             content=f"🕺 **Samba Disco Party!** Starring {', '.join(names)}",
             file=discord.File(BytesIO(video_bytes), filename="meyaya-disco.mp4"),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="solosamba",
+        aliases=["solo"],
+        description="Put your PFP on the Solo Samba dancer's face with friends and Meyaya in the intro.",
+    )
+    @commands.cooldown(1, 30, commands.BucketType.member)
+    @app_commands.describe(
+        member1="Optional friend for the big foreground dancer",
+        member2="Optional second friend",
+        member3="Optional third friend",
+        member4="Optional fourth friend",
+        member5="Optional fifth friend",
+    )
+    @commands.guild_only()
+    async def solosamba(
+        self,
+        ctx: commands.Context[Any],
+        member1: discord.Member | None = None,
+        member2: discord.Member | None = None,
+        member3: discord.Member | None = None,
+        member4: discord.Member | None = None,
+        member5: discord.Member | None = None,
+    ) -> None:
+        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
+            return
+        perms = ctx.channel.permissions_for(ctx.guild.me) if hasattr(ctx.channel, "permissions_for") else None
+        if perms is not None and not perms.attach_files:
+            await ctx.send("I need Attach Files permission in this channel to drop the Solo Samba video!", ephemeral=True)
+            return
+
+        chosen = await self._collect_party_members(
+            ctx,
+            (member1, member2, member3, member4, member5),
+            max_members=6,
+            autofill_limit=6,
+        )
+        await ctx.defer()
+        dancers = await self._build_dancers(chosen)
+
+        upload_limit = getattr(ctx.interaction, "filesize_limit", None) or ctx.guild.filesize_limit
+        try:
+            video_bytes = await self._solosamba_renderer.render(dancers, max_bytes=upload_limit)
+        except DiscoBusyError as exc:
+            await ctx.send(str(exc), ephemeral=True)
+            return
+        if not video_bytes:
+            await ctx.send(
+                "I couldn't render the Solo Samba video right now. Try again shortly!",
+                ephemeral=True,
+            )
+            return
+
+        solo_name = chosen[0].display_name if chosen else ctx.author.display_name
+        crew_names = [member.display_name for member in chosen[1:]]
+        remember_command_result(
+            ctx,
+            solo_star=solo_name,
+            crew=crew_names,
+            mode="solo_samba",
+        )
+        caption = f"🕺 **Solo Samba!** Solo star: **{solo_name}**"
+        if crew_names:
+            caption += f" | Crew: {', '.join(crew_names)} + Meyaya"
+        else:
+            caption += " | Intro cameo: Meyaya"
+        await send_native_file(
+            ctx,
+            content=caption,
+            file=discord.File(BytesIO(video_bytes), filename="meyaya-solosamba.mp4"),
             allowed_mentions=discord.AllowedMentions.none(),
         )
 

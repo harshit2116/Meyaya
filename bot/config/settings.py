@@ -161,6 +161,9 @@ class Settings(BaseSettings):
     disco_audio_path: str = Field(
         default="bot/assets/disco/track.m4a", alias="DISCO_AUDIO_PATH"
     )
+    solosamba_video_path: str = Field(
+        default="bot/assets/solosamba/base.mp4", alias="SOLOSAMBA_VIDEO_PATH"
+    )
     jungkook_roleplay_avatar_url: str = Field(default="", alias="JUNGKOOK_ROLEPLAY_AVATAR_URL")
     alya_roleplay_avatar_url: str = Field(default="", alias="ALYA_ROLEPLAY_AVATAR_URL")
     gemini_live_system_instruction: str = Field(

@@ -21,17 +21,17 @@ ROTATION_MINUTES = 5
 
 # Activity names follow Discord's Playing/Watching/Streaming label.
 PRESENCES = (
-    (discord.ActivityType.playing, "the final boss. I packed you snacks."),
-    (discord.ActivityType.watching, "your villain arc. Needs more flowers."),
+    (discord.ActivityType.playing, "Uma Samba! Try uwu samba or uwu solo"),
+    (discord.ActivityType.watching, "your friends spin on uwu disco"),
     (discord.ActivityType.streaming, "Origin.exe | endings are negotiable"),
-    (discord.ActivityType.playing, "with fate. It blinked first."),
-    (discord.ActivityType.watching, "the story you almost gave up on"),
+    (discord.ActivityType.playing, "concert mode in VC! Try uwu sing"),
+    (discord.ActivityType.watching, "your profile drip on uwu profilecheck"),
     (discord.ActivityType.streaming, "the bloopers between your character arcs"),
-    (discord.ActivityType.playing, "Origin Protocol: one more chance"),
-    (discord.ActivityType.watching, "Veyra threaten reality. Again."),
+    (discord.ActivityType.playing, "fact detective! Reply with uwu checkclaim"),
+    (discord.ActivityType.watching, "your villain arc. Needs more flowers."),
     (discord.ActivityType.streaming, "the Tenfold Descent, with commentary"),
-    (discord.ActivityType.playing, "matchmaker with suspicious confidence"),
-    (discord.ActivityType.watching, "the quiet souls in a loud room"),
+    (discord.ActivityType.playing, "the final boss. I packed you snacks."),
+    (discord.ActivityType.watching, "for uwu help | try uwu guide"),
     (discord.ActivityType.streaming, "one more chance from the end of the story"),
 )
 
