@@ -58,8 +58,8 @@ _TOPIC_COMMANDS: tuple[tuple[frozenset[str], tuple[str, ...]], ...] = (
         ("memories", "nicknames", "nickname", "roleplay"),
     ),
     (
-        frozenset({"fortune", "tarot", "fate", "8ball", "iq", "smart", "dumb", "clown", "roast", "compliment", "rank", "impersonate", "reddit", "duck", "rate", "mostlikely", "disco", "samba", "solosamba", "solo", "ssm", "party", "danceparty", "dance"}),
-        ("samba", "disco", "fortune", "tarot", "fate", "8ball", "roast", "compliment", "rate", "reddit", "iq"),
+        frozenset({"fortune", "tarot", "fate", "8ball", "iq", "smart", "dumb", "clown", "roast", "compliment", "rank", "impersonate", "reddit", "duck", "rate", "mostlikely", "disco", "samba", "solosamba", "solo", "ssm", "party", "danceparty", "dance", "beatup", "fold", "whoop", "jump", "bu", "invincible"}),
+        ("samba", "disco", "beatup", "fortune", "tarot", "fate", "8ball", "roast", "compliment", "rate", "reddit", "iq"),
     ),
     (
         frozenset({"mod", "moderation", "lockdown", "unlock", "raid", "spam", "setup", "serversetup", "prefix", "autoresponder", "blacklist", "chatbind", "admin", "settings", "dashboard"}),

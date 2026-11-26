@@ -108,7 +108,7 @@ COMMAND_ORDER: dict[str, tuple[str, ...]] = {
         "facepalm",
         "cry",
     ),
-    "Fun and Scores": ("samba", "disco", "ship", "bestiescore", "rate", "reddit", "duck", "scramble", "mostlikely", "8ball"),
+    "Fun and Scores": ("samba", "disco", "beatup", "ship", "bestiescore", "rate", "reddit", "duck", "scramble", "mostlikely", "8ball"),
     "Daily Picks": ("iq", "smart", "dumb", "clown"),
     "Fortune / Tarot": ("fortune", "tarot", "fate"),
     "Fantasy / Profile": ("summon", "guardian", "awaken", "fantasyprofile", "rebirth", "dungeon", "versus", "bossfight"),
@@ -412,6 +412,12 @@ COMMANDS: tuple[HelpCommand, ...] = (
         "samba",
         "samba [members...]",
         "Put your PFP on the Solo Samba dancer's face with friends and Meyaya in the intro.",
+        "Fun and Scores",
+    ),
+    HelpCommand(
+        "beatup",
+        "beatup [member]",
+        "Put your PFP and a friend's PFP onto an anime beatdown GIF.",
         "Fun and Scores",
     ),
     HelpCommand(

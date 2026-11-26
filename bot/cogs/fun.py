@@ -30,6 +30,11 @@ from bot.services.solosamba import (
     DEFAULT_BASE_VIDEO_PATH,
     SoloSambaRenderer,
 )
+from bot.services.beatup import (
+    BEATUP_TEMPLATES,
+    DEFAULT_BEATUP_STYLE,
+    BeatupRenderer,
+)
 from bot.utils.components_v2 import send_native_file
 from bot.utils.embeds import meyaya_embed, score_bar
 from bot.utils.image_work import image_work, animation_work, BoundedImageGate
@@ -97,6 +102,7 @@ class FunCog(commands.Cog):
             base_video_path=Path(ss_video_cfg) if ss_video_cfg else DEFAULT_BASE_VIDEO_PATH,
             ffmpeg_executable=ffmpeg_bin,
         )
+        self._beatup_renderer = BeatupRenderer(ffmpeg_executable=ffmpeg_bin)
 
     async def cog_unload(self) -> None:
         for view in tuple(self.pair_views):
@@ -910,6 +916,145 @@ class FunCog(commands.Cog):
         member5: discord.Member | None = None,
     ) -> None:
         await self._run_samba_render(ctx, (member1, member2, member3, member4, member5))
+
+    async def _resolve_beatup_target(
+        self,
+        ctx: Any,
+        member: discord.Member | None,
+    ) -> discord.Member | None:
+        if member is not None:
+            return member
+        message = getattr(ctx, "message", None)
+        ref = getattr(message, "reference", None)
+        if ref is None:
+            return None
+        resolved = getattr(ref, "resolved", None)
+        if resolved is None and getattr(ref, "message_id", None) and hasattr(ctx.channel, "fetch_message"):
+            try:
+                resolved = await ctx.channel.fetch_message(ref.message_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                resolved = None
+        author = getattr(resolved, "author", None)
+        if isinstance(author, discord.Member):
+            return author
+        if author is not None and ctx.guild is not None:
+            found = ctx.guild.get_member(author.id)
+            return found if isinstance(found, discord.Member) else None
+        return None
+
+    async def _run_beatup_render(
+        self,
+        ctx: Any,
+        target: discord.Member | None,
+        style: str = DEFAULT_BEATUP_STYLE,
+    ) -> None:
+        if ctx.guild is None or not isinstance(ctx.author, discord.Member):
+            await ctx.send("This command can only be used in a server.", ephemeral=True)
+            return
+        chosen_target = await self._resolve_beatup_target(ctx, target)
+        if chosen_target is None:
+            await ctx.send(
+                "Tag someone to fold (or reply to their message with `uwu beatup`)!",
+                ephemeral=True,
+            )
+            return
+        if chosen_target.id == ctx.author.id:
+            await ctx.send(
+                "Don't fold yourself - tag someone else (or reply to their message)!",
+                ephemeral=True,
+            )
+            return
+        missing = missing_text_permissions(ctx.channel, ctx.guild.me, require_attach=True)
+        if missing:
+            ch_name = f"#{getattr(ctx.channel, 'name', 'this-channel')}"
+            await ctx.send(
+                format_missing_permissions(missing, ch_name, "post the beatup GIF"),
+                ephemeral=True,
+            )
+            return
+
+        clean_style = style if style in BEATUP_TEMPLATES else DEFAULT_BEATUP_STYLE
+        template = BEATUP_TEMPLATES[clean_style]
+        if not self._beatup_renderer.is_template_ready(clean_style):
+            await ctx.send(
+                f"The **{template.label}** clip is not available on this host right now.",
+                ephemeral=True,
+            )
+            return
+
+        await ctx.defer()
+
+        async def _retry(interaction: discord.Interaction) -> None:
+            retry_ctx = RetryContextAdapter(self.bot, interaction, command=self.beatup)
+            await self._run_beatup_render(retry_ctx, chosen_target, clean_style)
+
+        retry_view = RetryRenderView(bot=self.bot, owner_id=ctx.author.id, retry_callback=_retry)
+        async with RenderStatus(
+            ctx,
+            f"🥊 Locking targets for **{template.label}**...",
+        ) as status:
+            dancers = await self._build_dancers([ctx.author, chosen_target])
+            await status.update(
+                f"🎬 Rendering **{ctx.author.display_name}** vs **{chosen_target.display_name}**..."
+            )
+            upload_limit = (
+                getattr(ctx.interaction, "filesize_limit", None) or ctx.guild.filesize_limit
+            )
+            try:
+                gif_bytes = await self._beatup_renderer.render(
+                    dancers,
+                    style=clean_style,
+                    max_bytes=upload_limit,
+                )
+            except DiscoBusyError as exc:
+                await ctx.send(f"⏳ {exc}", view=retry_view, ephemeral=True)
+                return
+            if not gif_bytes:
+                await ctx.send(
+                    "⚠️ The beatup GIF hit a snag - click **Retry** to throw hands again!",
+                    view=retry_view,
+                    ephemeral=True,
+                )
+                return
+
+            remember_command_result(
+                ctx,
+                attacker=ctx.author.display_name,
+                victim=chosen_target.display_name,
+                style=clean_style,
+                mode="beatup_gif",
+            )
+            await send_native_file(
+                ctx,
+                content=(
+                    f"🥊 **{ctx.author.display_name}** {template.verb} "
+                    f"**{chosen_target.display_name}**!"
+                ),
+                file=discord.File(BytesIO(gif_bytes), filename=f"meyaya-{clean_style}.gif"),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+
+    @commands.hybrid_command(  # type: ignore[arg-type]
+        name="beatup",
+        aliases=["fold", "whoop", "jump"],
+        description="Put your PFP and a friend's PFP onto an anime beatdown GIF.",
+    )
+    @commands.cooldown(1, 20, commands.BucketType.member)
+    @app_commands.describe(
+        member="Server member to fold (or reply to their message with uwu beatup)",
+        style="Beatdown scene style",
+    )
+    @app_commands.choices(
+        style=[app_commands.Choice(name="Invincible Beatdown", value="invincible")]
+    )
+    @commands.guild_only()
+    async def beatup(
+        self,
+        ctx: commands.Context[Any],
+        member: discord.Member | None = None,
+        style: str = DEFAULT_BEATUP_STYLE,
+    ) -> None:
+        await self._run_beatup_render(ctx, member, style)
 
     @staticmethod
     def _clean_input(value: str) -> str:

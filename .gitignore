@@ -38,6 +38,7 @@ pip-audit*.json
 # Local credentials and deployment-specific overrides
 /bot/assets/disco/track.m4a
 /bot/assets/solosamba/base.mp4
+/bot/assets/beatup/*/base.mp4
 /secrets/
 /certs/
 *.pem

@@ -23,7 +23,7 @@ SHORT_COMMANDS = {
     "dumb": "dm", "smart": "st", "clown": "cl", "ship": "sh",
     "mostlikely": "ml", "rate": "rt", "reddit": "rd",
     "duck": "dk", "scramble": "sc", "bestiescore": "bs", "8ball": "8b",
-    "samba": "ssm",
+    "samba": "ssm", "beatup": "bu",
     "marry": "my", "marriage": "mg", "renewvows": "rv", "divorce": "dv",
     "showdown": "sw", "excuse": "ex", "survive": "sv", "endgame": "eg",
     "court": "ct", "setcourt": "sct", "removecourt": "rc", "checkclaim": "ck",
